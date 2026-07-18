@@ -2497,7 +2497,7 @@ function LandingFooter() {
         </p>
         <div className="flex items-center justify-center gap-5 mb-5 flex-wrap">
           <a href="#faq" className="font-body text-[13px] font-medium" style={{ color: COLORS.text }}>Preguntas frecuentes</a>
-          <a href="mailto:contacto@nemul.app" className="font-body text-[13px] font-medium" style={{ color: COLORS.text }}>Contacto</a>
+          <a href="mailto:digitaldma2026@gmail.com" className="font-body text-[13px] font-medium" style={{ color: COLORS.text }}>Contacto</a>
           <button onClick={() => setShowPrivacy((s) => !s)} className="font-body text-[13px] font-medium" style={{ color: COLORS.text }}>Política de privacidad</button>
         </div>
         {showPrivacy && (
@@ -2529,7 +2529,7 @@ function LandingFooter() {
             <div>
               <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>Tus derechos</p>
               <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
-                Puedes pedirnos en cualquier momento que eliminemos tu email de nuestros registros escribiendo a <a href="mailto:contacto@nemul.app" style={{ color: COLORS.accent }}>contacto@nemul.app</a>.
+                Puedes pedirnos en cualquier momento que eliminemos tu email de nuestros registros escribiendo a <a href="mailto:digitaldma2026@gmail.com" style={{ color: COLORS.accent }}>digitaldma2026@gmail.com</a>.
               </p>
             </div>
             <div>
