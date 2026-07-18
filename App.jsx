@@ -3,7 +3,7 @@ import {
   Sofa, ChefHat, BedDouble, Bath, UtensilsCrossed, DoorOpen, Shirt, TreePine,
   ArrowLeft, Check, ChevronRight, ChevronDown, Sun, Moon, CloudSun, Lightbulb,
   Sparkles, BookOpen, Users, Coffee, Plus, Trash2, Home as HomeIcon,
-  Package, Palette, Wind, Tv, Briefcase, Droplets, Zap, Laptop, Lamp, X, Hammer, Info, Pencil, Lock, MapPin, ShieldAlert,
+  Package, Palette, Wind, Tv, Briefcase, Droplets, Zap, Laptop, Lamp, X, Hammer, Info, Pencil, Lock,
 } from "lucide-react";
 
 const FONT_STYLE = `
@@ -15,6 +15,8 @@ const FONT_STYLE = `
     50% { opacity: 0.85; transform: scale(1.06); }
   }
   .glow-orb { animation: glow-pulse 4.5s ease-in-out infinite; }
+  .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
   @keyframes rise-in {
     from { opacity: 0; transform: translateY(14px); }
     to { opacity: 1; transform: translateY(0); }
@@ -2319,71 +2321,50 @@ function HowItWorksSection() {
   );
 }
 
-function ProductShowcaseSection() {
+function PreviewRow({ label }) {
   return (
-    <section className="max-w-4xl mx-auto px-6 py-14">
-      <h2 className="font-display text-[28px] font-medium text-center mb-3" style={{ color: COLORS.text }}>Un estudio de iluminación, no un simple cálculo</h2>
-      <p className="font-body text-[14.5px] text-center mb-10 max-w-lg mx-auto leading-relaxed" style={{ color: COLORS.subtext }}>
-        Así se ve el informe que recibirás: números claros, explicados en palabras simples, y hasta un plano orientativo.
-      </p>
-      <div className="max-w-md mx-auto rounded-2xl p-6" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 12px 32px rgba(46,42,39,0.08)" }}>
-        <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: "#F3E9D8" }}>
-            <ChefHat size={18} color={COLORS.accent} strokeWidth={1.6} />
-          </div>
-          <div>
-            <p className="font-body text-[14px] font-medium" style={{ color: COLORS.text }}>Cocina</p>
-            <p className="font-body text-[12px]" style={{ color: COLORS.subtext }}>Informe técnico de iluminación</p>
-          </div>
-        </div>
-        <div className="flex flex-col gap-2 rounded-xl p-4 mb-4" style={{ backgroundColor: COLORS.bg }}>
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: "#EEF0EA" }}><Check size={10} color={COLORS.success} strokeWidth={3} /></div>
-            <p className="font-body text-[12.5px]" style={{ color: COLORS.text }}><span style={{ color: COLORS.subtext }}>Temperatura: </span>4000 K</p>
-          </div>
-          <p className="font-body text-[11.5px] italic ml-7" style={{ color: COLORS.subtext }}>luz blanca neutra, parecida a una oficina bien iluminada</p>
-          <div className="flex items-center gap-2 mt-1.5">
-            <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: "#EEF0EA" }}><Check size={10} color={COLORS.success} strokeWidth={3} /></div>
-            <p className="font-body text-[12.5px]" style={{ color: COLORS.text }}><span style={{ color: COLORS.subtext }}>Downlights: </span>6 × 700 lm</p>
-          </div>
-        </div>
-        <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
-          <svg viewBox="0 0 300 130" className="w-full h-auto">
-            <rect x="20" y="14" width="260" height="102" rx="10" fill="#FFFFFF" stroke={COLORS.border} strokeWidth="2" />
-            <rect x="20" y="80" width="260" height="22" rx="4" fill="#EFE6D8" stroke={COLORS.border} strokeWidth="1" />
-            <rect x="128" y="42" width="46" height="30" rx="6" fill="#EFE6D8" stroke={COLORS.accent} strokeWidth="1.5" />
-            {[60, 105, 195, 240].map((x, i) => <circle key={i} cx={x} cy={91} r="4" fill={COLORS.accent} stroke="#FFFFFF" strokeWidth="1" />)}
-            <circle cx="140" cy="57" r="5" fill="#F4B942" stroke="#FFFFFF" strokeWidth="1.2" />
-            <circle cx="160" cy="57" r="5" fill="#F4B942" stroke="#FFFFFF" strokeWidth="1.2" />
-          </svg>
-          <p className="font-body text-[11px] text-center mt-1" style={{ color: COLORS.subtext }}>Plano orientativo, no a escala</p>
-        </div>
+    <div className="flex items-center justify-between gap-3 py-3" style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+      <p className="font-body text-[14px] font-medium" style={{ color: COLORS.text }}>{label}</p>
+      <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "#EEF0EA" }}>
+        <Check size={11} color={COLORS.success} strokeWidth={3} />
       </div>
-    </section>
+    </div>
   );
 }
 
-function CapabilitiesSection() {
-  const items = [
-    { Icon: Lightbulb, text: "Calcula los lúmenes necesarios" },
-    { Icon: Sun, text: "Recomienda la temperatura de color" },
-    { Icon: MapPin, text: "Sugiere la distribución de los focos" },
-    { Icon: ShieldAlert, text: "Detecta errores habituales" },
-    { Icon: Hammer, text: "Adapta el estudio a tu reforma" },
-  ];
+const REPORT_PREVIEW_ITEMS = [
+  "Luz necesaria según los m²",
+  "Temperatura de color",
+  "Distribución de luminarias",
+  "Capas de iluminación",
+  "Errores a evitar",
+  "Recomendaciones profesionales",
+];
+
+function ProductShowcaseSection() {
   return (
-    <section className="max-w-3xl mx-auto px-6 py-14">
-      <h2 className="font-display text-[28px] font-medium text-center mb-10" style={{ color: COLORS.text }}>¿Qué puede hacer Nemul?</h2>
-      <div className="flex flex-col gap-3">
-        {items.map((item, i) => (
-          <div key={i} className="flex items-center gap-4 rounded-xl px-5 py-4" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
-            <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "#F3E9D8" }}>
-              <item.Icon size={18} color={COLORS.accent} strokeWidth={1.6} />
-            </div>
-            <span className="font-body text-[14.5px] font-medium" style={{ color: COLORS.text }}>{item.text}</span>
+    <section className="max-w-md mx-auto px-6 py-14">
+      <h2 className="font-display text-[28px] font-medium text-center mb-3" style={{ color: COLORS.text }}>¿Qué vas a recibir con Nemul?</h2>
+      <p className="font-body text-[13px] tracking-wide text-center mb-6" style={{ color: COLORS.accent }}>
+        Vista previa del informe (resumen)
+      </p>
+      <div className="rounded-2xl p-6" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 12px 32px rgba(46,42,39,0.08)" }}>
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: "#F3E9D8" }}>
+            <Sofa size={18} color={COLORS.accent} strokeWidth={1.6} />
           </div>
-        ))}
+          <div>
+            <p className="font-body text-[14px] font-medium" style={{ color: COLORS.text }}>Ejemplo: Salón</p>
+            <p className="font-body text-[12px]" style={{ color: COLORS.subtext }}>Informe técnico de iluminación</p>
+          </div>
+        </div>
+        <div>
+          {REPORT_PREVIEW_ITEMS.map((label, i) => <PreviewRow key={i} label={label} />)}
+        </div>
       </div>
+      <p className="font-body text-[12.5px] text-center mt-5 leading-relaxed" style={{ color: COLORS.subtext }}>
+        El informe completo incluye todos los cálculos, recomendaciones y explicaciones para cada estancia.
+      </p>
     </section>
   );
 }
@@ -2554,7 +2535,6 @@ function LandingPage({ onStart }) {
       <LandingHero onStart={onStart} />
       <HowItWorksSection />
       <ProductShowcaseSection />
-      <CapabilitiesSection />
       <CredentialSection />
       <AccessSection onStart={onStart} />
       <LandingGuideSection />
