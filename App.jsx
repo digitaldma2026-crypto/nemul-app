@@ -144,8 +144,18 @@ const STYLE_OPTIONS = [
 ];
 
 const TEMP_BY_STYLE = { acogedor: 2700, equilibrado: 3000, luminoso: 4000 };
-const LUMENS_PER_DOWNLIGHT = 700;
-const WATTS_PER_DOWNLIGHT = 7;
+const LUMENS_PER_DOWNLIGHT = 800;
+const WATTS_PER_DOWNLIGHT = 8;
+
+// Un criterio profesional nunca da una única cifra exacta: da un rango,
+// porque el número real depende del modelo de luminaria, la altura del
+// techo o la distribución final. Siempre se muestra como un rango de 2.
+function downlightRange(lumens, minCount) {
+  const exact = lumens / LUMENS_PER_DOWNLIGHT;
+  const low = Math.max(minCount, Math.round(exact));
+  const high = low + 1;
+  return { low, high };
+}
 
 // Traducción a lenguaje humano: el número técnico no desaparece, pero nunca
 // se queda solo. Así lo explicaría una diseñadora en persona.
@@ -236,7 +246,7 @@ function generateLivingReport(answers = {}) {
   const tempK = TEMP_BY_STYLE[style];
   const lux = getLux("living", light);
   const lumens = Math.round((lux * area) / 100) * 100;
-  const downlights = Math.max(4, Math.ceil(lumens / LUMENS_PER_DOWNLIGHT));
+  const { low: downlightsLow, high: downlightsHigh } = downlightRange(lumens, 4);
 
   const tips = [];
   tips.push("Coloca los downlights separados aproximadamente entre 1,2 y 1,5 m.");
@@ -278,7 +288,7 @@ function generateLivingReport(answers = {}) {
   if (activities.includes("tv") || problem === "glare") mistakes.push("No ilumines directamente la pantalla del televisor.");
   if (ceiling === "vigas") mistakes.push("No empotres focos en las vigas de madera sin consultarlo antes con un instalador.");
 
-  return { tempK, lumens, downlights, area, lux, tips: [...new Set(tips)], mistakes: [...new Set(mistakes)] };
+  return { tempK, lumens, downlightsLow, downlightsHigh, area, lux, tips: [...new Set(tips)], mistakes: [...new Set(mistakes)] };
 }
 
 // ---------- Cocina ----------
@@ -380,10 +390,10 @@ function generateKitchenReport(answers = {}) {
   const area = KITCHEN_AREA_BY_SIZE[size] || 11;
   const heightFactor = KITCHEN_HEIGHT_FACTOR[ceilingHeight] || 1;
   const lumens = Math.round((lux * area * heightFactor) / 100) * 100;
-  const downlights = Math.max(4, Math.ceil(lumens / LUMENS_PER_DOWNLIGHT));
+  const { low: downlightsLow, high: downlightsHigh } = downlightRange(lumens, 4);
 
   const distribution = [];
-  distribution.push(`${downlights} downlights recomendados.`);
+  distribution.push(`${downlightsLow}–${downlightsHigh} downlights recomendados.`);
   distribution.push("Separación aproximada entre focos: 1,20–1,50 m, adaptada al tamaño de la cocina.");
   if (upperCabinets && upperCabinets !== "no") {
     distribution.push("Coloca la línea de focos entre 20 y 30 cm por delante de los muebles altos, para iluminar bien el centro de la encimera y evitar sombras al cocinar.");
@@ -444,7 +454,7 @@ function generateKitchenReport(answers = {}) {
   if (problem === "onlyLighting") mistakes.push("No elijas soluciones que requieran romper alicatado o encimera si no vas a hacer obra.");
   if (adjoiningStyle) mistakes.push("No dejes la cocina con una temperatura de luz totalmente distinta a la del salón: en un espacio abierto, el contraste se nota mucho más que en una habitación cerrada.");
 
-  return { tempK, lumens, downlights, area, lux, distribution, narrative: sentences.join(" "), mistakes: [...new Set(mistakes)] };
+  return { tempK, lumens, downlightsLow, downlightsHigh, area, lux, distribution, narrative: sentences.join(" "), mistakes: [...new Set(mistakes)] };
 }
 
 // ---------- Dormitorio, baño, comedor, pasillo, vestidor y terraza ----------
@@ -857,11 +867,11 @@ function generateGenericTechnicalReport(roomId, answers = {}) {
   const area = cfg.areaMap[answers.size] ?? cfg.defaultArea;
   const lux = getLux(roomId, answers.light);
   const lumens = Math.round((lux * area) / 100) * 100;
-  const downlights = Math.max(cfg.minDownlights, Math.ceil(lumens / LUMENS_PER_DOWNLIGHT));
+  const { low: downlightsLow, high: downlightsHigh } = downlightRange(lumens, cfg.minDownlights);
   const tempK = cfg.getTempK(answers);
   const tips = getReport(roomId, answers);
   const mistakes = ROOM_TECH_MISTAKES[roomId] || [];
-  return { tempK, lumens, downlights, area, lux, tips, mistakes };
+  return { tempK, lumens, downlightsLow, downlightsHigh, area, lux, tips, mistakes };
 }
 
 const ROOM_FLOWS = {
@@ -1418,7 +1428,7 @@ function MistakesList({ mistakes }) {
 
 // Transparencia sin tecnicismo: el usuario ve de dónde sale el número,
 // sin que nadie le explique una fórmula.
-function CalculationBlock({ area, lux, lumens, downlights }) {
+function CalculationBlock({ area, lux, lumens, downlightsLow, downlightsHigh }) {
   return (
     <div>
       <p className="font-body text-[13px] tracking-[0.12em] uppercase mb-2.5" style={{ color: COLORS.accent }}>Cálculo realizado</p>
@@ -1430,12 +1440,15 @@ function CalculationBlock({ area, lux, lumens, downlights }) {
         </div>
         <StatRow label="Iluminación total necesaria" value={`${lumens.toLocaleString("es-ES")} lúmenes`} />
         <div>
-          <StatRow label="Downlights recomendados" value={`${downlights} × ${LUMENS_PER_DOWNLIGHT} lm`} />
+          <StatRow label="Downlights recomendados" value={`${downlightsLow}–${downlightsHigh} × ${LUMENS_PER_DOWNLIGHT} lm`} />
           <p className="font-body text-[13.5px] italic mt-1 ml-9" style={{ color: COLORS.subtext }}>
             Equivale a downlights LED de unos {WATTS_PER_DOWNLIGHT}W cada uno, el estándar más habitual en casa.
           </p>
         </div>
       </div>
+      <p className="font-body text-[12.5px] leading-relaxed mt-2.5" style={{ color: COLORS.subtext }}>
+        La cantidad de luminarias se calcula según los m² de la estancia, el nivel de iluminación recomendado y el flujo luminoso de cada downlight. La recomendación es orientativa y puede ajustarse al diseño final.
+      </p>
     </div>
   );
 }
@@ -1495,7 +1508,7 @@ function TerraceZoneScheme({ activities = [], covered, night }) {
 }
 
 function TechnicalReportCard({ room, answers, expanded, onToggle }) {
-  const { tempK, lumens, downlights, area, lux, tips, mistakes } = generateLivingReport(answers);
+  const { tempK, lumens, downlightsLow, downlightsHigh, area, lux, tips, mistakes } = generateLivingReport(answers);
   const { Icon } = room;
   return (
     <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 2px 12px rgba(46,42,39,0.05)" }}>
@@ -1519,7 +1532,7 @@ function TechnicalReportCard({ room, answers, expanded, onToggle }) {
             </div>
           </div>
 
-          <CalculationBlock area={area} lux={lux} lumens={lumens} downlights={downlights} />
+          <CalculationBlock area={area} lux={lux} lumens={lumens} downlightsLow={downlightsLow} downlightsHigh={downlightsHigh} />
 
           <div>
             <p className="font-body text-[13px] tracking-[0.12em] uppercase mb-2.5" style={{ color: COLORS.accent }}>Recomendaciones profesionales</p>
@@ -1541,7 +1554,7 @@ function TechnicalReportCard({ room, answers, expanded, onToggle }) {
 }
 
 function KitchenReportCard({ room, answers, expanded, onToggle }) {
-  const { tempK, lumens, downlights, area, lux, distribution, narrative, mistakes } = generateKitchenReport(answers);
+  const { tempK, lumens, downlightsLow, downlightsHigh, area, lux, distribution, narrative, mistakes } = generateKitchenReport(answers);
   const { Icon } = room;
   return (
     <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 2px 12px rgba(46,42,39,0.05)" }}>
@@ -1566,7 +1579,7 @@ function KitchenReportCard({ room, answers, expanded, onToggle }) {
             </div>
           </div>
 
-          <CalculationBlock area={area} lux={lux} lumens={lumens} downlights={downlights} />
+          <CalculationBlock area={area} lux={lux} lumens={lumens} downlightsLow={downlightsLow} downlightsHigh={downlightsHigh} />
 
           <div>
             <p className="font-body text-[13px] tracking-[0.12em] uppercase mb-2.5" style={{ color: COLORS.accent }}>📍 Distribución recomendada de los focos</p>
@@ -1624,7 +1637,7 @@ function RoomReportCard({ room, answers, expanded, onToggle }) {
 }
 
 function GenericTechnicalReportCard({ room, answers, expanded, onToggle }) {
-  const { tempK, lumens, downlights, area, lux, tips, mistakes } = generateGenericTechnicalReport(room.id, answers);
+  const { tempK, lumens, downlightsLow, downlightsHigh, area, lux, tips, mistakes } = generateGenericTechnicalReport(room.id, answers);
   const { Icon } = room;
   return (
     <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 2px 12px rgba(46,42,39,0.05)" }}>
@@ -1648,7 +1661,7 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle }) {
             </div>
           </div>
 
-          <CalculationBlock area={area} lux={lux} lumens={lumens} downlights={downlights} />
+          <CalculationBlock area={area} lux={lux} lumens={lumens} downlightsLow={downlightsLow} downlightsHigh={downlightsHigh} />
 
           {room.id === "terrace" && (
             <div>
