@@ -3,7 +3,7 @@ import {
   Sofa, ChefHat, BedDouble, Bath, UtensilsCrossed, DoorOpen, Shirt, TreePine,
   ArrowLeft, Check, ChevronRight, ChevronDown, Sun, Moon, CloudSun, Lightbulb,
   Sparkles, BookOpen, Users, Coffee, Plus, Trash2, Home as HomeIcon,
-  Package, Palette, Wind, Tv, Briefcase, Droplets, Zap, Laptop, Lamp, X, Hammer, Info, Pencil, Lock,
+  Package, Palette, Wind, Tv, Briefcase, Droplets, Zap, Laptop, Lamp, X, Hammer, Info, Pencil, Lock, MapPin, ShieldAlert,
 } from "lucide-react";
 
 const FONT_STYLE = `
@@ -2239,8 +2239,333 @@ function PlanDetailScreen({ plan, onBack }) {
   );
 }
 
+// ---------- Landing page: la puerta de entrada real de www.nemul.app ----------
+// Se muestra fuera del marco de teléfono: es una página web normal y responsiva,
+// no la simulación de app. El CTA lleva a la experiencia dentro del "teléfono".
+
+function LandingNav({ onStart }) {
+  return (
+    <div className="sticky top-0 z-10 backdrop-blur-md" style={{ backgroundColor: "rgba(248,246,242,0.85)", borderBottom: `1px solid ${COLORS.border}` }}>
+      <div className="max-w-5xl mx-auto flex items-center justify-between px-6 py-4">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: COLORS.card, boxShadow: "0 4px 12px rgba(244,181,66,0.35)" }}>
+            <Lightbulb size={15} color="#F4B942" fill="#FFDE8A" strokeWidth={1.4} />
+          </div>
+          <span className="font-body text-[15px] font-semibold tracking-wide" style={{ color: COLORS.text }}>Nemul</span>
+        </div>
+        <button
+          onClick={onStart}
+          className="font-body text-[13.5px] font-medium rounded-full px-5 py-2.5 transition-all duration-200"
+          style={{ backgroundColor: COLORS.primary, color: "#FFFFFF" }}
+        >
+          Empieza gratis
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function LandingHero({ onStart }) {
+  return (
+    <section className="max-w-3xl mx-auto px-6 pt-16 pb-14 text-center">
+      <div className="relative w-24 h-24 mx-auto mb-8 flex items-center justify-center">
+        <div className="absolute inset-0 rounded-full glow-orb" style={{ background: "radial-gradient(circle, #FFC94Db3 0%, #FFC94D33 45%, transparent 72%)" }} />
+        <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor: COLORS.card, boxShadow: "0 8px 24px rgba(244,181,66,0.45)" }}>
+          <Lightbulb size={26} color="#F4B942" fill="#FFDE8A" strokeWidth={1.4} />
+        </div>
+      </div>
+      <p className="font-body text-[13px] tracking-[0.25em] uppercase mb-4" style={{ color: COLORS.accent }}>Nemul</p>
+      <h1 className="font-display text-[40px] md:text-[52px] leading-[1.1] font-medium mb-5" style={{ color: COLORS.text }}>
+        La forma más sencilla de diseñar la iluminación de tu hogar.
+      </h1>
+      <p className="font-body text-[16px] md:text-[17px] leading-relaxed max-w-xl mx-auto mb-9" style={{ color: COLORS.subtext }}>
+        Recibe recomendaciones profesionales en pocos minutos. Sin conocimientos técnicos.
+      </p>
+      <button
+        onClick={onStart}
+        className="font-body font-medium text-[15px] tracking-wide rounded-2xl px-8 py-4 transition-all duration-200"
+        style={{ backgroundColor: COLORS.primary, color: "#FFFFFF", boxShadow: "0 10px 26px rgba(111,94,77,0.3)" }}
+      >
+        ✨ Empieza gratis
+      </button>
+      <p className="font-body text-[12.5px] mt-3.5" style={{ color: COLORS.subtext }}>
+        Sin registro. Sin compromiso. Informe gratuito en pocos minutos.
+      </p>
+    </section>
+  );
+}
+
+function HowItWorksSection() {
+  const steps = [
+    { n: "1", title: "Elige una estancia", text: "Salón, cocina, dormitorio... empieza por el espacio que más te importa ahora mismo." },
+    { n: "2", title: "Responde unas preguntas sencillas", text: "Nada de términos técnicos: te preguntamos cómo vives ese espacio, no cómo diseñar luz." },
+    { n: "3", title: "Recibe tu estudio de iluminación", text: "Temperatura, lúmenes, distribución de focos y consejos, explicados en lenguaje simple." },
+  ];
+  return (
+    <section className="max-w-4xl mx-auto px-6 py-14">
+      <h2 className="font-display text-[28px] font-medium text-center mb-10" style={{ color: COLORS.text }}>¿Cómo funciona?</h2>
+      <div className="grid md:grid-cols-3 gap-5">
+        {steps.map((s) => (
+          <div key={s.n} className="rounded-2xl p-6" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 2px 12px rgba(46,42,39,0.05)" }}>
+            <div className="w-9 h-9 rounded-full flex items-center justify-center mb-4 font-body text-[14px] font-semibold" style={{ backgroundColor: "#F3E9D8", color: COLORS.accent }}>
+              {s.n}
+            </div>
+            <p className="font-body text-[15px] font-medium mb-2" style={{ color: COLORS.text }}>{s.title}</p>
+            <p className="font-body text-[13.5px] leading-relaxed" style={{ color: COLORS.subtext }}>{s.text}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ProductShowcaseSection() {
+  return (
+    <section className="max-w-4xl mx-auto px-6 py-14">
+      <h2 className="font-display text-[28px] font-medium text-center mb-3" style={{ color: COLORS.text }}>Un estudio de iluminación, no un simple cálculo</h2>
+      <p className="font-body text-[14.5px] text-center mb-10 max-w-lg mx-auto leading-relaxed" style={{ color: COLORS.subtext }}>
+        Así se ve el informe que recibirás: números claros, explicados en palabras simples, y hasta un plano orientativo.
+      </p>
+      <div className="max-w-md mx-auto rounded-2xl p-6" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 12px 32px rgba(46,42,39,0.08)" }}>
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: "#F3E9D8" }}>
+            <ChefHat size={18} color={COLORS.accent} strokeWidth={1.6} />
+          </div>
+          <div>
+            <p className="font-body text-[14px] font-medium" style={{ color: COLORS.text }}>Cocina</p>
+            <p className="font-body text-[12px]" style={{ color: COLORS.subtext }}>Informe técnico de iluminación</p>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 rounded-xl p-4 mb-4" style={{ backgroundColor: COLORS.bg }}>
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: "#EEF0EA" }}><Check size={10} color={COLORS.success} strokeWidth={3} /></div>
+            <p className="font-body text-[12.5px]" style={{ color: COLORS.text }}><span style={{ color: COLORS.subtext }}>Temperatura: </span>4000 K</p>
+          </div>
+          <p className="font-body text-[11.5px] italic ml-7" style={{ color: COLORS.subtext }}>luz blanca neutra, parecida a una oficina bien iluminada</p>
+          <div className="flex items-center gap-2 mt-1.5">
+            <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: "#EEF0EA" }}><Check size={10} color={COLORS.success} strokeWidth={3} /></div>
+            <p className="font-body text-[12.5px]" style={{ color: COLORS.text }}><span style={{ color: COLORS.subtext }}>Downlights: </span>6 × 700 lm</p>
+          </div>
+        </div>
+        <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
+          <svg viewBox="0 0 300 130" className="w-full h-auto">
+            <rect x="20" y="14" width="260" height="102" rx="10" fill="#FFFFFF" stroke={COLORS.border} strokeWidth="2" />
+            <rect x="20" y="80" width="260" height="22" rx="4" fill="#EFE6D8" stroke={COLORS.border} strokeWidth="1" />
+            <rect x="128" y="42" width="46" height="30" rx="6" fill="#EFE6D8" stroke={COLORS.accent} strokeWidth="1.5" />
+            {[60, 105, 195, 240].map((x, i) => <circle key={i} cx={x} cy={91} r="4" fill={COLORS.accent} stroke="#FFFFFF" strokeWidth="1" />)}
+            <circle cx="140" cy="57" r="5" fill="#F4B942" stroke="#FFFFFF" strokeWidth="1.2" />
+            <circle cx="160" cy="57" r="5" fill="#F4B942" stroke="#FFFFFF" strokeWidth="1.2" />
+          </svg>
+          <p className="font-body text-[11px] text-center mt-1" style={{ color: COLORS.subtext }}>Plano orientativo, no a escala</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CapabilitiesSection() {
+  const items = [
+    { Icon: Lightbulb, text: "Calcula los lúmenes necesarios" },
+    { Icon: Sun, text: "Recomienda la temperatura de color" },
+    { Icon: MapPin, text: "Sugiere la distribución de los focos" },
+    { Icon: ShieldAlert, text: "Detecta errores habituales" },
+    { Icon: Hammer, text: "Adapta el estudio a tu reforma" },
+  ];
+  return (
+    <section className="max-w-3xl mx-auto px-6 py-14">
+      <h2 className="font-display text-[28px] font-medium text-center mb-10" style={{ color: COLORS.text }}>¿Qué puede hacer Nemul?</h2>
+      <div className="flex flex-col gap-3">
+        {items.map((item, i) => (
+          <div key={i} className="flex items-center gap-4 rounded-xl px-5 py-4" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
+            <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "#F3E9D8" }}>
+              <item.Icon size={18} color={COLORS.accent} strokeWidth={1.6} />
+            </div>
+            <span className="font-body text-[14.5px] font-medium" style={{ color: COLORS.text }}>{item.text}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CredentialSection() {
+  return (
+    <section className="max-w-2xl mx-auto px-6 py-14 text-center">
+      <div className="w-14 h-14 rounded-full mx-auto mb-5 flex items-center justify-center" style={{ backgroundColor: "#F3E9D8" }}>
+        <Sparkles size={22} color={COLORS.accent} strokeWidth={1.6} />
+      </div>
+      <p className="font-display text-[22px] font-medium mb-3" style={{ color: COLORS.text }}>Creado por Dayami, diseñadora de interiores</p>
+      <p className="font-body text-[14.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
+        Aplica criterios profesionales de interiorismo y los explica de forma sencilla para ayudarte a tomar mejores decisiones.
+      </p>
+    </section>
+  );
+}
+
+function AccessSection({ onStart }) {
+  return (
+    <section className="max-w-2xl mx-auto px-6 py-14 text-center">
+      <div className="rounded-2xl p-8" style={{ backgroundColor: "#F3E9D8", border: `1px solid #C1A16B55` }}>
+        <p className="font-body text-[12px] tracking-[0.2em] uppercase mb-3" style={{ color: COLORS.primary }}>Acceso</p>
+        <p className="font-display text-[22px] font-medium mb-3" style={{ color: COLORS.text }}>Empieza gratis con una habitación</p>
+        <p className="font-body text-[14px] leading-relaxed mb-6" style={{ color: COLORS.subtext }}>
+          Prueba Nemul sin coste en el espacio que más te importe ahora. Muy pronto abriremos el acceso a toda la vivienda.
+        </p>
+        <button
+          onClick={onStart}
+          className="font-body font-medium text-[14.5px] rounded-2xl px-7 py-3.5 transition-all duration-200"
+          style={{ backgroundColor: COLORS.primary, color: "#FFFFFF", boxShadow: "0 8px 20px rgba(111,94,77,0.25)" }}
+        >
+          Empieza gratis
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function LandingGuideSection() {
+  return (
+    <section className="max-w-2xl mx-auto px-6 py-14">
+      <p className="font-body text-[12px] tracking-[0.2em] uppercase text-center mb-4" style={{ color: COLORS.accent }}>¿Quieres aprender más?</p>
+      <div className="rounded-2xl p-6" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 2px 12px rgba(46,42,39,0.05)" }}>
+        <div className="flex items-start gap-4">
+          <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "#F3E9D8" }}>
+            <BookOpen size={19} color={COLORS.accent} strokeWidth={1.6} />
+          </div>
+          <div className="flex-1">
+            <p className="font-display text-[18px] font-medium mb-1" style={{ color: COLORS.text }}>Guía Profesional de Iluminación</p>
+            <p className="font-body text-[13px] leading-relaxed mb-4" style={{ color: COLORS.subtext }}>
+              Aprende a iluminar cualquier estancia como un profesional, con ejemplos reales y consejos prácticos.
+            </p>
+            <a
+              href="https://www.etsy.com/es/listing/4427720777/guia-de-iluminacion-del-hogar-consejos?ref=share_ios_native_control"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block font-body font-medium text-[13.5px] rounded-xl px-5 py-2.5"
+              style={{ backgroundColor: COLORS.primary, color: "#FFFFFF" }}
+            >
+              Ver en Etsy
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FAQItem({ q, a }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
+      <button onClick={() => setOpen((o) => !o)} className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left">
+        <span className="font-body text-[14px] font-medium" style={{ color: COLORS.text }}>{q}</span>
+        <ChevronDown size={16} color={COLORS.subtext} style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", flexShrink: 0 }} />
+      </button>
+      {open && (
+        <div className="px-5 pb-4">
+          <p className="font-body text-[13.5px] leading-relaxed" style={{ color: COLORS.subtext }}>{a}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FAQSection() {
+  const faqs = [
+    { q: "¿Necesito saber de iluminación para usar Nemul?", a: "No. Todas las preguntas están pensadas para cualquier persona, sin necesidad de conocer términos técnicos. Nemul se encarga de la parte profesional por ti." },
+    { q: "¿Nemul sustituye a un electricista?", a: "No. Las recomendaciones son orientativas; para la instalación eléctrica siempre debes consultar a un profesional certificado." },
+    { q: "¿Cuántas habitaciones puedo probar gratis?", a: "Una habitación completa, sin ningún coste. Muy pronto abriremos el acceso a toda la vivienda." },
+    { q: "¿Cómo sé cuándo esté disponible el acceso completo?", a: "Al intentar entrar a otra habitación te ofrecemos dejar tu email para avisarte en cuanto esté listo." },
+  ];
+  return (
+    <section id="faq" className="max-w-2xl mx-auto px-6 py-14">
+      <h2 className="font-display text-[26px] font-medium text-center mb-8" style={{ color: COLORS.text }}>Preguntas frecuentes</h2>
+      <div className="flex flex-col gap-3">
+        {faqs.map((f, i) => <FAQItem key={i} q={f.q} a={f.a} />)}
+      </div>
+    </section>
+  );
+}
+
+function LandingFooter() {
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  return (
+    <footer className="border-t" style={{ borderColor: COLORS.border }}>
+      <div className="max-w-2xl mx-auto px-6 py-10 text-center">
+        <p className="font-body text-[12px] leading-relaxed mb-5" style={{ color: COLORS.subtext }}>
+          Estas recomendaciones son orientativas. Para la instalación eléctrica, consulta siempre a un profesional certificado.
+        </p>
+        <div className="flex items-center justify-center gap-5 mb-5 flex-wrap">
+          <a href="#faq" className="font-body text-[13px] font-medium" style={{ color: COLORS.text }}>Preguntas frecuentes</a>
+          <a href="mailto:contacto@nemul.app" className="font-body text-[13px] font-medium" style={{ color: COLORS.text }}>Contacto</a>
+          <button onClick={() => setShowPrivacy((s) => !s)} className="font-body text-[13px] font-medium" style={{ color: COLORS.text }}>Política de privacidad</button>
+        </div>
+        {showPrivacy && (
+          <div className="rounded-xl p-6 text-left mb-5 flex flex-col gap-4" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
+            <div>
+              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>Qué datos recopilamos</p>
+              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
+                Nemul solo te pide tu email si tú decides dejarlo voluntariamente en la pantalla de acceso Premium, para avisarte cuando esa función esté disponible. No pedimos contraseña, datos de pago, ni ningún otro dato personal para usar la habitación gratuita.
+              </p>
+            </div>
+            <div>
+              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>Cómo lo usamos</p>
+              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
+                Únicamente para enviarte un aviso relacionado con el acceso Premium. No lo usamos para ningún otro fin, y no lo compartimos, vendemos ni cedemos a terceros bajo ninguna circunstancia.
+              </p>
+            </div>
+            <div>
+              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>Dónde se guarda</p>
+              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
+                Tu email se almacena de forma segura en Formspree, el servicio que usamos para gestionar este formulario de interés.
+              </p>
+            </div>
+            <div>
+              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>Cookies</p>
+              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
+                Nemul no utiliza cookies de seguimiento ni analíticas de terceros en esta versión.
+              </p>
+            </div>
+            <div>
+              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>Tus derechos</p>
+              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
+                Puedes pedirnos en cualquier momento que eliminemos tu email de nuestros registros escribiendo a <a href="mailto:contacto@nemul.app" style={{ color: COLORS.accent }}>contacto@nemul.app</a>.
+              </p>
+            </div>
+            <div>
+              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>Cambios futuros</p>
+              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
+                Si en el futuro añadimos cuentas de usuario, pagos u otro tratamiento de datos, actualizaremos esta política y te lo indicaremos claramente aquí.
+              </p>
+            </div>
+          </div>
+        )}
+        <p className="font-body text-[11.5px]" style={{ color: COLORS.subtext }}>© {new Date().getFullYear()} Nemul</p>
+      </div>
+    </footer>
+  );
+}
+
+function LandingPage({ onStart }) {
+  return (
+    <div className="min-h-screen w-full" style={{ backgroundColor: COLORS.bg }}>
+      <style>{FONT_STYLE}</style>
+      <LandingNav onStart={onStart} />
+      <LandingHero onStart={onStart} />
+      <HowItWorksSection />
+      <ProductShowcaseSection />
+      <CapabilitiesSection />
+      <CredentialSection />
+      <AccessSection onStart={onStart} />
+      <LandingGuideSection />
+      <FAQSection />
+      <LandingFooter />
+    </div>
+  );
+}
+
 export default function NemulApp() {
-  const [screen, setScreen] = useState("welcome");
+  const [screen, setScreen] = useState("landing");
   const [selectedRoomIds, setSelectedRoomIds] = useState([]);
   const [roomIndex, setRoomIndex] = useState(0);
   const [stepIndex, setStepIndex] = useState(0);
@@ -2337,6 +2662,10 @@ export default function NemulApp() {
     : currentRoom?.label;
 
   const viewingPlan = savedPlans.find((p) => p.id === viewingPlanId);
+
+  if (screen === "landing") {
+    return <LandingPage onStart={() => setScreen("welcome")} />;
+  }
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center py-10 px-4" style={{ backgroundColor: "#EFECE5" }}>
