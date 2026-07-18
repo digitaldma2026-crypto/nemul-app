@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 import {
   Sofa, ChefHat, BedDouble, Bath, UtensilsCrossed, DoorOpen, Shirt, TreePine,
   ArrowLeft, Check, ChevronRight, ChevronDown, Sun, Moon, CloudSun, Lightbulb,
   Sparkles, BookOpen, Users, Coffee, Plus, Trash2, Home as HomeIcon,
-  Package, Palette, Wind, Tv, Briefcase, Droplets, Zap, Laptop, Lamp, X, Hammer, Info, Pencil, Lock,
+  Package, Palette, Wind, Tv, Briefcase, Droplets, Zap, Laptop, Lamp, X, Hammer, Info, Pencil, Lock, Download,
 } from "lucide-react";
 
 const FONT_STYLE = `
@@ -56,6 +58,41 @@ const ROOMS = [
   { id: "closet", label: "Vestidor", Icon: Shirt },
   { id: "terrace", label: "Terraza", Icon: TreePine },
 ];
+
+// Los planes se guardan en el propio navegador (localStorage), para que
+// sobrevivan a recargar la página. Los objetos de habitación incluyen un
+// componente de icono que no se puede guardar como texto, así que solo
+// guardamos el id de cada habitación y lo reconstruimos al cargar.
+function loadSavedPlans() {
+  try {
+    const raw = localStorage.getItem("nemul_savedPlans");
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return parsed.map((p) => ({
+      id: p.id,
+      savedAt: new Date(p.savedAt),
+      rooms: (p.roomIds || []).map((rid) => ROOMS.find((r) => r.id === rid)).filter(Boolean),
+      answersByRoom: p.answersByRoom || {},
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function persistSavedPlans(plans) {
+  try {
+    const serializable = plans.map((p) => ({
+      id: p.id,
+      savedAt: p.savedAt instanceof Date ? p.savedAt.toISOString() : p.savedAt,
+      roomIds: p.rooms.map((r) => r.id),
+      answersByRoom: p.answersByRoom,
+    }));
+    localStorage.setItem("nemul_savedPlans", JSON.stringify(serializable));
+  } catch {
+    // Si localStorage no está disponible (por ejemplo, modo privado),
+    // simplemente no persiste entre recargas; el resto de la app sigue funcionando.
+  }
+}
 
 const LIGHT_OPTIONS = [
   { id: "bright", label: "Mucha luz natural", Icon: Sun },
@@ -2111,8 +2148,74 @@ function LegalNote() {
   );
 }
 
+// Versión "para imprimir": las mismas tarjetas de informe, siempre abiertas
+// del todo, renderizadas fuera de pantalla para capturarlas como imagen.
+function PrintableReport({ rooms, answersByRoom }) {
+  return (
+    <div style={{ width: 700 }} className="bg-white p-10">
+      <div className="text-center mb-8">
+        <p className="font-body text-[13px] tracking-[0.2em] uppercase mb-2" style={{ color: COLORS.accent }}>Nemul</p>
+        <p className="font-display text-[28px] font-medium" style={{ color: COLORS.text }}>Estudio de iluminación</p>
+        <p className="font-body text-[13px] mt-1.5" style={{ color: COLORS.subtext }}>
+          {new Date().toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}
+        </p>
+      </div>
+      <div className="flex flex-col gap-6">
+        {rooms.map((room) => (
+          <ReportCard key={room.id} room={room} answers={answersByRoom[room.id]} expanded={true} onToggle={() => {}} />
+        ))}
+      </div>
+      <p className="font-body text-[12px] text-center mt-8 leading-relaxed" style={{ color: COLORS.subtext }}>
+        Estas recomendaciones son orientativas. Para la instalación eléctrica, consulta siempre a un profesional certificado.
+      </p>
+    </div>
+  );
+}
+
+async function downloadReportAsPdf(node, filename) {
+  if (!node) return;
+  const canvas = await html2canvas(node, { scale: 2, backgroundColor: "#FFFFFF", useCORS: true });
+  const imgData = canvas.toDataURL("image/png");
+  const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const imgWidth = pageWidth;
+  const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+  let heightLeft = imgHeight;
+  let position = 0;
+
+  pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+  heightLeft -= pageHeight;
+
+  while (heightLeft > 0) {
+    position = heightLeft - imgHeight;
+    pdf.addPage();
+    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+  }
+
+  pdf.save(filename);
+}
+
 function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
   const [expandedId, setExpandedId] = useState(rooms[0]?.id);
+  const [downloading, setDownloading] = useState(false);
+  const printRef = useRef(null);
+
+  const handleDownloadPdf = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      const dateStr = new Date().toISOString().slice(0, 10);
+      await downloadReportAsPdf(printRef.current, `nemul-informe-${dateStr}.pdf`);
+    } catch (e) {
+      // Si algo falla generando el PDF, no rompemos el resto de la app.
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full rise-in relative">
       <TopNav onBack={onRestart} />
@@ -2144,6 +2247,15 @@ function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
       </div>
       <div className="px-7 pt-3 pb-1 flex flex-col gap-3">
         <PrimaryButton onClick={onSave}>Guardar este plan</PrimaryButton>
+        <button
+          onClick={handleDownloadPdf}
+          disabled={downloading}
+          className="w-full flex items-center justify-center gap-2 font-body font-medium text-[14px] rounded-2xl py-3.5 transition-all duration-200"
+          style={{ backgroundColor: COLORS.card, border: `1.5px solid ${COLORS.border}`, color: COLORS.text }}
+        >
+          <Download size={16} color={COLORS.text} strokeWidth={1.8} />
+          {downloading ? "Generando PDF..." : "Descargar informe en PDF"}
+        </button>
         <button onClick={onRestart} className="w-full font-body text-[13.5px] font-medium py-2 flex items-center justify-center gap-1" style={{ color: COLORS.subtext }}>
           Crear un nuevo plan <ChevronRight size={14} />
         </button>
@@ -2154,6 +2266,11 @@ function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
           <span className="font-body text-[14px] font-medium text-white">Plan guardado</span>
         </div>
       )}
+      <div style={{ position: "absolute", left: -99999, top: 0 }} aria-hidden="true">
+        <div ref={printRef}>
+          <PrintableReport rooms={rooms} answersByRoom={answersByRoom} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -2215,6 +2332,22 @@ function HomeScreen({ plans, onOpenPlan, onDeletePlan, onNewPlan }) {
 
 function PlanDetailScreen({ plan, onBack }) {
   const [expandedId, setExpandedId] = useState(plan.rooms[0]?.id);
+  const [downloading, setDownloading] = useState(false);
+  const printRef = useRef(null);
+
+  const handleDownloadPdf = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      const dateStr = new Date().toISOString().slice(0, 10);
+      await downloadReportAsPdf(printRef.current, `nemul-informe-${dateStr}.pdf`);
+    } catch (e) {
+      // Si algo falla generando el PDF, no rompemos el resto de la app.
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full rise-in">
       <TopNav onBack={onBack} />
@@ -2231,10 +2364,26 @@ function PlanDetailScreen({ plan, onBack }) {
           ))}
         </div>
         <div className="pb-3">
+          <button
+            onClick={handleDownloadPdf}
+            disabled={downloading}
+            className="w-full flex items-center justify-center gap-2 font-body font-medium text-[14px] rounded-2xl py-3.5 transition-all duration-200"
+            style={{ backgroundColor: COLORS.card, border: `1.5px solid ${COLORS.border}`, color: COLORS.text }}
+          >
+            <Download size={16} color={COLORS.text} strokeWidth={1.8} />
+            {downloading ? "Generando PDF..." : "Descargar informe en PDF"}
+          </button>
+        </div>
+        <div className="pb-3">
           <GuidePromoCard />
         </div>
         <div className="pb-6">
           <LegalNote />
+        </div>
+      </div>
+      <div style={{ position: "absolute", left: -99999, top: 0 }} aria-hidden="true">
+        <div ref={printRef}>
+          <PrintableReport rooms={plan.rooms} answersByRoom={plan.answersByRoom} />
         </div>
       </div>
     </div>
@@ -2502,6 +2651,12 @@ function LandingFooter() {
               </p>
             </div>
             <div>
+              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>Almacenamiento en tu propio dispositivo</p>
+              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
+                Para que Nemul funcione bien, guardamos cierta información directamente en tu navegador (no en nuestros servidores): qué habitación probaste gratis y los planes que decidas guardar. Esta información se queda únicamente en tu dispositivo, nunca se nos envía, y puedes borrarla en cualquier momento eliminando los datos de navegación de tu navegador.
+              </p>
+            </div>
+            <div>
               <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>Cookies</p>
               <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
                 Nemul no utiliza cookies de seguimiento ni analíticas de terceros en esta versión.
@@ -2551,9 +2706,28 @@ export default function NemulApp() {
   const [stepIndex, setStepIndex] = useState(0);
   const [answersByRoom, setAnswersByRoom] = useState({});
   const [saved, setSaved] = useState(false);
-  const [savedPlans, setSavedPlans] = useState([]);
+  const [savedPlans, setSavedPlans] = useState(() => loadSavedPlans());
+
+  useEffect(() => {
+    persistSavedPlans(savedPlans);
+  }, [savedPlans]);
   const [viewingPlanId, setViewingPlanId] = useState(null);
-  const [freeRoomId, setFreeRoomId] = useState(null);
+  const [freeRoomId, setFreeRoomId] = useState(() => {
+    try {
+      return localStorage.getItem("nemul_freeRoomId") || null;
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (freeRoomId) localStorage.setItem("nemul_freeRoomId", freeRoomId);
+    } catch {
+      // Si el navegador bloquea localStorage (modo privado, por ejemplo),
+      // simplemente no persiste entre recargas; el resto de la app sigue funcionando.
+    }
+  }, [freeRoomId]);
 
   const selectedRooms = selectedRoomIds.map((id) => ROOMS.find((r) => r.id === id));
   const currentRoom = selectedRooms[roomIndex];
