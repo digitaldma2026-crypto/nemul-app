@@ -1982,7 +1982,138 @@ function PlanDetailScreen({ plan, onBack }) {
 // Se muestra fuera del marco de teléfono: es una página web normal y responsiva,
 // no la simulación de app. El CTA lleva a la experiencia dentro del "teléfono".
 
-function LandingNav({ onStart }) {
+const LANDING_COPY = {
+  es: {
+    navCta: "Empieza gratis",
+    heroTitle: "La forma más sencilla de diseñar la iluminación de tu hogar.",
+    heroSubtitle: "Recibe recomendaciones profesionales en pocos minutos. Sin conocimientos técnicos.",
+    heroCta: "✨ Empieza gratis",
+    heroTrust: "Sin registro. Sin compromiso. Informe gratuito en pocos minutos.",
+    langNotice: "",
+    howTitle: "¿Cómo funciona?",
+    steps: [
+      { n: "1", title: "Elige una estancia", text: "Salón, cocina, dormitorio... empieza por el espacio que más te importa ahora mismo." },
+      { n: "2", title: "Responde unas preguntas sencillas", text: "Nada de términos técnicos: te preguntamos cómo vives ese espacio, no cómo diseñar luz." },
+      { n: "3", title: "Recibe tu estudio de iluminación", text: "Temperatura, lúmenes, distribución de focos y consejos, explicados en lenguaje simple." },
+    ],
+    showcaseTitle: "¿Qué vas a recibir con Nemul?",
+    showcasePreviewLabel: "Vista previa del informe (resumen)",
+    showcaseExampleLabel: "Ejemplo: Salón",
+    showcaseSubLabel: "Informe técnico de iluminación",
+    showcaseItems: [
+      "Luz necesaria según los m²",
+      "Temperatura de color",
+      "Distribución de luminarias",
+      "Capas de iluminación",
+      "Errores a evitar",
+      "Recomendaciones profesionales",
+    ],
+    showcaseFooter: "El informe completo incluye todos los cálculos, recomendaciones y explicaciones para cada estancia.",
+    credentialTitle: "Creado por Dayami, diseñadora de interiores",
+    credentialText: "Aplica criterios profesionales de interiorismo y los explica de forma sencilla para ayudarte a tomar mejores decisiones.",
+    accessLabel: "Acceso",
+    accessTitle: "Empieza gratis con una habitación",
+    accessText: "Prueba Nemul sin coste en el espacio que más te importe ahora. Muy pronto abriremos el acceso a toda la vivienda.",
+    accessCta: "Empieza gratis",
+    guideLabel: "¿Quieres aprender más?",
+    guideTitle: "Guía Profesional de Iluminación",
+    guideText: "Aprende a iluminar cualquier estancia como un profesional, con ejemplos reales y consejos prácticos.",
+    guideCta: "Ver en Etsy",
+    faqTitle: "Preguntas frecuentes",
+    faqs: [
+      { q: "¿Necesito saber de iluminación para usar Nemul?", a: "No. Todas las preguntas están pensadas para cualquier persona, sin necesidad de conocer términos técnicos. Nemul se encarga de la parte profesional por ti." },
+      { q: "¿Nemul sustituye a un electricista?", a: "No. Las recomendaciones son orientativas; para la instalación eléctrica siempre debes consultar a un profesional certificado." },
+      { q: "¿Cuántas habitaciones puedo probar gratis?", a: "Una habitación completa, sin ningún coste. Muy pronto abriremos el acceso a toda la vivienda." },
+      { q: "¿Cómo sé cuándo esté disponible el acceso completo?", a: "Al intentar entrar a otra habitación te ofrecemos dejar tu email para avisarte en cuanto esté listo." },
+    ],
+    footerLegal: "Estas recomendaciones son orientativas. Para la instalación eléctrica, consulta siempre a un profesional certificado.",
+    footerFaqLink: "Preguntas frecuentes",
+    footerContact: "Contacto",
+    footerPrivacy: "Política de privacidad",
+    privacy: {
+      dataTitle: "Qué datos recopilamos",
+      dataText: "Nemul solo te pide tu email si tú decides dejarlo voluntariamente en la pantalla de acceso Premium, para avisarte cuando esa función esté disponible. No pedimos contraseña, datos de pago, ni ningún otro dato personal para usar la habitación gratuita.",
+      useTitle: "Cómo lo usamos",
+      useText: "Únicamente para enviarte un aviso relacionado con el acceso Premium. No lo usamos para ningún otro fin, y no lo compartimos, vendemos ni cedemos a terceros bajo ninguna circunstancia.",
+      whereTitle: "Dónde se guarda",
+      whereText: "Tu email se almacena de forma segura en Formspree, el servicio que usamos para gestionar este formulario de interés.",
+      localTitle: "Almacenamiento en tu propio dispositivo",
+      localText: "Para que Nemul funcione bien, guardamos cierta información directamente en tu navegador (no en nuestros servidores): qué habitación probaste gratis y los planes que decidas guardar. Esta información se queda únicamente en tu dispositivo, nunca se nos envía, y puedes borrarla en cualquier momento eliminando los datos de navegación de tu navegador.",
+      cookiesTitle: "Cookies",
+      cookiesText: "Nemul no utiliza cookies de seguimiento ni analíticas de terceros en esta versión.",
+      rightsTitle: "Tus derechos",
+      rightsTextPrefix: "Puedes pedirnos en cualquier momento que eliminemos tu email de nuestros registros escribiendo a ",
+      changesTitle: "Cambios futuros",
+      changesText: "Si en el futuro añadimos cuentas de usuario, pagos u otro tratamiento de datos, actualizaremos esta política y te lo indicaremos claramente aquí.",
+    },
+  },
+  en: {
+    navCta: "Start for free",
+    heroTitle: "The simplest way to design your home's lighting.",
+    heroSubtitle: "Get professional recommendations in minutes. No technical knowledge required.",
+    heroCta: "✨ Start for free",
+    heroTrust: "No sign-up. No commitment. Free report in minutes.",
+    langNotice: "Note: the interactive questionnaire is currently only available in Spanish. Full English support is coming soon.",
+    howTitle: "How does it work?",
+    steps: [
+      { n: "1", title: "Choose a room", text: "Living room, kitchen, bedroom... start with the space that matters most to you right now." },
+      { n: "2", title: "Answer a few simple questions", text: "No technical jargon: we ask how you live in that space, not how to design lighting." },
+      { n: "3", title: "Get your lighting study", text: "Temperature, lumens, fixture layout and tips, explained in plain language." },
+    ],
+    showcaseTitle: "What will you get with Nemul?",
+    showcasePreviewLabel: "Report preview (summary)",
+    showcaseExampleLabel: "Example: Living Room",
+    showcaseSubLabel: "Technical lighting report",
+    showcaseItems: [
+      "Light needed based on room size",
+      "Color temperature",
+      "Fixture layout",
+      "Lighting layers",
+      "Mistakes to avoid",
+      "Professional recommendations",
+    ],
+    showcaseFooter: "The full report includes every calculation, recommendation, and explanation for each room.",
+    credentialTitle: "Created by Dayami, interior designer",
+    credentialText: "Applies professional interior design criteria and explains it simply, to help you make better decisions.",
+    accessLabel: "Access",
+    accessTitle: "Start free with one room",
+    accessText: "Try Nemul at no cost in the space that matters most to you right now. We'll soon open access to your whole home.",
+    accessCta: "Start for free",
+    guideLabel: "Want to learn more?",
+    guideTitle: "Professional Lighting Guide",
+    guideText: "Learn to light any room like a professional, with real examples and practical tips.",
+    guideCta: "View on Etsy",
+    faqTitle: "Frequently asked questions",
+    faqs: [
+      { q: "Do I need to know about lighting to use Nemul?", a: "No. Every question is designed for anyone, no technical terms required. Nemul handles the professional part for you." },
+      { q: "Does Nemul replace an electrician?", a: "No. The recommendations are for guidance only; always consult a certified professional for electrical installation." },
+      { q: "How many rooms can I try for free?", a: "One full room, at no cost. We'll soon open access to your entire home." },
+      { q: "How will I know when full access is available?", a: "When you try to enter another room, we'll offer you the option to leave your email so we can notify you." },
+    ],
+    footerLegal: "These recommendations are for guidance only. Always consult a certified professional for electrical installation.",
+    footerFaqLink: "FAQ",
+    footerContact: "Contact",
+    footerPrivacy: "Privacy policy",
+    privacy: {
+      dataTitle: "What data we collect",
+      dataText: "Nemul only asks for your email if you choose to leave it on the Premium access screen, so we can notify you when that feature is available. We don't ask for a password, payment details, or any other personal data to use the free room.",
+      useTitle: "How we use it",
+      useText: "Only to send you a notice related to Premium access. We never use it for any other purpose, and we never share, sell, or transfer it to third parties under any circumstances.",
+      whereTitle: "Where it's stored",
+      whereText: "Your email is securely stored in Formspree, the service we use to manage this interest form.",
+      localTitle: "Storage on your own device",
+      localText: "To make Nemul work properly, we store certain information directly in your browser (not on our servers): which room you tried for free, and any plans you choose to save. This information stays only on your device, is never sent to us, and you can delete it anytime by clearing your browser's browsing data.",
+      cookiesTitle: "Cookies",
+      cookiesText: "Nemul does not use tracking cookies or third-party analytics in this version.",
+      rightsTitle: "Your rights",
+      rightsTextPrefix: "You can ask us at any time to delete your email from our records by writing to ",
+      changesTitle: "Future changes",
+      changesText: "If we add user accounts, payments, or any other data processing in the future, we'll update this policy and clearly note it here.",
+    },
+  },
+};
+
+function LandingNav({ onStart, lang, setLang, t }) {
   return (
     <div className="sticky top-0 z-10 backdrop-blur-md" style={{ backgroundColor: "rgba(248,246,242,0.85)", borderBottom: `1px solid ${COLORS.border}` }}>
       <div className="max-w-5xl mx-auto flex items-center justify-between px-6 py-4">
@@ -1992,19 +2123,36 @@ function LandingNav({ onStart }) {
           </div>
           <span className="font-body text-[15px] font-semibold tracking-wide" style={{ color: COLORS.text }}>Nemul</span>
         </div>
-        <button
-          onClick={onStart}
-          className="font-body text-[13.5px] font-medium rounded-full px-5 py-2.5 transition-all duration-200"
-          style={{ backgroundColor: COLORS.primary, color: "#FFFFFF" }}
-        >
-          Empieza gratis
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center rounded-full p-0.5" style={{ backgroundColor: COLORS.bg, border: `1px solid ${COLORS.border}` }}>
+            {["es", "en"].map((code) => (
+              <button
+                key={code}
+                onClick={() => setLang(code)}
+                className="font-body text-[12px] font-semibold rounded-full px-3 py-1.5 transition-all duration-200"
+                style={{
+                  backgroundColor: lang === code ? COLORS.primary : "transparent",
+                  color: lang === code ? "#FFFFFF" : COLORS.subtext,
+                }}
+              >
+                {code.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={onStart}
+            className="font-body text-[13.5px] font-medium rounded-full px-5 py-2.5 transition-all duration-200"
+            style={{ backgroundColor: COLORS.primary, color: "#FFFFFF" }}
+          >
+            {t.navCta}
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-function LandingHero({ onStart }) {
+function LandingHero({ onStart, t }) {
   return (
     <section className="max-w-3xl mx-auto px-6 pt-16 pb-14 text-center">
       <div className="relative w-24 h-24 mx-auto mb-8 flex items-center justify-center">
@@ -2015,36 +2163,36 @@ function LandingHero({ onStart }) {
       </div>
       <p className="font-body text-[13px] tracking-[0.25em] uppercase mb-4" style={{ color: COLORS.accent }}>Nemul</p>
       <h1 className="font-display text-[40px] md:text-[52px] leading-[1.1] font-medium mb-5" style={{ color: COLORS.text }}>
-        La forma más sencilla de diseñar la iluminación de tu hogar.
+        {t.heroTitle}
       </h1>
       <p className="font-body text-[16px] md:text-[17px] leading-relaxed max-w-xl mx-auto mb-9" style={{ color: COLORS.subtext }}>
-        Recibe recomendaciones profesionales en pocos minutos. Sin conocimientos técnicos.
+        {t.heroSubtitle}
       </p>
       <button
         onClick={onStart}
         className="font-body font-medium text-[15px] tracking-wide rounded-2xl px-8 py-4 transition-all duration-200"
         style={{ backgroundColor: COLORS.primary, color: "#FFFFFF", boxShadow: "0 10px 26px rgba(111,94,77,0.3)" }}
       >
-        ✨ Empieza gratis
+        {t.heroCta}
       </button>
       <p className="font-body text-[12.5px] mt-3.5" style={{ color: COLORS.subtext }}>
-        Sin registro. Sin compromiso. Informe gratuito en pocos minutos.
+        {t.heroTrust}
       </p>
+      {t.langNotice && (
+        <p className="font-body text-[12px] leading-relaxed mt-3 max-w-sm mx-auto rounded-xl px-4 py-2.5" style={{ color: COLORS.primary, backgroundColor: "#F3E9D8" }}>
+          {t.langNotice}
+        </p>
+      )}
     </section>
   );
 }
 
-function HowItWorksSection() {
-  const steps = [
-    { n: "1", title: "Elige una estancia", text: "Salón, cocina, dormitorio... empieza por el espacio que más te importa ahora mismo." },
-    { n: "2", title: "Responde unas preguntas sencillas", text: "Nada de términos técnicos: te preguntamos cómo vives ese espacio, no cómo diseñar luz." },
-    { n: "3", title: "Recibe tu estudio de iluminación", text: "Temperatura, lúmenes, distribución de focos y consejos, explicados en lenguaje simple." },
-  ];
+function HowItWorksSection({ t }) {
   return (
     <section className="max-w-4xl mx-auto px-6 py-14">
-      <h2 className="font-display text-[28px] font-medium text-center mb-10" style={{ color: COLORS.text }}>¿Cómo funciona?</h2>
+      <h2 className="font-display text-[28px] font-medium text-center mb-10" style={{ color: COLORS.text }}>{t.howTitle}</h2>
       <div className="grid md:grid-cols-3 gap-5">
-        {steps.map((s) => (
+        {t.steps.map((s) => (
           <div key={s.n} className="rounded-2xl p-6" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 2px 12px rgba(46,42,39,0.05)" }}>
             <div className="w-9 h-9 rounded-full flex items-center justify-center mb-4 font-body text-[14px] font-semibold" style={{ backgroundColor: "#F3E9D8", color: COLORS.accent }}>
               {s.n}
@@ -2069,21 +2217,12 @@ function PreviewRow({ label }) {
   );
 }
 
-const REPORT_PREVIEW_ITEMS = [
-  "Luz necesaria según los m²",
-  "Temperatura de color",
-  "Distribución de luminarias",
-  "Capas de iluminación",
-  "Errores a evitar",
-  "Recomendaciones profesionales",
-];
-
-function ProductShowcaseSection() {
+function ProductShowcaseSection({ t }) {
   return (
     <section className="max-w-md mx-auto px-6 py-14">
-      <h2 className="font-display text-[28px] font-medium text-center mb-3" style={{ color: COLORS.text }}>¿Qué vas a recibir con Nemul?</h2>
+      <h2 className="font-display text-[28px] font-medium text-center mb-3" style={{ color: COLORS.text }}>{t.showcaseTitle}</h2>
       <p className="font-body text-[13px] tracking-wide text-center mb-6" style={{ color: COLORS.accent }}>
-        Vista previa del informe (resumen)
+        {t.showcasePreviewLabel}
       </p>
       <div className="rounded-2xl p-6" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 12px 32px rgba(46,42,39,0.08)" }}>
         <div className="flex items-center gap-3 mb-2">
@@ -2091,69 +2230,69 @@ function ProductShowcaseSection() {
             <Sofa size={18} color={COLORS.accent} strokeWidth={1.6} />
           </div>
           <div>
-            <p className="font-body text-[14px] font-medium" style={{ color: COLORS.text }}>Ejemplo: Salón</p>
-            <p className="font-body text-[12px]" style={{ color: COLORS.subtext }}>Informe técnico de iluminación</p>
+            <p className="font-body text-[14px] font-medium" style={{ color: COLORS.text }}>{t.showcaseExampleLabel}</p>
+            <p className="font-body text-[12px]" style={{ color: COLORS.subtext }}>{t.showcaseSubLabel}</p>
           </div>
         </div>
         <div>
-          {REPORT_PREVIEW_ITEMS.map((label, i) => <PreviewRow key={i} label={label} />)}
+          {t.showcaseItems.map((label, i) => <PreviewRow key={i} label={label} />)}
         </div>
       </div>
       <p className="font-body text-[12.5px] text-center mt-5 leading-relaxed" style={{ color: COLORS.subtext }}>
-        El informe completo incluye todos los cálculos, recomendaciones y explicaciones para cada estancia.
+        {t.showcaseFooter}
       </p>
     </section>
   );
 }
 
-function CredentialSection() {
+function CredentialSection({ t }) {
   return (
     <section className="max-w-2xl mx-auto px-6 py-14 text-center">
       <div className="w-14 h-14 rounded-full mx-auto mb-5 flex items-center justify-center" style={{ backgroundColor: "#F3E9D8" }}>
         <Sparkles size={22} color={COLORS.accent} strokeWidth={1.6} />
       </div>
-      <p className="font-display text-[22px] font-medium mb-3" style={{ color: COLORS.text }}>Creado por Dayami, diseñadora de interiores</p>
+      <p className="font-display text-[22px] font-medium mb-3" style={{ color: COLORS.text }}>{t.credentialTitle}</p>
       <p className="font-body text-[14.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
-        Aplica criterios profesionales de interiorismo y los explica de forma sencilla para ayudarte a tomar mejores decisiones.
+        {t.credentialText}
       </p>
     </section>
   );
 }
 
-function AccessSection({ onStart }) {
+function AccessSection({ onStart, t }) {
   return (
     <section className="max-w-2xl mx-auto px-6 py-14 text-center">
       <div className="rounded-2xl p-8" style={{ backgroundColor: "#F3E9D8", border: `1px solid #C1A16B55` }}>
-        <p className="font-body text-[12px] tracking-[0.2em] uppercase mb-3" style={{ color: COLORS.primary }}>Acceso</p>
-        <p className="font-display text-[22px] font-medium mb-3" style={{ color: COLORS.text }}>Empieza gratis con una habitación</p>
+        <p className="font-body text-[12px] tracking-[0.2em] uppercase mb-3" style={{ color: COLORS.primary }}>{t.accessLabel}</p>
+        <p className="font-display text-[22px] font-medium mb-3" style={{ color: COLORS.text }}>{t.accessTitle}</p>
         <p className="font-body text-[14px] leading-relaxed mb-6" style={{ color: COLORS.subtext }}>
-          Prueba Nemul sin coste en el espacio que más te importe ahora. Muy pronto abriremos el acceso a toda la vivienda.
+          {t.accessText}
         </p>
         <button
           onClick={onStart}
           className="font-body font-medium text-[14.5px] rounded-2xl px-7 py-3.5 transition-all duration-200"
           style={{ backgroundColor: COLORS.primary, color: "#FFFFFF", boxShadow: "0 8px 20px rgba(111,94,77,0.25)" }}
         >
-          Empieza gratis
+          {t.accessCta}
         </button>
       </div>
     </section>
   );
 }
 
-function LandingGuideSection() {
+function LandingGuideSection({ t }) {
   return (
     <section className="max-w-2xl mx-auto px-6 py-14">
-      <p className="font-body text-[12px] tracking-[0.2em] uppercase text-center mb-4" style={{ color: COLORS.accent }}>¿Quieres aprender más?</p>
+      <p className="font-body text-[12px] tracking-[0.2em] uppercase text-center mb-4" style={{ color: COLORS.accent }}>{t.guideLabel}</p>
       <div className="rounded-2xl p-6" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 2px 12px rgba(46,42,39,0.05)" }}>
         <div className="flex items-start gap-4">
           <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "#F3E9D8" }}>
             <BookOpen size={19} color={COLORS.accent} strokeWidth={1.6} />
           </div>
           <div className="flex-1">
-            <p className="font-display text-[18px] font-medium mb-1" style={{ color: COLORS.text }}>Guía Profesional de Iluminación</p>
+            <p className="font-display text-[18px] font-medium mb-1" style={{ color: COLORS.text }}>{t.guideTitle}</p>
             <p className="font-body text-[13px] leading-relaxed mb-4" style={{ color: COLORS.subtext }}>
-              Aprende a iluminar cualquier estancia como un profesional, con ejemplos reales y consejos prácticos.
+              {t.guideText}
             </p>
             <a
               href="https://www.etsy.com/es/listing/4427720777/guia-de-iluminacion-del-hogar-consejos?ref=share_ios_native_control"
@@ -2162,7 +2301,7 @@ function LandingGuideSection() {
               className="inline-block font-body font-medium text-[13.5px] rounded-xl px-5 py-2.5"
               style={{ backgroundColor: COLORS.primary, color: "#FFFFFF" }}
             >
-              Ver en Etsy
+              {t.guideCta}
             </a>
           </div>
         </div>
@@ -2188,79 +2327,62 @@ function FAQItem({ q, a }) {
   );
 }
 
-function FAQSection() {
-  const faqs = [
-    { q: "¿Necesito saber de iluminación para usar Nemul?", a: "No. Todas las preguntas están pensadas para cualquier persona, sin necesidad de conocer términos técnicos. Nemul se encarga de la parte profesional por ti." },
-    { q: "¿Nemul sustituye a un electricista?", a: "No. Las recomendaciones son orientativas; para la instalación eléctrica siempre debes consultar a un profesional certificado." },
-    { q: "¿Cuántas habitaciones puedo probar gratis?", a: "Una habitación completa, sin ningún coste. Muy pronto abriremos el acceso a toda la vivienda." },
-    { q: "¿Cómo sé cuándo esté disponible el acceso completo?", a: "Al intentar entrar a otra habitación te ofrecemos dejar tu email para avisarte en cuanto esté listo." },
-  ];
+function FAQSection({ t }) {
   return (
     <section id="faq" className="max-w-2xl mx-auto px-6 py-14">
-      <h2 className="font-display text-[26px] font-medium text-center mb-8" style={{ color: COLORS.text }}>Preguntas frecuentes</h2>
+      <h2 className="font-display text-[26px] font-medium text-center mb-8" style={{ color: COLORS.text }}>{t.faqTitle}</h2>
       <div className="flex flex-col gap-3">
-        {faqs.map((f, i) => <FAQItem key={i} q={f.q} a={f.a} />)}
+        {t.faqs.map((f, i) => <FAQItem key={i} q={f.q} a={f.a} />)}
       </div>
     </section>
   );
 }
 
-function LandingFooter() {
+function LandingFooter({ t }) {
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const p = t.privacy;
   return (
     <footer className="border-t" style={{ borderColor: COLORS.border }}>
       <div className="max-w-2xl mx-auto px-6 py-10 text-center">
         <p className="font-body text-[12px] leading-relaxed mb-5" style={{ color: COLORS.subtext }}>
-          Estas recomendaciones son orientativas. Para la instalación eléctrica, consulta siempre a un profesional certificado.
+          {t.footerLegal}
         </p>
         <div className="flex items-center justify-center gap-5 mb-5 flex-wrap">
-          <a href="#faq" className="font-body text-[13px] font-medium" style={{ color: COLORS.text }}>Preguntas frecuentes</a>
-          <a href="mailto:digitaldma2026@gmail.com" className="font-body text-[13px] font-medium" style={{ color: COLORS.text }}>Contacto</a>
-          <button onClick={() => setShowPrivacy((s) => !s)} className="font-body text-[13px] font-medium" style={{ color: COLORS.text }}>Política de privacidad</button>
+          <a href="#faq" className="font-body text-[13px] font-medium" style={{ color: COLORS.text }}>{t.footerFaqLink}</a>
+          <a href="mailto:digitaldma2026@gmail.com" className="font-body text-[13px] font-medium" style={{ color: COLORS.text }}>{t.footerContact}</a>
+          <button onClick={() => setShowPrivacy((s) => !s)} className="font-body text-[13px] font-medium" style={{ color: COLORS.text }}>{t.footerPrivacy}</button>
         </div>
         {showPrivacy && (
           <div className="rounded-xl p-6 text-left mb-5 flex flex-col gap-4" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
             <div>
-              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>Qué datos recopilamos</p>
+              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>{p.dataTitle}</p>
+              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>{p.dataText}</p>
+            </div>
+            <div>
+              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>{p.useTitle}</p>
+              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>{p.useText}</p>
+            </div>
+            <div>
+              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>{p.whereTitle}</p>
+              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>{p.whereText}</p>
+            </div>
+            <div>
+              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>{p.localTitle}</p>
+              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>{p.localText}</p>
+            </div>
+            <div>
+              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>{p.cookiesTitle}</p>
+              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>{p.cookiesText}</p>
+            </div>
+            <div>
+              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>{p.rightsTitle}</p>
               <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
-                Nemul solo te pide tu email si tú decides dejarlo voluntariamente en la pantalla de acceso Premium, para avisarte cuando esa función esté disponible. No pedimos contraseña, datos de pago, ni ningún otro dato personal para usar la habitación gratuita.
+                {p.rightsTextPrefix}<a href="mailto:digitaldma2026@gmail.com" style={{ color: COLORS.accent }}>digitaldma2026@gmail.com</a>.
               </p>
             </div>
             <div>
-              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>Cómo lo usamos</p>
-              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
-                Únicamente para enviarte un aviso relacionado con el acceso Premium. No lo usamos para ningún otro fin, y no lo compartimos, vendemos ni cedemos a terceros bajo ninguna circunstancia.
-              </p>
-            </div>
-            <div>
-              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>Dónde se guarda</p>
-              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
-                Tu email se almacena de forma segura en Formspree, el servicio que usamos para gestionar este formulario de interés.
-              </p>
-            </div>
-            <div>
-              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>Almacenamiento en tu propio dispositivo</p>
-              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
-                Para que Nemul funcione bien, guardamos cierta información directamente en tu navegador (no en nuestros servidores): qué habitación probaste gratis y los planes que decidas guardar. Esta información se queda únicamente en tu dispositivo, nunca se nos envía, y puedes borrarla en cualquier momento eliminando los datos de navegación de tu navegador.
-              </p>
-            </div>
-            <div>
-              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>Cookies</p>
-              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
-                Nemul no utiliza cookies de seguimiento ni analíticas de terceros en esta versión.
-              </p>
-            </div>
-            <div>
-              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>Tus derechos</p>
-              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
-                Puedes pedirnos en cualquier momento que eliminemos tu email de nuestros registros escribiendo a <a href="mailto:digitaldma2026@gmail.com" style={{ color: COLORS.accent }}>digitaldma2026@gmail.com</a>.
-              </p>
-            </div>
-            <div>
-              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>Cambios futuros</p>
-              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
-                Si en el futuro añadimos cuentas de usuario, pagos u otro tratamiento de datos, actualizaremos esta política y te lo indicaremos claramente aquí.
-              </p>
+              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>{p.changesTitle}</p>
+              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>{p.changesText}</p>
             </div>
           </div>
         )}
@@ -2271,21 +2393,24 @@ function LandingFooter() {
 }
 
 function LandingPage({ onStart }) {
+  const [lang, setLang] = useState("es");
+  const t = LANDING_COPY[lang];
   return (
     <div className="min-h-screen w-full" style={{ backgroundColor: COLORS.bg }}>
       <style>{FONT_STYLE}</style>
-      <LandingNav onStart={onStart} />
-      <LandingHero onStart={onStart} />
-      <HowItWorksSection />
-      <ProductShowcaseSection />
-      <CredentialSection />
-      <AccessSection onStart={onStart} />
-      <LandingGuideSection />
-      <FAQSection />
-      <LandingFooter />
+      <LandingNav onStart={onStart} lang={lang} setLang={setLang} t={t} />
+      <LandingHero onStart={onStart} t={t} />
+      <HowItWorksSection t={t} />
+      <ProductShowcaseSection t={t} />
+      <CredentialSection t={t} />
+      <AccessSection onStart={onStart} t={t} />
+      <LandingGuideSection t={t} />
+      <FAQSection t={t} />
+      <LandingFooter t={t} />
     </div>
   );
 }
+
 
 export default function NemulApp() {
   const [screen, setScreen] = useState("landing");
