@@ -160,10 +160,10 @@ function downlightRange(lumens, minCount) {
 // Traducción a lenguaje humano: el número técnico no desaparece, pero nunca
 // se queda solo. Así lo explicaría una diseñadora en persona.
 const TEMP_HUMAN = {
-  2700: "luz muy cálida y acogedora, como la de una lámpara de mesa clásica",
-  3000: "luz cálida, la más habitual en los hogares",
-  3500: "luz cálida-neutra, ni amarilla ni blanca",
-  4000: "luz blanca neutra, parecida a la de una oficina bien iluminada",
+  2700: "Luz cálida, similar a la de un salón acogedor al atardecer.",
+  3000: "Luz cálida neutra, ideal para crear un ambiente confortable y natural.",
+  3500: "Luz neutra cálida, similar a la de un hogar moderno y bien iluminado.",
+  4000: "Luz blanca neutra, similar a la de una cocina moderna bien iluminada."
 };
 function describeTempK(tempK) {
   return TEMP_HUMAN[tempK] || "un tono de luz equilibrado";
@@ -171,8 +171,8 @@ function describeTempK(tempK) {
 function describeLux(lux) {
   if (lux < 130) return "un ambiente suave, pensado para relajarse";
   if (lux < 200) return "una luz cómoda para el día a día";
-  if (lux < 300) return "una luz intensa, pensada para tareas que exigen precisión";
-  return "una luz muy intensa, como la de una zona de trabajo";
+  if (lux < 300) return "una luz intensa, ideal para tareas que requieren precisión";
+  return "una luz muy intensa, perfecta para cocinar,leer o trabajar con precisión";
 }
 
 // Regla de diseño: la luz natural decide cuánta luz añadimos (lm/m²).
