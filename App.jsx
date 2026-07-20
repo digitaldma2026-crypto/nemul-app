@@ -900,12 +900,12 @@ const ROOM_FLOWS = {
     {
       key: "layout", title: "¿Qué distribución tiene tu cocina?", subtitle: "Elige la forma que más se parece a la tuya.", type: "single", layout: "grid", options: KITCHEN_LAYOUT_OPTIONS,
       reactions: {
-        isla: "Con isla, ya sabemos que las lámparas colgantes van a ser protagonistas.",
-        peninsula: "Con península, la luz tendrá que marcar esa zona sin cerrar el paso.",
-        L: "En L, el rincón interior suele necesitar un empujón extra de luz.",
-        U: "En U, hay tres frentes de trabajo — nada de un único punto central.",
-        paralela: "Paralela: vamos a repartir la luz entre ambos lados por igual.",
-        lineal: "Lineal, la opción más directa: una línea de luz continua será clave.",
+        isla: "En una cocina con isla, las lámparas colgantes serán las protagonistas de la iluminación.",
+        peninsula: "La luz debe destacar la península sin cerrar visualmente el paso.",
+        L: "La esquina interior de la encimera necesita un poco más de luz para que toda la superficie quede iluminada de forma uniforme.",
+        U: "En una cocina en U, la luz debe repartirse entre los tres frentes de trabajo, no concentrarse en un único punto central.",
+        paralela: "Reparte la luz por igual entre ambos lados para evitar zonas con sombra.",
+        lineal: "Una línea de luz continua será la clave para iluminar toda la encimera de forma uniforme.",
       },
     },
     { key: "size", title: "¿Cuántos metros cuadrados tiene la cocina?", subtitle: "Un cálculo aproximado está bien.", info: "Para una cocina suelen recomendarse entre 300 y 400 lm/m². Nemul hará el cálculo automáticamente según el tamaño y la luz natural.", type: "single", layout: "grid", options: KITCHEN_SIZE_OPTIONS },
