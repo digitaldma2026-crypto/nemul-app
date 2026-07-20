@@ -897,14 +897,40 @@ const ROOM_FLOWS = {
     renovationStep,
   ],
   kitchen: [
-    { key: "layout", title: "¿Qué distribución tiene tu cocina?", subtitle: "Elige la forma que más se parece a la tuya.", type: "single", layout: "grid", options: KITCHEN_LAYOUT_OPTIONS },
+    {
+      key: "layout", title: "¿Qué distribución tiene tu cocina?", subtitle: "Elige la forma que más se parece a la tuya.", type: "single", layout: "grid", options: KITCHEN_LAYOUT_OPTIONS,
+      reactions: {
+        isla: "Con isla, ya sabemos que las lámparas colgantes van a ser protagonistas.",
+        peninsula: "Con península, la luz tendrá que marcar esa zona sin cerrar el paso.",
+        L: "En L, el rincón interior suele necesitar un empujón extra de luz.",
+        U: "En U, hay tres frentes de trabajo — nada de un único punto central.",
+        paralela: "Paralela: vamos a repartir la luz entre ambos lados por igual.",
+        lineal: "Lineal, la opción más directa: una línea de luz continua será clave.",
+      },
+    },
     { key: "size", title: "¿Cuántos metros cuadrados tiene la cocina?", subtitle: "Un cálculo aproximado está bien.", info: "Para una cocina suelen recomendarse entre 300 y 400 lm/m². Nemul hará el cálculo automáticamente según el tamaño y la luz natural.", type: "single", layout: "grid", options: KITCHEN_SIZE_OPTIONS },
     { key: "priorities", title: "¿Qué es lo más importante para ti en la cocina?", subtitle: "Puedes elegir varias opciones.", type: "multi", layout: "list", options: KITCHEN_PRIORITY_OPTIONS },
-    { key: "upperCabinets", title: "¿Tienes muebles altos?", subtitle: "Esto nos dice dónde puede faltar luz sobre la encimera.", type: "single", layout: "list", options: KITCHEN_UPPER_CABINETS_OPTIONS },
+    {
+      key: "upperCabinets", title: "¿Tienes muebles altos?", subtitle: "Esto nos dice dónde puede faltar luz sobre la encimera.", type: "single", layout: "list", options: KITCHEN_UPPER_CABINETS_OPTIONS,
+      reactions: {
+        unaPared: "Anotado: esa pared es donde probablemente falte luz sobre la encimera.",
+        dosParedes: "Con muebles en dos paredes, ninguna de las dos se puede quedar en sombra.",
+        no: "Sin muebles altos, la luz general va a tener que hacer casi todo el trabajo.",
+      },
+    },
     { key: "workZone", title: "¿Dónde preparas normalmente los alimentos?", subtitle: "Así sabremos dónde reforzar la iluminación.", type: "single", layout: "list", options: KITCHEN_WORK_ZONE_OPTIONS },
     { key: "ceilingHeight", title: "¿Cuál es la altura aproximada del techo?", subtitle: "Un cálculo aproximado está bien.", type: "single", layout: "grid", options: KITCHEN_CEILING_HEIGHT_OPTIONS },
     { key: "light", title: "¿Cuánta luz natural recibe la cocina durante el día?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
-    { key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: KITCHEN_PROBLEM_OPTIONS },
+    {
+      key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: KITCHEN_PROBLEM_OPTIONS,
+      reactions: {
+        shadows: "Entendido: vamos a poner luz directa sobre la encimera, no solo general.",
+        visibility: "Vamos a priorizar visibilidad sobre ambiente en la zona de trabajo.",
+        modern: "Buscamos un aspecto más moderno sin sacrificar función.",
+        renovating: "Con reforma completa, podemos plantear circuitos independientes desde cero.",
+        onlyLighting: "Solo cambiar la iluminación: nos vamos a adaptar a lo que ya existe.",
+      },
+    },
     renovationStep,
   ],
   kitchenOpen: [
@@ -1315,6 +1341,16 @@ function QuestionScreen({ step, value, onSelect, onContinue, onBack, stepIndex, 
           </div>
         )}
       </div>
+      {!isMulti && step.reactions && value && step.reactions[value] && (
+        <div className="px-7 pb-2 rise-in">
+          <div className="flex items-start gap-2.5 rounded-xl px-4 py-3" style={{ backgroundColor: "#F3E9D8" }}>
+            <Sparkles size={14} color={COLORS.accent} strokeWidth={1.8} className="mt-0.5 shrink-0" />
+            <p className="font-body text-[13px] leading-relaxed italic" style={{ color: COLORS.primary }}>
+              {step.reactions[value]}
+            </p>
+          </div>
+        </div>
+      )}
       <div className="px-7 pt-4 pb-1">
         <PrimaryButton onClick={onContinue} disabled={!isAnswered}>Continuar</PrimaryButton>
       </div>
