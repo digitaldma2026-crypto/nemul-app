@@ -301,6 +301,15 @@ const KITCHEN_LAYOUT_OPTIONS = [
   { id: "peninsula", label: "Con península" },
 ];
 
+const KITCHEN_LAYOUT_REACTIONS = {
+  isla: "En una cocina con isla, las lámparas colgantes serán las protagonistas de la iluminación.",
+  peninsula: "La luz debe destacar la península sin cerrar visualmente el paso.",
+  L: "La esquina interior de la encimera necesita un poco más de luz para que toda la superficie quede iluminada de forma uniforme.",
+  U: "En una cocina en U, la luz debe repartirse entre los tres frentes de trabajo, no concentrarse en un único punto central.",
+  paralela: "Reparte la luz por igual entre ambos lados para evitar zonas con sombra.",
+  lineal: "Una línea de luz continua será la clave para iluminar toda la encimera de forma uniforme.",
+};
+
 const KITCHEN_PRIORITY_OPTIONS = [
   { id: "comfortable", label: "Cocinar con comodidad", Icon: ChefHat },
   { id: "family", label: "Compartir tiempo con la familia", Icon: Users },
@@ -329,6 +338,14 @@ const KITCHEN_PROBLEM_OPTIONS = [
   { id: "renovating", label: "Voy a hacer una reforma", Icon: Hammer },
   { id: "onlyLighting", label: "Solo quiero cambiar la iluminación" },
 ];
+
+const KITCHEN_PROBLEM_REACTIONS = {
+  shadows: "Entendido: vamos a poner luz directa sobre la encimera, no solo general.",
+  visibility: "Vamos a priorizar visibilidad sobre ambiente en la zona de trabajo.",
+  modern: "Buscamos un aspecto más moderno sin sacrificar función.",
+  renovating: "Con reforma completa, podemos plantear circuitos independientes desde cero.",
+  onlyLighting: "Solo cambiar la iluminación: nos vamos a adaptar a lo que ya existe.",
+};
 
 const KITCHEN_SIZE_OPTIONS = [
   { id: "small", label: "Pequeña", hint: "Menos de 8 m²", area: 6 },
@@ -601,8 +618,64 @@ const ACTIVITY_INSIGHT = {
 function activityStep(roomId, subtitle) {
   return { key: "activities", title: roomId === "bedroom" ? "¿Qué haces habitualmente en el dormitorio?" : "¿Cómo utilizas la terraza?", subtitle, type: "multi", layout: "list", options: ACTIVITY_OPTIONS[roomId] };
 }
+
+// Reacciones cortas que aparecen justo después de responder la pregunta del
+// "problema a resolver" en cada habitación — el mismo guiño de razonamiento
+// que ya se probó y validó en Cocina.
+const PROBLEM_REACTIONS = {
+  living: {
+    dark: "Entendido, vamos a reforzar la luz general y las esquinas.",
+    glare: "Vamos a alejar la luz de la línea de visión hacia la televisión.",
+    reading: "Anotado: un buen rincón de lectura va a ser prioridad.",
+    cozy: "Vamos a priorizar tonos cálidos y luz regulable.",
+    renovating: "Con reforma desde cero, podemos dejar varios circuitos independientes preparados.",
+  },
+  bedroom: {
+    dark: "Vamos a reforzar la luz general sin perder la calidez para descansar.",
+    glare: "Evitaremos puntos de luz que apunten directo a la cama.",
+    reading: "Anotado: un buen punto de luz en la mesita de noche será clave.",
+    cozy: "Priorizaremos tonos cálidos y la posibilidad de atenuar la luz.",
+    renovating: "Con reforma desde cero, separaremos en circuitos la zona de descanso y el vestidor.",
+  },
+  bathroom: {
+    shadows: "Vamos a iluminar el espejo desde ambos lados, no solo desde arriba.",
+    cold: "Bajaremos el tono general hacia un blanco más cálido.",
+    night: "Añadiremos una luz muy tenue, independiente de la principal, para la noche.",
+    spa: "Priorizaremos luz cálida y regulable para ese ambiente de spa.",
+    renovating: "Con reforma desde cero, separaremos en circuitos la zona del espejo, la ducha y la general.",
+  },
+  dining: {
+    badLight: "Vamos a centrar un punto de luz directo sobre la mesa.",
+    noAmbience: "Añadiremos un regulador para bajar la intensidad según la ocasión.",
+    pendant: "La lámpara colgante irá a la altura justa para no bloquear la vista entre comensales.",
+    elegant: "Combinaremos la luz de la mesa con algún punto cálido adicional en la sala.",
+    renovating: "Con reforma desde cero, dejaremos prevista una toma en el techo, centrada sobre la mesa.",
+  },
+  closet: {
+    colors: "Cambiaremos a una luz blanca neutra para que veas los colores reales de la ropa.",
+    mirror: "Iluminaremos el espejo desde ambos lados del cuerpo, no solo desde arriba.",
+    organize: "Añadiremos luz uniforme dentro de cajones y estantes.",
+    elegant: "Sumaremos un punto de luz cálida decorativa junto al espejo o la entrada.",
+    renovating: "Con reforma desde cero, integraremos luz dentro de los propios armarios.",
+  },
+  terrace: {
+    dark: "Añadiremos dos o tres puntos de luz repartidos, en vez de uno solo central.",
+    noAmbience: "Combinaremos luz cálida indirecta con algún punto decorativo.",
+    weather: "Elegiremos luminarias con certificación IP44 o superior.",
+    decor: "Priorizaremos varios puntos de baja intensidad frente a un único foco potente.",
+    renovating: "Con reforma desde cero, dejaremos prevista una toma eléctrica protegida junto a la zona de estar.",
+  },
+  hallway: {
+    dark: "Añadiremos un punto adicional en el tramo central, además de los extremos.",
+    scary: "Una luz muy tenue permanente o con sensor hará que dé menos reparo cruzarlo de noche.",
+    energy: "Un sensor de movimiento con LED de bajo consumo será lo más eficiente.",
+    decor: "Consideraremos apliques en la pared en vez de solo downlights en el techo.",
+    renovating: "Con reforma desde cero, dejaremos cableado preparado para un sensor de movimiento.",
+  },
+};
+
 function problemStep(roomId) {
-  return { key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: PROBLEM_OPTIONS[roomId] };
+  return { key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: PROBLEM_OPTIONS[roomId], reactions: PROBLEM_REACTIONS[roomId] };
 }
 const lightStep = { key: "light", title: "¿Qué iluminación tiene?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS };
 
@@ -879,34 +952,36 @@ const ROOM_FLOWS = {
     { key: "activities", title: "¿Cómo utilizas principalmente el salón?", subtitle: "Puedes elegir varias opciones.", type: "multi", layout: "list", options: LIVING_ACTIVITY_OPTIONS },
     { key: "size", title: "¿Cuántos metros cuadrados tiene el salón?", subtitle: "Un cálculo aproximado está bien.", info: "En un salón suelen recomendarse entre 150 y 225 lm/m² según el ambiente que busques. Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: SALON_SIZE_OPTIONS },
     { key: "light", title: "¿Cuánta luz natural recibe?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
-    { key: "ceiling", title: "¿Qué tipo de techo tienes?", subtitle: "Esto determina qué soluciones de instalación son posibles.", type: "single", layout: "list", options: CEILING_OPTIONS },
+    { key: "ceiling", title: "¿Qué tipo de techo tienes?", subtitle: "Esto determina qué soluciones de instalación son posibles.", type: "single", layout: "list", options: CEILING_OPTIONS, reactions: {
+      liso: "Un techo liso te da total libertad para colocar los downlights donde más los necesites.",
+      pladur: "Con falso techo de pladur, podemos integrar tiras LED perimetrales sin ninguna obra extra.",
+      vigas: "Con vigas vistas, vamos a evitar empotrar nada en la madera y usar soluciones de superficie.",
+      noSe: "Sin problema, lo confirmamos con un instalador antes de decidir si se puede empotrar algo.",
+    } },
     { key: "goals", title: "¿Qué te gustaría conseguir con la iluminación?", subtitle: "Puedes elegir varias opciones.", type: "multi", layout: "list", options: LIVING_GOAL_OPTIONS },
-    { key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: LIVING_PROBLEM_OPTIONS },
+    { key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: LIVING_PROBLEM_OPTIONS, reactions: PROBLEM_REACTIONS.living },
     renovationStep,
   ],
   livingDining: [
     { key: "activities", title: "¿Cómo utilizas principalmente el espacio?", subtitle: "Puedes elegir varias opciones.", type: "multi", layout: "list", options: LIVING_ACTIVITY_OPTIONS },
-    { key: "diningShape", title: "¿La mesa del comedor es redonda, rectangular o cuadrada?", subtitle: "La forma cambia cómo repartimos la luz sobre ella.", type: "single", layout: "list", options: DINING_SHAPE_OPTIONS },
+    { key: "diningShape", title: "¿La mesa del comedor es redonda, rectangular o cuadrada?", subtitle: "La forma cambia cómo repartimos la luz sobre ella.", type: "single", layout: "list", options: DINING_SHAPE_OPTIONS, reactions: {
+      redonda: "Con mesa redonda, un único punto centrado suele ser suficiente y queda muy equilibrado.",
+      rectangular: "Con mesa rectangular, dos o tres puntos en línea reparten mejor la luz.",
+      cuadrada: "Con mesa cuadrada, un colgante centrado o de varias luces cubre bien toda la superficie.",
+    } },
     { key: "diningSeats", title: "¿Cuántas personas suelen comer?", subtitle: "Un cálculo aproximado está bien.", type: "single", layout: "list", options: DINING_SEATS_OPTIONS },
     { key: "diningPendant", title: "¿Quieres una lámpara decorativa sobre la mesa?", subtitle: "Como una lámpara colgante.", type: "single", layout: "list", options: YES_NO_OPTIONS },
     { key: "size", title: "¿Cuántos metros cuadrados tiene el salón-comedor en total?", subtitle: "Un cálculo aproximado está bien.", info: "Al ser un espacio abierto, se calcula como una sola superficie. Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: SALON_SIZE_OPTIONS },
     { key: "light", title: "¿Cuánta luz natural recibe?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
     { key: "ceiling", title: "¿Qué tipo de techo tienes?", subtitle: "Esto determina qué soluciones de instalación son posibles.", type: "single", layout: "list", options: CEILING_OPTIONS },
     { key: "goals", title: "¿Qué te gustaría conseguir con la iluminación?", subtitle: "Puedes elegir varias opciones.", type: "multi", layout: "list", options: LIVING_GOAL_OPTIONS },
-    { key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: LIVING_PROBLEM_OPTIONS },
+    { key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: LIVING_PROBLEM_OPTIONS, reactions: PROBLEM_REACTIONS.living },
     renovationStep,
   ],
   kitchen: [
     {
       key: "layout", title: "¿Qué distribución tiene tu cocina?", subtitle: "Elige la forma que más se parece a la tuya.", type: "single", layout: "grid", options: KITCHEN_LAYOUT_OPTIONS,
-      reactions: {
-        isla: "En una cocina con isla, las lámparas colgantes serán las protagonistas de la iluminación.",
-        peninsula: "La luz debe destacar la península sin cerrar visualmente el paso.",
-        L: "La esquina interior de la encimera necesita un poco más de luz para que toda la superficie quede iluminada de forma uniforme.",
-        U: "En una cocina en U, la luz debe repartirse entre los tres frentes de trabajo, no concentrarse en un único punto central.",
-        paralela: "Reparte la luz por igual entre ambos lados para evitar zonas con sombra.",
-        lineal: "Una línea de luz continua será la clave para iluminar toda la encimera de forma uniforme.",
-      },
+      reactions: KITCHEN_LAYOUT_REACTIONS,
     },
     { key: "size", title: "¿Cuántos metros cuadrados tiene la cocina?", subtitle: "Un cálculo aproximado está bien.", info: "Para una cocina suelen recomendarse entre 300 y 400 lm/m². Nemul hará el cálculo automáticamente según el tamaño y la luz natural.", type: "single", layout: "grid", options: KITCHEN_SIZE_OPTIONS },
     { key: "priorities", title: "¿Qué es lo más importante para ti en la cocina?", subtitle: "Puedes elegir varias opciones.", type: "multi", layout: "list", options: KITCHEN_PRIORITY_OPTIONS },
@@ -923,18 +998,12 @@ const ROOM_FLOWS = {
     { key: "light", title: "¿Cuánta luz natural recibe la cocina durante el día?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
     {
       key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: KITCHEN_PROBLEM_OPTIONS,
-      reactions: {
-        shadows: "Entendido: vamos a poner luz directa sobre la encimera, no solo general.",
-        visibility: "Vamos a priorizar visibilidad sobre ambiente en la zona de trabajo.",
-        modern: "Buscamos un aspecto más moderno sin sacrificar función.",
-        renovating: "Con reforma completa, podemos plantear circuitos independientes desde cero.",
-        onlyLighting: "Solo cambiar la iluminación: nos vamos a adaptar a lo que ya existe.",
-      },
+      reactions: KITCHEN_PROBLEM_REACTIONS,
     },
     renovationStep,
   ],
   kitchenOpen: [
-    { key: "layout", title: "¿Qué distribución tiene tu cocina?", subtitle: "Elige la forma que más se parece a la tuya.", type: "single", layout: "grid", options: KITCHEN_LAYOUT_OPTIONS },
+    { key: "layout", title: "¿Qué distribución tiene tu cocina?", subtitle: "Elige la forma que más se parece a la tuya.", type: "single", layout: "grid", options: KITCHEN_LAYOUT_OPTIONS, reactions: KITCHEN_LAYOUT_REACTIONS },
     { key: "size", title: "¿Cuántos metros cuadrados tiene la zona de cocina?", subtitle: "Un cálculo aproximado está bien.", info: "Para una cocina suelen recomendarse entre 300 y 400 lm/m². Nemul hará el cálculo automáticamente según el tamaño y la luz natural.", type: "single", layout: "grid", options: KITCHEN_SIZE_OPTIONS },
     { key: "priorities", title: "¿Qué es lo más importante para ti en la cocina?", subtitle: "Puedes elegir varias opciones.", type: "multi", layout: "list", options: KITCHEN_PRIORITY_OPTIONS },
     { key: "upperCabinets", title: "¿Tienes muebles altos?", subtitle: "Esto nos dice dónde puede faltar luz sobre la encimera.", type: "single", layout: "list", options: KITCHEN_UPPER_CABINETS_OPTIONS },
@@ -942,7 +1011,7 @@ const ROOM_FLOWS = {
     { key: "ceilingHeight", title: "¿Cuál es la altura aproximada del techo?", subtitle: "Un cálculo aproximado está bien.", type: "single", layout: "grid", options: KITCHEN_CEILING_HEIGHT_OPTIONS },
     { key: "light", title: "¿Cuánta luz natural recibe la cocina durante el día?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
     { key: "adjoiningStyle", title: "¿Qué ambiente tiene el salón con el que se conecta?", subtitle: "Así coordinamos la luz entre ambas zonas.", type: "single", layout: "grid", options: STYLE_OPTIONS },
-    { key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: KITCHEN_PROBLEM_OPTIONS },
+    { key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: KITCHEN_PROBLEM_OPTIONS, reactions: KITCHEN_PROBLEM_REACTIONS },
     renovationStep,
   ],
   bedroom: [
@@ -950,13 +1019,20 @@ const ROOM_FLOWS = {
     { key: "ceiling", title: "¿Qué tipo de techo tienes?", subtitle: "Esto determina qué soluciones de instalación son posibles.", type: "single", layout: "list", options: CEILING_OPTIONS },
     { key: "size", title: "¿Cuántos metros cuadrados tiene el dormitorio?", subtitle: "Un cálculo aproximado está bien.", info: "En un dormitorio suelen bastar entre 100 y 150 lm/m². Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: BEDROOM_SIZE_OPTIONS },
     activityStep("bedroom", "Puedes elegir varias opciones."),
-    { key: "closetType", title: "¿Tienes armario o vestidor?", subtitle: "Cada uno necesita una luz distinta.", type: "single", layout: "list", options: BEDROOM_CLOSET_TYPE_OPTIONS },
+    { key: "closetType", title: "¿Tienes armario o vestidor?", subtitle: "Cada uno necesita una luz distinta.", type: "single", layout: "list", options: BEDROOM_CLOSET_TYPE_OPTIONS, reactions: {
+      empotrado: "Con armario empotrado, una luz continua arriba evitará que el interior quede en sombra.",
+      vestidor: "Al ser un vestidor, lo trataremos casi como una habitación aparte, con su propia luz general.",
+      independiente: "Con un armario independiente, un punto de luz cercano evitará que el propio mueble haga sombra.",
+    } },
     { key: "closetLight", title: "¿Quieres iluminación dentro o delante del armario?", subtitle: "Ideal si te vistes ahí mismo.", type: "single", layout: "list", options: YES_NO_OPTIONS },
     problemStep("bedroom"),
     renovationStep,
   ],
   bathroom: (answers = {}) => [
-    { key: "type", title: "¿Qué tipo de baño es?", subtitle: "Esto cambia cuántas zonas de luz necesitas.", type: "single", layout: "list", options: BATHROOM_TYPE_OPTIONS },
+    { key: "type", title: "¿Qué tipo de baño es?", subtitle: "Esto cambia cuántas zonas de luz necesitas.", type: "single", layout: "list", options: BATHROOM_TYPE_OPTIONS, reactions: {
+      aseo: "Al ser un aseo, con un buen punto sobre el espejo y otro general bastará.",
+      completo: "En un baño completo, vamos a diferenciar la luz del espejo, la ducha o bañera, y la general.",
+    } },
     { key: "size", title: "¿Cuántos metros cuadrados tiene aproximadamente?", subtitle: "Un cálculo aproximado está bien.", info: "En un baño suelen recomendarse entre 200 y 300 lm/m². Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: BATHROOM_SIZE_OPTIONS },
     { key: "mirrorUse", title: "¿Qué haces habitualmente delante del espejo?", subtitle: "Elige la opción principal.", type: "single", layout: "list", options: BATHROOM_MIRROR_OPTIONS },
     ...(answers.type === "aseo" ? [] : [{ key: "fixture", title: "¿Tienes ducha o bañera?", subtitle: "Cada una pide un tipo de luz distinto.", type: "single", layout: "list", options: BATHROOM_FIXTURE_OPTIONS }]),
@@ -967,7 +1043,11 @@ const ROOM_FLOWS = {
   ],
   dining: [
     { key: "daily", title: "¿Lo utilizas todos los días?", subtitle: "Cambia si priorizamos lo cómodo o lo decorativo.", type: "single", layout: "list", options: YES_NO_OPTIONS },
-    { key: "shape", title: "¿La mesa es redonda, rectangular o cuadrada?", subtitle: "La forma cambia cómo repartimos la luz.", type: "single", layout: "list", options: DINING_SHAPE_OPTIONS },
+    { key: "shape", title: "¿La mesa es redonda, rectangular o cuadrada?", subtitle: "La forma cambia cómo repartimos la luz.", type: "single", layout: "list", options: DINING_SHAPE_OPTIONS, reactions: {
+      redonda: "Con mesa redonda, un único punto centrado suele ser suficiente y queda muy equilibrado.",
+      rectangular: "Con mesa rectangular, dos o tres puntos en línea reparten mejor la luz.",
+      cuadrada: "Con mesa cuadrada, un colgante centrado o de varias luces cubre bien toda la superficie.",
+    } },
     { key: "size", title: "¿Cuántos metros cuadrados tiene el comedor?", subtitle: "Un cálculo aproximado está bien.", info: "En un comedor suelen recomendarse entre 150 y 200 lm/m². Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: DINING_SIZE_OPTIONS },
     { key: "seats", title: "¿Cuántas personas suelen comer?", subtitle: "Un cálculo aproximado está bien.", type: "single", layout: "list", options: DINING_SEATS_OPTIONS },
     { key: "pendant", title: "¿Quieres una lámpara decorativa sobre la mesa?", subtitle: "Como una lámpara colgante.", type: "single", layout: "list", options: YES_NO_OPTIONS },
@@ -976,7 +1056,11 @@ const ROOM_FLOWS = {
     renovationStep,
   ],
   closet: [
-    { key: "type", title: "¿Qué tipo de armario tienes?", subtitle: "Esto cambia cómo debe repartirse la luz.", type: "single", layout: "list", options: CLOSET_TYPE_OPTIONS },
+    { key: "type", title: "¿Qué tipo de armario tienes?", subtitle: "Esto cambia cómo debe repartirse la luz.", type: "single", layout: "list", options: CLOSET_TYPE_OPTIONS, reactions: {
+      abierto: "Con armarios abiertos, la luz general ya alcanza la ropa; reforzaremos solo el espejo.",
+      cerrado: "Con armarios cerrados, añadiremos luz interior en cada módulo para que no quede oscuro el fondo.",
+      mixto: "Con armarios mixtos, iluminaremos primero los módulos cerrados por dentro.",
+    } },
     { key: "size", title: "¿Cuántos metros cuadrados tiene el vestidor?", subtitle: "Un cálculo aproximado está bien.", info: "En un vestidor conviene entre 250 y 300 lm/m² para ver bien los colores. Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: CLOSET_SIZE_OPTIONS },
     { key: "mirror", title: "¿Hay espejo de cuerpo entero?", subtitle: "Ideal para ver el conjunto completo.", type: "single", layout: "list", options: YES_NO_OPTIONS },
     { key: "makeup", title: "¿Te maquillas o preparas aquí?", subtitle: "Esto pide una luz de mejor calidad de color.", type: "single", layout: "list", options: YES_NO_OPTIONS },
@@ -986,7 +1070,10 @@ const ROOM_FLOWS = {
   ],
   terrace: [
     activityStep("terrace", "Puedes elegir varias opciones."),
-    { key: "covered", title: "¿Está cubierta o descubierta?", subtitle: "Esto determina qué luminarias puedes usar.", type: "single", layout: "list", options: TERRACE_COVERED_OPTIONS },
+    { key: "covered", title: "¿Está cubierta o descubierta?", subtitle: "Esto determina qué luminarias puedes usar.", type: "single", layout: "list", options: TERRACE_COVERED_OPTIONS, reactions: {
+      cubierta: "Al estar cubierta, podemos usar luminarias de interior, siempre protegidas de la humedad.",
+      descubierta: "Al estar descubierta, elegiremos luminarias con certificación para exterior.",
+    } },
     { key: "size", title: "¿Cuántos metros cuadrados tiene la terraza?", subtitle: "Un cálculo aproximado está bien.", info: "En una terraza suelen bastar entre 80 y 150 lm/m² de ambiente. Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: TERRACE_SIZE_OPTIONS },
     { key: "night", title: "¿La usas principalmente de noche?", subtitle: "Cambia cuánto peso le damos a la luz artificial.", type: "single", layout: "list", options: YES_NO_OPTIONS },
     lightStep,
@@ -994,7 +1081,11 @@ const ROOM_FLOWS = {
     renovationStep,
   ],
   hallway: [
-    { key: "length", title: "¿Qué longitud tiene aproximadamente?", subtitle: "Un cálculo aproximado está bien.", type: "single", layout: "grid", options: HALLWAY_LENGTH_OPTIONS },
+    { key: "length", title: "¿Qué longitud tiene aproximadamente?", subtitle: "Un cálculo aproximado está bien.", type: "single", layout: "grid", options: HALLWAY_LENGTH_OPTIONS, reactions: {
+      corto: "Al ser corto, un único punto centrado probablemente sea suficiente.",
+      medio: "Con longitud media, repartiremos dos puntos para no dejar zonas oscuras.",
+      largo: "Al ser largo, repartiremos varios puntos a lo largo del recorrido.",
+    } },
     { key: "light", title: "¿Tiene luz natural?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
     { key: "sensor", title: "¿Quieres sensor de movimiento?", subtitle: "Ideal para pasillos que se cruzan de paso.", type: "single", layout: "list", options: HALLWAY_SENSOR_OPTIONS },
     { key: "connects", title: "¿Conecta muchas habitaciones?", subtitle: "Cuantas más conecte, más se usará.", type: "single", layout: "list", options: YES_NO_OPTIONS },
