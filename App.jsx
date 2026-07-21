@@ -134,7 +134,7 @@ const renovationStep = {
 };
 const RENOVATION_INSIGHT = {
   renovation: "Como vas a hacer una reforma, aprovecha para mover o añadir puntos de luz donde realmente se necesiten, sin depender de la instalación actual.",
-  onlyLights: "Como solo vas a cambiar las luminarias, la propuesta se adapta a los puntos de luz que ya existen en tu instalación.",
+  onlyLights: "Como solo vas a cambiar las luminarias, la propuesta se adaptarán a los puntos de luz que ya existen en tu vivienda.",
 };
 
 const STYLE_OPTIONS = [
