@@ -19,6 +19,19 @@ const FONT_STYLE = `
   .glow-orb { animation: glow-pulse 4.5s ease-in-out infinite; }
   .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
+  @keyframes option-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .option-in { animation: option-in 0.4s cubic-bezier(0.22,1,0.36,1) both; }
+  @keyframes check-pop {
+    0% { transform: scale(0.4); }
+    60% { transform: scale(1.15); }
+    100% { transform: scale(1); }
+  }
+  .check-pop { animation: check-pop 0.32s cubic-bezier(0.34,1.56,0.64,1) both; }
+  .tap-scale { transition: transform 0.15s ease, box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease; }
+  .tap-scale:active { transform: scale(0.965); }
   @keyframes rise-in {
     from { opacity: 0; transform: translateY(14px); }
     to { opacity: 1; transform: translateY(0); }
@@ -30,7 +43,8 @@ const FONT_STYLE = `
   }
   .toast-in { animation: toast-in 0.3s ease-out both; }
   @media (prefers-reduced-motion: reduce) {
-    .glow-orb, .rise-in, .toast-in { animation: none; }
+    .glow-orb, .rise-in, .toast-in, .option-in, .check-pop { animation: none; }
+    .tap-scale:active { transform: none; }
   }
 `;
 
@@ -1184,23 +1198,27 @@ function PrimaryButton({ children, onClick, disabled }) {
     <button
       onClick={onClick}
       disabled={disabled}
-      className="w-full font-body font-medium text-[15px] tracking-wide rounded-2xl py-4 transition-all duration-200"
-      style={{ backgroundColor: disabled ? COLORS.border : COLORS.primary, color: disabled ? COLORS.subtext : "#FFFFFF", boxShadow: disabled ? "none" : "0 8px 20px rgba(111,94,77,0.25)" }}
+      className="tap-scale w-full font-body font-medium text-[15px] tracking-wide rounded-2xl py-4 transition-all duration-200"
+      style={{
+        background: disabled ? COLORS.border : `linear-gradient(135deg, #7C6A56 0%, ${COLORS.primary} 55%, #5E4F41 100%)`,
+        color: disabled ? COLORS.subtext : "#FFFFFF",
+        boxShadow: disabled ? "none" : "0 8px 20px rgba(111,94,77,0.3)",
+      }}
     >
       {children}
     </button>
   );
 }
 
-function OptionRow({ selected, onClick, Icon, label, hint, multi }) {
+function OptionRow({ selected, onClick, Icon, label, hint, multi, delay = 0 }) {
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-4 rounded-2xl px-5 py-4 text-left transition-all duration-200"
-      style={{ backgroundColor: COLORS.card, border: `1.5px solid ${selected ? COLORS.accent : COLORS.border}`, boxShadow: selected ? "0 6px 18px rgba(193,161,107,0.20)" : "0 2px 10px rgba(46,42,39,0.04)" }}
+      className="option-in tap-scale w-full flex items-center gap-4 rounded-2xl px-5 py-4 text-left"
+      style={{ backgroundColor: COLORS.card, border: `1.5px solid ${selected ? COLORS.accent : COLORS.border}`, boxShadow: selected ? "0 6px 18px rgba(193,161,107,0.20)" : "0 2px 10px rgba(46,42,39,0.04)", animationDelay: `${delay}ms` }}
     >
       {Icon && (
-        <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: selected ? "#F3E9D8" : COLORS.bg }}>
+        <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ background: selected ? "linear-gradient(135deg, #F3E9D8, #EAD9BC)" : COLORS.bg }}>
           <Icon size={19} color={selected ? COLORS.accent : COLORS.subtext} strokeWidth={1.6} />
         </div>
       )}
@@ -1212,7 +1230,7 @@ function OptionRow({ selected, onClick, Icon, label, hint, multi }) {
         className={`w-5 h-5 flex items-center justify-center shrink-0 transition-all duration-200 ${multi ? "rounded-[6px]" : "rounded-full"}`}
         style={{ backgroundColor: selected ? COLORS.accent : "transparent", border: `1.5px solid ${selected ? COLORS.accent : COLORS.border}` }}
       >
-        {selected && <Check size={11} color="#FFFFFF" strokeWidth={3} />}
+        {selected && <Check size={11} color="#FFFFFF" strokeWidth={3} className="check-pop" />}
       </div>
     </button>
   );
@@ -1346,22 +1364,22 @@ function RoomsScreen({ selected, toggle, onContinue, onBack, freeRoomId }) {
       </div>
       <div className="flex-1 overflow-y-auto px-7">
         <div className="grid grid-cols-2 gap-3 pb-3">
-          {ROOMS.map(({ id, label, Icon }) => {
+          {ROOMS.map(({ id, label, Icon }, i) => {
             const isSelected = selected.includes(id);
             const isLocked = freeRoomId && freeRoomId !== id;
             return (
               <button
                 key={id}
                 onClick={() => toggle(id)}
-                className="relative flex flex-col items-center justify-center gap-3 rounded-2xl py-6 px-3 transition-all duration-200"
-                style={{ backgroundColor: COLORS.card, border: `1.5px solid ${isSelected ? COLORS.accent : COLORS.border}`, boxShadow: isSelected ? "0 6px 18px rgba(193,161,107,0.20)" : "0 2px 10px rgba(46,42,39,0.04)" }}
+                className="option-in tap-scale relative flex flex-col items-center justify-center gap-3 rounded-2xl py-6 px-3"
+                style={{ backgroundColor: COLORS.card, border: `1.5px solid ${isSelected ? COLORS.accent : COLORS.border}`, boxShadow: isSelected ? "0 6px 18px rgba(193,161,107,0.20)" : "0 2px 10px rgba(46,42,39,0.04)", animationDelay: `${i * 40}ms` }}
               >
                 {isLocked && (
                   <div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: "#F3E9D8" }}>
                     <Lock size={10} color={COLORS.accent} strokeWidth={2} />
                   </div>
                 )}
-                <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: isSelected ? "#F3E9D8" : COLORS.bg, opacity: isLocked ? 0.6 : 1 }}>
+                <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: isSelected ? "linear-gradient(135deg, #F3E9D8, #EAD9BC)" : COLORS.bg, opacity: isLocked ? 0.6 : 1 }}>
                   <Icon size={20} color={isSelected ? COLORS.accent : COLORS.subtext} strokeWidth={1.5} />
                 </div>
                 <span className="font-body text-[14px] font-medium text-center leading-tight" style={{ color: isLocked ? COLORS.subtext : COLORS.text }}>{label}</span>
@@ -1408,26 +1426,26 @@ function QuestionScreen({ step, value, onSelect, onContinue, onBack, stepIndex, 
       <div className="flex-1 overflow-y-auto px-7">
         {step.layout === "list" && (
           <div className="flex flex-col gap-3">
-            {step.options.map((opt) => {
+            {step.options.map((opt, i) => {
               const selected = isMulti ? (value || []).includes(opt.id) : value === opt.id;
-              return <OptionRow key={opt.id} selected={selected} onClick={() => onSelect(opt.id)} Icon={opt.Icon} label={opt.label} hint={opt.hint} multi={isMulti} />;
+              return <OptionRow key={opt.id} selected={selected} onClick={() => onSelect(opt.id)} Icon={opt.Icon} label={opt.label} hint={opt.hint} multi={isMulti} delay={i * 45} />;
             })}
           </div>
         )}
         {step.layout === "grid" && (
           <div className="grid grid-cols-2 gap-3">
-            {step.options.map((opt) => {
+            {step.options.map((opt, i) => {
               const selected = isMulti ? (value || []).includes(opt.id) : value === opt.id;
               const { Icon } = opt;
               return (
                 <button
                   key={opt.id}
                   onClick={() => onSelect(opt.id)}
-                  className="rounded-2xl py-5 px-3 text-center transition-all duration-200 flex flex-col items-center gap-2"
-                  style={{ backgroundColor: COLORS.card, border: `1.5px solid ${selected ? COLORS.accent : COLORS.border}`, boxShadow: selected ? "0 6px 18px rgba(193,161,107,0.20)" : "0 2px 10px rgba(46,42,39,0.04)" }}
+                  className="option-in tap-scale rounded-2xl py-5 px-3 text-center flex flex-col items-center gap-2"
+                  style={{ backgroundColor: COLORS.card, border: `1.5px solid ${selected ? COLORS.accent : COLORS.border}`, boxShadow: selected ? "0 6px 18px rgba(193,161,107,0.20)" : "0 2px 10px rgba(46,42,39,0.04)", animationDelay: `${i * 45}ms` }}
                 >
                   {Icon && (
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: selected ? "#F3E9D8" : COLORS.bg }}>
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: selected ? "linear-gradient(135deg, #F3E9D8, #EAD9BC)" : COLORS.bg }}>
                       <Icon size={16} color={selected ? COLORS.accent : COLORS.subtext} strokeWidth={1.6} />
                     </div>
                   )}
@@ -1550,7 +1568,7 @@ function MistakesList({ mistakes }) {
       <p className="font-body text-[13px] tracking-[0.12em] uppercase mb-2.5" style={{ color: COLORS.warning }}>Errores que debes evitar</p>
       <div className="flex flex-col gap-2">
         {mistakes.map((m, i) => (
-          <div key={i} className="flex items-start gap-3 rounded-xl p-3.5" style={{ backgroundColor: "#FBF1EC" }}>
+          <div key={i} className="option-in flex items-start gap-3 rounded-xl p-3.5" style={{ backgroundColor: "#FBF1EC", border: "1px solid #F0D9CE", animationDelay: `${i * 60}ms` }}>
             <X size={15} color={COLORS.warning} strokeWidth={2.2} className="mt-0.5 shrink-0" />
             <p className="font-body text-[14px] leading-relaxed" style={{ color: COLORS.text }}>{m}</p>
           </div>
@@ -1853,8 +1871,8 @@ function GuidePromoCard() {
         href="https://www.etsy.com/es/listing/4427720777/guia-de-iluminacion-del-hogar-consejos?ref=share_ios_native_control"
         target="_blank"
         rel="noopener noreferrer"
-        className="w-full flex items-center justify-center font-body font-medium text-[14px] rounded-xl py-3.5 transition-all duration-200"
-        style={{ backgroundColor: COLORS.primary, color: "#FFFFFF", boxShadow: "0 8px 20px rgba(111,94,77,0.25)" }}
+        className="tap-scale w-full flex items-center justify-center font-body font-medium text-[14px] rounded-xl py-3.5 transition-all duration-200"
+        style={{ background: `linear-gradient(135deg, #7C6A56 0%, ${COLORS.primary} 55%, #5E4F41 100%)`, color: "#FFFFFF", boxShadow: "0 8px 20px rgba(111,94,77,0.25)" }}
       >
         Ver la guía en Etsy
       </a>
@@ -2044,7 +2062,7 @@ function HomeScreen({ plans, onOpenPlan, onDeletePlan, onNewPlan }) {
         )}
       </div>
       <div className="px-7 pt-3 pb-1">
-        <button onClick={onNewPlan} className="w-full flex items-center justify-center gap-2 font-body font-medium text-[15px] tracking-wide rounded-2xl py-4 transition-all duration-200" style={{ backgroundColor: COLORS.primary, color: "#FFFFFF", boxShadow: "0 8px 20px rgba(111,94,77,0.25)" }}>
+        <button onClick={onNewPlan} className="tap-scale w-full flex items-center justify-center gap-2 font-body font-medium text-[15px] tracking-wide rounded-2xl py-4 transition-all duration-200" style={{ background: `linear-gradient(135deg, #7C6A56 0%, ${COLORS.primary} 55%, #5E4F41 100%)`, color: "#FFFFFF", boxShadow: "0 8px 20px rgba(111,94,77,0.25)" }}>
           <Plus size={16} strokeWidth={2.2} /> Planear un nuevo espacio
         </button>
       </div>
@@ -2115,6 +2133,44 @@ function PlanDetailScreen({ plan, onBack }) {
 // ---------- Landing page: la puerta de entrada real de www.nemul.app ----------
 // Se muestra fuera del marco de teléfono: es una página web normal y responsiva,
 // no la simulación de app. El CTA lleva a la experiencia dentro del "teléfono".
+
+// Envuelve cualquier sección para que aparezca con un fundido/deslizamiento
+// suave la primera vez que entra en pantalla al hacer scroll, en vez de estar
+// todo ya visible de golpe al cargar la página.
+function Reveal({ children, delay = 0, className = "" }) {
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.15 }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div
+      ref={ref}
+      className={className}
+      style={{
+        opacity: visible ? 1 : 0,
+        transform: visible ? "translateY(0)" : "translateY(24px)",
+        transition: `opacity 0.6s ease ${delay}ms, transform 0.6s cubic-bezier(0.22,1,0.36,1) ${delay}ms`,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
 /* ---------------------------------------------------------------------------
  * Copia original del modelo "una habitación gratis + Premium en espera",
@@ -2291,8 +2347,8 @@ function LandingNav({ onStart, lang, setLang, t }) {
           </div>
           <button
             onClick={onStart}
-            className="font-body text-[13.5px] font-medium rounded-full px-5 py-2.5 transition-all duration-200"
-            style={{ backgroundColor: COLORS.primary, color: "#FFFFFF" }}
+            className="tap-scale font-body text-[13.5px] font-medium rounded-full px-5 py-2.5 transition-all duration-200"
+            style={{ background: `linear-gradient(135deg, #7C6A56 0%, ${COLORS.primary} 55%, #5E4F41 100%)`, color: "#FFFFFF" }}
           >
             {t.navCta}
           </button>
@@ -2320,8 +2376,8 @@ function LandingHero({ onStart, t }) {
       </p>
       <button
         onClick={onStart}
-        className="font-body font-medium text-[15px] tracking-wide rounded-2xl px-8 py-4 transition-all duration-200"
-        style={{ backgroundColor: COLORS.primary, color: "#FFFFFF", boxShadow: "0 10px 26px rgba(111,94,77,0.3)" }}
+        className="tap-scale font-body font-medium text-[15px] tracking-wide rounded-2xl px-8 py-4 transition-all duration-200 hover:scale-[1.02]"
+        style={{ background: `linear-gradient(135deg, #7C6A56 0%, ${COLORS.primary} 55%, #5E4F41 100%)`, color: "#FFFFFF", boxShadow: "0 10px 26px rgba(111,94,77,0.3)" }}
       >
         {t.heroCta}
       </button>
@@ -2340,16 +2396,21 @@ function LandingHero({ onStart, t }) {
 function HowItWorksSection({ t }) {
   return (
     <section className="max-w-4xl mx-auto px-6 py-14">
-      <h2 className="font-display text-[28px] font-medium text-center mb-10" style={{ color: COLORS.text }}>{t.howTitle}</h2>
+      <Reveal><h2 className="font-display text-[28px] font-medium text-center mb-10" style={{ color: COLORS.text }}>{t.howTitle}</h2></Reveal>
       <div className="grid md:grid-cols-3 gap-5">
-        {t.steps.map((s) => (
-          <div key={s.n} className="rounded-2xl p-6" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 2px 12px rgba(46,42,39,0.05)" }}>
-            <div className="w-9 h-9 rounded-full flex items-center justify-center mb-4 font-body text-[14px] font-semibold" style={{ backgroundColor: "#F3E9D8", color: COLORS.accent }}>
-              {s.n}
+        {t.steps.map((s, i) => (
+          <Reveal key={s.n} delay={i * 120}>
+            <div
+              className="rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1.5"
+              style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 2px 12px rgba(46,42,39,0.05)" }}
+            >
+              <div className="w-9 h-9 rounded-full flex items-center justify-center mb-4 font-body text-[14px] font-semibold" style={{ background: "linear-gradient(135deg, #F3E9D8, #EAD9BC)", color: COLORS.accent }}>
+                {s.n}
+              </div>
+              <p className="font-body text-[15px] font-medium mb-2" style={{ color: COLORS.text }}>{s.title}</p>
+              <p className="font-body text-[13.5px] leading-relaxed" style={{ color: COLORS.subtext }}>{s.text}</p>
             </div>
-            <p className="font-body text-[15px] font-medium mb-2" style={{ color: COLORS.text }}>{s.title}</p>
-            <p className="font-body text-[13.5px] leading-relaxed" style={{ color: COLORS.subtext }}>{s.text}</p>
-          </div>
+          </Reveal>
         ))}
       </div>
     </section>
@@ -2370,24 +2431,28 @@ function PreviewRow({ label }) {
 function ProductShowcaseSection({ t }) {
   return (
     <section className="max-w-md mx-auto px-6 py-14">
-      <h2 className="font-display text-[28px] font-medium text-center mb-3" style={{ color: COLORS.text }}>{t.showcaseTitle}</h2>
-      <p className="font-body text-[13px] tracking-wide text-center mb-6" style={{ color: COLORS.accent }}>
-        {t.showcasePreviewLabel}
-      </p>
-      <div className="rounded-2xl p-6" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 12px 32px rgba(46,42,39,0.08)" }}>
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: "#F3E9D8" }}>
-            <Sofa size={18} color={COLORS.accent} strokeWidth={1.6} />
+      <Reveal>
+        <h2 className="font-display text-[28px] font-medium text-center mb-3" style={{ color: COLORS.text }}>{t.showcaseTitle}</h2>
+        <p className="font-body text-[13px] tracking-wide text-center mb-6" style={{ color: COLORS.accent }}>
+          {t.showcasePreviewLabel}
+        </p>
+      </Reveal>
+      <Reveal delay={150}>
+        <div className="rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 12px 32px rgba(46,42,39,0.08)" }}>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: "linear-gradient(135deg, #F3E9D8, #EAD9BC)" }}>
+              <Sofa size={18} color={COLORS.accent} strokeWidth={1.6} />
+            </div>
+            <div>
+              <p className="font-body text-[14px] font-medium" style={{ color: COLORS.text }}>{t.showcaseExampleLabel}</p>
+              <p className="font-body text-[12px]" style={{ color: COLORS.subtext }}>{t.showcaseSubLabel}</p>
+            </div>
           </div>
           <div>
-            <p className="font-body text-[14px] font-medium" style={{ color: COLORS.text }}>{t.showcaseExampleLabel}</p>
-            <p className="font-body text-[12px]" style={{ color: COLORS.subtext }}>{t.showcaseSubLabel}</p>
+            {t.showcaseItems.map((label, i) => <PreviewRow key={i} label={label} />)}
           </div>
         </div>
-        <div>
-          {t.showcaseItems.map((label, i) => <PreviewRow key={i} label={label} />)}
-        </div>
-      </div>
+      </Reveal>
       <p className="font-body text-[12.5px] text-center mt-5 leading-relaxed" style={{ color: COLORS.subtext }}>
         {t.showcaseFooter}
       </p>
@@ -2398,13 +2463,15 @@ function ProductShowcaseSection({ t }) {
 function CredentialSection({ t }) {
   return (
     <section className="max-w-2xl mx-auto px-6 py-14 text-center">
-      <div className="w-14 h-14 rounded-full mx-auto mb-5 flex items-center justify-center" style={{ backgroundColor: "#F3E9D8" }}>
-        <Sparkles size={22} color={COLORS.accent} strokeWidth={1.6} />
-      </div>
-      <p className="font-display text-[22px] font-medium mb-3" style={{ color: COLORS.text }}>{t.credentialTitle}</p>
-      <p className="font-body text-[14.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
-        {t.credentialText}
-      </p>
+      <Reveal>
+        <div className="w-14 h-14 rounded-full mx-auto mb-5 flex items-center justify-center" style={{ background: "linear-gradient(135deg, #F3E9D8, #EAD9BC)" }}>
+          <Sparkles size={22} color={COLORS.accent} strokeWidth={1.6} />
+        </div>
+        <p className="font-display text-[22px] font-medium mb-3" style={{ color: COLORS.text }}>{t.credentialTitle}</p>
+        <p className="font-body text-[14.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
+          {t.credentialText}
+        </p>
+      </Reveal>
     </section>
   );
 }
@@ -2412,7 +2479,8 @@ function CredentialSection({ t }) {
 function AccessSection({ onStart, t }) {
   return (
     <section className="max-w-2xl mx-auto px-6 py-14 text-center">
-      <div className="rounded-2xl p-8" style={{ backgroundColor: "#F3E9D8", border: `1px solid #C1A16B55` }}>
+      <Reveal>
+      <div className="rounded-2xl p-8 transition-all duration-300 hover:-translate-y-1" style={{ backgroundColor: "#F3E9D8", border: `1px solid #C1A16B55` }}>
         <p className="font-body text-[12px] tracking-[0.2em] uppercase mb-3" style={{ color: COLORS.primary }}>{t.accessLabel}</p>
         <p className="font-display text-[22px] font-medium mb-3" style={{ color: COLORS.text }}>{t.accessTitle}</p>
         <p className="font-body text-[14px] leading-relaxed mb-6" style={{ color: COLORS.subtext }}>
@@ -2420,12 +2488,13 @@ function AccessSection({ onStart, t }) {
         </p>
         <button
           onClick={onStart}
-          className="font-body font-medium text-[14.5px] rounded-2xl px-7 py-3.5 transition-all duration-200"
-          style={{ backgroundColor: COLORS.primary, color: "#FFFFFF", boxShadow: "0 8px 20px rgba(111,94,77,0.25)" }}
+          className="tap-scale font-body font-medium text-[14.5px] rounded-2xl px-7 py-3.5 transition-all duration-200"
+          style={{ background: `linear-gradient(135deg, #7C6A56 0%, ${COLORS.primary} 55%, #5E4F41 100%)`, color: "#FFFFFF", boxShadow: "0 8px 20px rgba(111,94,77,0.25)" }}
         >
           {t.accessCta}
         </button>
       </div>
+      </Reveal>
     </section>
   );
 }
@@ -2433,29 +2502,31 @@ function AccessSection({ onStart, t }) {
 function LandingGuideSection({ t }) {
   return (
     <section className="max-w-2xl mx-auto px-6 py-14">
-      <p className="font-body text-[12px] tracking-[0.2em] uppercase text-center mb-4" style={{ color: COLORS.accent }}>{t.guideLabel}</p>
-      <div className="rounded-2xl p-6" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 2px 12px rgba(46,42,39,0.05)" }}>
-        <div className="flex items-start gap-4">
-          <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "#F3E9D8" }}>
-            <BookOpen size={19} color={COLORS.accent} strokeWidth={1.6} />
-          </div>
-          <div className="flex-1">
-            <p className="font-display text-[18px] font-medium mb-1" style={{ color: COLORS.text }}>{t.guideTitle}</p>
-            <p className="font-body text-[13px] leading-relaxed mb-4" style={{ color: COLORS.subtext }}>
-              {t.guideText}
-            </p>
-            <a
-              href="https://www.etsy.com/es/listing/4427720777/guia-de-iluminacion-del-hogar-consejos?ref=share_ios_native_control"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block font-body font-medium text-[13.5px] rounded-xl px-5 py-2.5"
-              style={{ backgroundColor: COLORS.primary, color: "#FFFFFF" }}
-            >
-              {t.guideCta}
-            </a>
+      <Reveal>
+        <p className="font-body text-[12px] tracking-[0.2em] uppercase text-center mb-4" style={{ color: COLORS.accent }}>{t.guideLabel}</p>
+        <div className="rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 2px 12px rgba(46,42,39,0.05)" }}>
+          <div className="flex items-start gap-4">
+            <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, #F3E9D8, #EAD9BC)" }}>
+              <BookOpen size={19} color={COLORS.accent} strokeWidth={1.6} />
+            </div>
+            <div className="flex-1">
+              <p className="font-display text-[18px] font-medium mb-1" style={{ color: COLORS.text }}>{t.guideTitle}</p>
+              <p className="font-body text-[13px] leading-relaxed mb-4" style={{ color: COLORS.subtext }}>
+                {t.guideText}
+              </p>
+              <a
+                href="https://www.etsy.com/es/listing/4427720777/guia-de-iluminacion-del-hogar-consejos?ref=share_ios_native_control"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="tap-scale inline-block font-body font-medium text-[13.5px] rounded-xl px-5 py-2.5"
+                style={{ background: `linear-gradient(135deg, #7C6A56 0%, ${COLORS.primary} 55%, #5E4F41 100%)`, color: "#FFFFFF" }}
+              >
+                {t.guideCta}
+              </a>
+            </div>
           </div>
         </div>
-      </div>
+      </Reveal>
     </section>
   );
 }
@@ -2463,13 +2534,13 @@ function LandingGuideSection({ t }) {
 function FAQItem({ q, a }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
+    <div className="tap-scale rounded-xl overflow-hidden transition-all duration-200 hover:-translate-y-0.5" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
       <button onClick={() => setOpen((o) => !o)} className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left">
         <span className="font-body text-[14px] font-medium" style={{ color: COLORS.text }}>{q}</span>
         <ChevronDown size={16} color={COLORS.subtext} style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", flexShrink: 0 }} />
       </button>
       {open && (
-        <div className="px-5 pb-4">
+        <div className="px-5 pb-4 option-in">
           <p className="font-body text-[13.5px] leading-relaxed" style={{ color: COLORS.subtext }}>{a}</p>
         </div>
       )}
@@ -2480,9 +2551,13 @@ function FAQItem({ q, a }) {
 function FAQSection({ t }) {
   return (
     <section id="faq" className="max-w-2xl mx-auto px-6 py-14">
-      <h2 className="font-display text-[26px] font-medium text-center mb-8" style={{ color: COLORS.text }}>{t.faqTitle}</h2>
+      <Reveal><h2 className="font-display text-[26px] font-medium text-center mb-8" style={{ color: COLORS.text }}>{t.faqTitle}</h2></Reveal>
       <div className="flex flex-col gap-3">
-        {t.faqs.map((f, i) => <FAQItem key={i} q={f.q} a={f.a} />)}
+        {t.faqs.map((f, i) => (
+          <Reveal key={i} delay={i * 80}>
+            <FAQItem q={f.q} a={f.a} />
+          </Reveal>
+        ))}
       </div>
     </section>
   );
