@@ -105,6 +105,12 @@ const YES_NO_OPTIONS = [
   { id: "no", label: "No" },
 ];
 
+const CLOSET_LIGHT_OPTIONS = [
+  { id: "dentro", label: "Dentro del armario" },
+  { id: "delante", label: "Delante del armario" },
+  { id: "no", label: "No hace falta" },
+];
+
 const CEILING_OPTIONS = [
   { id: "liso", label: "Liso" },
   { id: "pladur", label: "Falso techo de pladur" },
@@ -134,7 +140,7 @@ const renovationStep = {
 };
 const RENOVATION_INSIGHT = {
   renovation: "Como vas a hacer una reforma, aprovecha para mover o añadir puntos de luz donde realmente se necesiten, sin depender de la instalación actual.",
-  onlyLights: "Como solo vas a cambiar las luminarias, la propuesta se adaptarán a los puntos de luz que ya existen en tu vivienda.",
+  onlyLights: "Como solo vas a cambiar las luminarias, la propuesta se adapta a los puntos de luz que ya existen en tu instalación.",
 };
 
 const STYLE_OPTIONS = [
@@ -163,7 +169,7 @@ const TEMP_HUMAN = {
   2700: "Luz cálida, similar a la de un salón acogedor al atardecer.",
   3000: "Luz cálida neutra, ideal para crear un ambiente confortable y natural.",
   3500: "Luz neutra cálida, similar a la de un hogar moderno y bien iluminado.",
-  4000: "Luz blanca neutra, similar a la de una cocina moderna bien iluminada."
+  4000: "Luz blanca neutra, similar a la de una cocina moderna bien iluminada.",
 };
 function describeTempK(tempK) {
   return TEMP_HUMAN[tempK] || "un tono de luz equilibrado";
@@ -171,8 +177,8 @@ function describeTempK(tempK) {
 function describeLux(lux) {
   if (lux < 130) return "un ambiente suave, pensado para relajarse";
   if (lux < 200) return "una luz cómoda para el día a día";
-  if (lux < 300) return "una luz intensa, ideal para tareas que requieren precisión";
-  return "una luz muy intensa, perfecta para cocinar,leer o trabajar con precisión";
+  if (lux < 300) return "una luz intensa, pensada para tareas que exigen precisión";
+  return "una luz muy intensa, como la de una zona de trabajo";
 }
 
 // Regla de diseño: la luz natural decide cuánta luz añadimos (lm/m²).
@@ -734,7 +740,8 @@ const EXTRA_INSIGHT = {
       independiente: "Con un armario independiente, un punto de luz cercano evita que el propio mueble haga sombra sobre sí mismo al abrirlo.",
     },
     closetLight: {
-      si: "Como quieres luz dentro o delante del armario, añade una tira LED interior o un foco orientado directamente hacia la ropa.",
+      dentro: "Con luz dentro del armario, una tira LED en la parte superior o lateral ilumina la ropa sin que el propio mueble haga sombra.",
+      delante: "Con luz delante del armario, un punto de luz cercano te ayuda a elegir bien la ropa antes incluso de abrirlo.",
       no: "Al no necesitar luz específica en el armario, la luz general del dormitorio bien colocada será suficiente.",
     },
   },
@@ -1024,7 +1031,7 @@ const ROOM_FLOWS = {
       vestidor: "Al ser un vestidor, lo trataremos casi como una habitación aparte, con su propia luz general.",
       independiente: "Con un armario independiente, un punto de luz cercano evitará que el propio mueble haga sombra.",
     } },
-    { key: "closetLight", title: "¿Quieres iluminación dentro o delante del armario?", subtitle: "Ideal si te vistes ahí mismo.", type: "single", layout: "list", options: YES_NO_OPTIONS },
+    { key: "closetLight", title: "¿Quieres iluminación dentro o delante del armario?", subtitle: "Ideal si te vistes ahí mismo.", type: "single", layout: "list", options: CLOSET_LIGHT_OPTIONS },
     problemStep("bedroom"),
     renovationStep,
   ],
@@ -2109,6 +2116,22 @@ function PlanDetailScreen({ plan, onBack }) {
 // Se muestra fuera del marco de teléfono: es una página web normal y responsiva,
 // no la simulación de app. El CTA lleva a la experiencia dentro del "teléfono".
 
+/* ---------------------------------------------------------------------------
+ * Copia original del modelo "una habitación gratis + Premium en espera",
+ * guardada aquí para restaurarla fácilmente si se reactiva ese modelo.
+ *
+ * ES:
+ *   accessTitle: "Empieza gratis con una habitación"
+ *   accessText: "Prueba Nemul sin coste en el espacio que más te importe ahora. Muy pronto abriremos el acceso a toda la vivienda."
+ *   faq (¿Cuántas habitaciones puedo probar gratis?): "Una habitación completa, sin ningún coste. Muy pronto abriremos el acceso a toda la vivienda."
+ *   faq (¿Cómo sé cuándo esté disponible el acceso completo?): "Al intentar entrar a otra habitación te ofrecemos dejar tu email para avisarte en cuanto esté listo."
+ *
+ * EN:
+ *   accessTitle: "Start free with one room"
+ *   accessText: "Try Nemul at no cost in the space that matters most to you right now. We'll soon open access to your whole home."
+ *   faq (How many rooms can I try for free?): "One full room, at no cost. We'll soon open access to your entire home."
+ *   faq (How will I know when full access is available?): "When you try to enter another room, we'll offer you the option to leave your email so we can notify you."
+ * ------------------------------------------------------------------------- */
 const LANDING_COPY = {
   es: {
     navCta: "Empieza gratis",
