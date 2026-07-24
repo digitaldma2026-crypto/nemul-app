@@ -119,8 +119,8 @@ const CEILING_OPTIONS = [
 ];
 
 const CEILING_INSIGHT = {
-  liso: "Un techo liso te da libertad total para colocar los puntos de luz donde más los necesites.",
-  pladur: "Un falso techo de pladur es ideal para empotrar focos e integrar tiras LED sin obra adicional.",
+  liso: "Un techo liso no tiene cámara donde empotrar focos: sin reforma, lo más viable son luminarias de superficie o carriles; si vas a reformar, se puede construir un falso techo para tener más libertad.",
+  pladur: "Un falso techo de pladur ya tiene la cámara necesaria para empotrar focos e integrar tiras LED sin obra adicional.",
   vigas: "Con vigas vistas, evita empotrar focos en la madera: opta por soluciones de superficie o carriles.",
   noSe: "Antes de instalar focos empotrados, confirma con un instalador qué tipo de techo tienes.",
 };
@@ -960,7 +960,7 @@ const ROOM_FLOWS = {
     { key: "size", title: "¿Cuántos metros cuadrados tiene el salón?", subtitle: "Un cálculo aproximado está bien.", info: "En un salón suelen recomendarse entre 150 y 225 lm/m² según el ambiente que busques. Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: SALON_SIZE_OPTIONS },
     { key: "light", title: "¿Cuánta luz natural recibe?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
     { key: "ceiling", title: "¿Qué tipo de techo tienes?", subtitle: "Esto determina qué soluciones de instalación son posibles.", type: "single", layout: "list", options: CEILING_OPTIONS, reactions: {
-      liso: "Un techo liso te da total libertad para colocar los downlights donde más los necesites.",
+      liso: "Un techo liso no tiene cámara para empotrar focos: sin reforma iremos a soluciones de superficie; con reforma, se puede crear un falso techo.",
       pladur: "Con falso techo de pladur, podemos integrar tiras LED perimetrales sin ninguna obra extra.",
       vigas: "Con vigas vistas, vamos a evitar empotrar nada en la madera y usar soluciones de superficie.",
       noSe: "Sin problema, lo confirmamos con un instalador antes de decidir si se puede empotrar algo.",
