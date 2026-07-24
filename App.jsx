@@ -1021,7 +1021,7 @@ const ROOM_FLOWS = {
     { key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: KITCHEN_PROBLEM_OPTIONS, reactions: KITCHEN_PROBLEM_REACTIONS },
     renovationStep,
   ],
-  bedroom: [
+  bedroom: (answers = {}) => [
     lightStep,
     { key: "ceiling", title: "¿Qué tipo de techo tienes?", subtitle: "Esto determina qué soluciones de instalación son posibles.", type: "single", layout: "list", options: CEILING_OPTIONS },
     { key: "size", title: "¿Cuántos metros cuadrados tiene el dormitorio?", subtitle: "Un cálculo aproximado está bien.", info: "En un dormitorio suelen bastar entre 100 y 150 lm/m². Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: BEDROOM_SIZE_OPTIONS },
@@ -1031,7 +1031,7 @@ const ROOM_FLOWS = {
       vestidor: "Al ser un vestidor, lo trataremos casi como una habitación aparte, con su propia luz general.",
       independiente: "Con un armario independiente, un punto de luz cercano evitará que el propio mueble haga sombra.",
     } },
-    { key: "closetLight", title: "¿Quieres iluminación dentro o delante del armario?", subtitle: "Ideal si te vistes ahí mismo.", type: "single", layout: "list", options: CLOSET_LIGHT_OPTIONS },
+    ...(answers.closetType === "vestidor" ? [] : [{ key: "closetLight", title: "¿Quieres iluminación dentro o delante del armario?", subtitle: "Ideal si te vistes ahí mismo.", type: "single", layout: "list", options: CLOSET_LIGHT_OPTIONS }]),
     problemStep("bedroom"),
     renovationStep,
   ],
