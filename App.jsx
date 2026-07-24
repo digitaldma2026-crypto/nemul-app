@@ -607,7 +607,7 @@ const ACTIVITY_INSIGHT = {
   bedroom: {
     sleep: "Para dormir bien, la luz principal debe poder atenuarse hasta casi apagarse: la última luz que ves antes de dormir marca el tono del descanso.",
     readBed: "Para leer en la cama, una lámpara orientable en la mesita, a la altura del hombro, evita que la luz general te deslumbre al recostarte.",
-    dress: "Para vestirte frente al armario, usa una luz neutra y sin sombras: la misma cálida que usas para dormir no te deja ver bien los colores.",
+    dress: "Para vestirte con buena luz, usa un tono neutro y sin sombras en la zona donde te cambias: la misma cálida que usas para dormir no te deja ver bien los colores.",
     makeup: "Para maquillarte, necesitas luz uniforme sobre el rostro, nunca solo cenital: la luz de techo genera sombras que engañan al ojo.",
     work: "Si tienes un rincón de trabajo en el dormitorio, sepáralo con una luz blanca propia, distinta del resto del cuarto, para que el cerebro distinga descanso de trabajo.",
     tv: "Si ves la televisión desde la cama, evita que la luz general quede justo detrás o enfrente de la pantalla para no generar reflejos.",
@@ -648,7 +648,7 @@ const PROBLEM_REACTIONS = {
     cold: "Bajaremos el tono general hacia un blanco más cálido.",
     night: "Añadiremos una luz muy tenue, independiente de la principal, para la noche.",
     spa: "Priorizaremos luz cálida y regulable para ese ambiente de spa.",
-    renovating: "Con reforma desde cero, separaremos en circuitos la zona del espejo, la ducha y la general.",
+    renovating: "Con reforma desde cero, separaremos en circuitos el espejo, la zona húmeda (si la tienes) y la general.",
   },
   dining: {
     badLight: "Vamos a centrar un punto de luz directo sobre la mesa.",
@@ -815,7 +815,7 @@ const EXTRA_INSIGHT = {
 };
 
 const CLOSET_TYPE_INSIGHT = {
-  abierto: "Como tu armario es abierto, la luz general del vestidor ya alcanza la ropa; refuerza solo la zona del espejo.",
+  abierto: "Como tu armario es abierto, la luz general del vestidor ya alcanza la ropa; refuerza sobre todo la zona del espejo, si tienes uno.",
   cerrado: "Con armarios cerrados, añade una luz interior en cada módulo: si no, la luz general no llega bien al fondo.",
   mixto: "Con armarios mixtos, ilumina primero los módulos cerrados por dentro y deja que la luz general cubra las zonas abiertas.",
 };
@@ -841,7 +841,7 @@ const PROBLEM_INSIGHT = {
   bedroom: {
     dark: "Como el dormitorio se ve oscuro, refuerza la luz general con un punto adicional, sin perder la calidez necesaria para descansar.",
     glare: "Para que la luz no te deslumbre al despertar, evita puntos orientados directamente hacia la cama y prioriza luz indirecta.",
-    reading: "Ya que te falta luz para leer o vestirte, añade un punto dedicado en la mesita de noche y otro neutro cerca del armario.",
+    reading: "Ya que te falta luz para leer o vestirte, añade un punto dedicado en la mesita de noche y otro de luz neutra en la zona donde te cambias.",
     cozy: "Para un ambiente más relajante, prioriza tonos cálidos y añade la posibilidad de atenuar la luz por la noche.",
     renovating: "Como estás reformando desde cero, aprovecha para separar en circuitos la zona de descanso y la de vestidor.",
   },
@@ -849,8 +849,8 @@ const PROBLEM_INSIGHT = {
     shadows: "Para eliminar las sombras del espejo, coloca la luz a ambos lados del rostro en lugar de un único punto cenital.",
     cold: "Si la luz se siente demasiado fría, baja la temperatura de color general hacia un blanco más cálido y neutro.",
     night: "Para las rutinas nocturnas, añade una luz muy tenue independiente de la luz principal del baño.",
-    spa: "Para un ambiente de spa, prioriza luz cálida y regulable, y valora añadir una vela o luz indirecta junto a la bañera.",
-    renovating: "Como estás reformando desde cero, separa en circuitos distintos la zona del espejo, la ducha y la luz general.",
+    spa: "Para un ambiente de spa, prioriza luz cálida y regulable, y valora añadir una vela o luz indirecta en la zona húmeda.",
+    renovating: "Como estás reformando desde cero, separa en circuitos distintos el espejo, la zona húmeda (si la tienes) y la luz general.",
   },
   dining: {
     badLight: "Para que la mesa se vea bien iluminada, centra un punto de luz directamente sobre ella, no solo la luz general de la sala.",
@@ -921,7 +921,7 @@ const ROOM_TECH_CONFIG = {
 const ROOM_TECH_MISTAKES = {
   bedroom: [
     "No uses una única luz cenital muy intensa: resulta poco agradable para conciliar el sueño.",
-    "No mezcles tonos de luz muy distintos entre la zona de la cama y el armario.",
+    "No mezcles tonos de luz muy distintos entre la zona de la cama y la zona de vestir.",
   ],
   bathroom: [
     "No coloques un único punto de luz cenital sobre el espejo: crea sombras bajo los ojos y la nariz.",
@@ -1064,7 +1064,7 @@ const ROOM_FLOWS = {
   ],
   closet: [
     { key: "type", title: "¿Qué tipo de armario tienes?", subtitle: "Esto cambia cómo debe repartirse la luz.", type: "single", layout: "list", options: CLOSET_TYPE_OPTIONS, reactions: {
-      abierto: "Con armarios abiertos, la luz general ya alcanza la ropa; reforzaremos solo el espejo.",
+      abierto: "Con armarios abiertos, la luz general ya alcanza la ropa; reforzaremos sobre todo el espejo, si tienes uno.",
       cerrado: "Con armarios cerrados, añadiremos luz interior en cada módulo para que no quede oscuro el fondo.",
       mixto: "Con armarios mixtos, iluminaremos primero los módulos cerrados por dentro.",
     } },
