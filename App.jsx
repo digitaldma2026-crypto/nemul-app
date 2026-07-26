@@ -1,5 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 import { track } from "@vercel/analytics/react";
+
+// Envía un evento a Google Analytics (gratis, sin límite en el volumen de
+// tráfico actual). Si gtag todavía no ha cargado, simplemente no hace nada
+// en vez de romper la app.
+function gaEvent(name, params = {}) {
+  try {
+    if (typeof window !== "undefined" && typeof window.gtag === "function") {
+      window.gtag("event", name, params);
+    }
+  } catch (e) {
+    // silencioso: la analítica nunca debe romper la experiencia del usuario
+  }
+}
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import {
@@ -1281,6 +1294,7 @@ function PremiumGateScreen({ freeRoomLabel, onBack, onContinueFree }) {
       if (!res.ok) throw new Error("request failed");
       setSubmitted(true);
       track("premium_interest_submitted");
+      gaEvent("premium_interest_submitted");
     } catch (e) {
       setError(true);
     } finally {
@@ -1947,6 +1961,7 @@ function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
 
   useEffect(() => {
     track("viewed_report", { rooms: rooms.map((r) => r.id).join(",") });
+    gaEvent("viewed_report", { rooms: rooms.map((r) => r.id).join(",") });
   }, []);
 
   const handleDownloadPdf = async () => {
@@ -1956,6 +1971,7 @@ function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
       const dateStr = new Date().toISOString().slice(0, 10);
       await downloadReportAsPdf(printRef.current, `nemul-informe-${dateStr}.pdf`);
       track("downloaded_pdf");
+      gaEvent("downloaded_pdf");
     } catch (e) {
       // Si algo falla generando el PDF, no rompemos el resto de la app.
     } finally {
@@ -2713,11 +2729,13 @@ export default function NemulApp() {
     const chosenId = selectedRoomIds[0];
     if (freeRoomId && chosenId !== freeRoomId) {
       track("saw_premium_gate", { room: chosenId });
+      gaEvent("saw_premium_gate", { room: chosenId });
       setScreen("premiumGate");
       return;
     }
     if (!freeRoomId) setFreeRoomId(chosenId);
     track("started_room", { room: chosenId });
+    gaEvent("started_room", { room: chosenId });
     startFlow();
   };
 
@@ -2753,6 +2771,7 @@ export default function NemulApp() {
     setSavedPlans((prev) => [newPlan, ...prev]);
     setSaved(true);
     track("saved_plan", { rooms: selectedRooms.map((r) => r.id).join(",") });
+    gaEvent("saved_plan", { rooms: selectedRooms.map((r) => r.id).join(",") });
     setTimeout(() => setSaved(false), 2200);
   };
 
@@ -2766,7 +2785,7 @@ export default function NemulApp() {
   const viewingPlan = savedPlans.find((p) => p.id === viewingPlanId);
 
   if (screen === "landing") {
-    return <LandingPage onStart={() => { track("landing_cta_click"); setScreen("welcome"); }} />;
+    return <LandingPage onStart={() => { track("landing_cta_click"); gaEvent("landing_cta_click"); setScreen("welcome"); }} />;
   }
 
   return (
