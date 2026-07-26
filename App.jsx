@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { track } from "@vercel/analytics/react";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import {
@@ -1279,6 +1280,7 @@ function PremiumGateScreen({ freeRoomLabel, onBack, onContinueFree }) {
       });
       if (!res.ok) throw new Error("request failed");
       setSubmitted(true);
+      track("premium_interest_submitted");
     } catch (e) {
       setError(true);
     } finally {
@@ -1943,12 +1945,17 @@ function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
   const [downloading, setDownloading] = useState(false);
   const printRef = useRef(null);
 
+  useEffect(() => {
+    track("viewed_report", { rooms: rooms.map((r) => r.id).join(",") });
+  }, []);
+
   const handleDownloadPdf = async () => {
     if (downloading) return;
     setDownloading(true);
     try {
       const dateStr = new Date().toISOString().slice(0, 10);
       await downloadReportAsPdf(printRef.current, `nemul-informe-${dateStr}.pdf`);
+      track("downloaded_pdf");
     } catch (e) {
       // Si algo falla generando el PDF, no rompemos el resto de la app.
     } finally {
@@ -2705,10 +2712,12 @@ export default function NemulApp() {
   const handleRoomsContinue = () => {
     const chosenId = selectedRoomIds[0];
     if (freeRoomId && chosenId !== freeRoomId) {
+      track("saw_premium_gate", { room: chosenId });
       setScreen("premiumGate");
       return;
     }
     if (!freeRoomId) setFreeRoomId(chosenId);
+    track("started_room", { room: chosenId });
     startFlow();
   };
 
@@ -2743,6 +2752,7 @@ export default function NemulApp() {
     const newPlan = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, savedAt: new Date(), rooms: selectedRooms, answersByRoom };
     setSavedPlans((prev) => [newPlan, ...prev]);
     setSaved(true);
+    track("saved_plan", { rooms: selectedRooms.map((r) => r.id).join(",") });
     setTimeout(() => setSaved(false), 2200);
   };
 
@@ -2756,7 +2766,7 @@ export default function NemulApp() {
   const viewingPlan = savedPlans.find((p) => p.id === viewingPlanId);
 
   if (screen === "landing") {
-    return <LandingPage onStart={() => setScreen("welcome")} />;
+    return <LandingPage onStart={() => { track("landing_cta_click"); setScreen("welcome"); }} />;
   }
 
   return (
