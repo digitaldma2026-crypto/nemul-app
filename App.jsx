@@ -85,6 +85,7 @@ const ROOMS = [
   { id: "hallway", label: "Pasillo", Icon: DoorOpen },
   { id: "closet", label: "Vestidor", Icon: Shirt },
   { id: "terrace", label: "Terraza", Icon: TreePine },
+  { id: "office", label: "Despacho", Icon: Laptop },
 ];
 
 // Los planes se guardan en el propio navegador (localStorage), para que
@@ -137,6 +138,12 @@ const CLOSET_LIGHT_OPTIONS = [
   { id: "dentro", label: "Dentro del armario" },
   { id: "delante", label: "Delante del armario" },
   { id: "no", label: "No hace falta" },
+];
+
+const MIRROR_STATUS_OPTIONS = [
+  { id: "tengo", label: "Sí, ya tengo" },
+  { id: "planeo", label: "Sí, planeo instalarlo" },
+  { id: "no", label: "No" },
 ];
 
 const CEILING_OPTIONS = [
@@ -222,6 +229,7 @@ const ROOM_LUX_BY_LIGHT = {
   dining: { bright: 175, moderate: 200, low: 225 },
   closet: { bright: 225, moderate: 250, low: 275 },
   terrace: { bright: 80, moderate: 100, low: 120 },
+  office: { bright: 300, moderate: 350, low: 400 },
 };
 function getLux(roomId, light) {
   const table = ROOM_LUX_BY_LIGHT[roomId] || {};
@@ -626,6 +634,21 @@ const HALLWAY_SENSOR_OPTIONS = [
   { id: "no", label: "No, prefiero interruptor normal", Icon: DoorOpen },
 ];
 
+const OFFICE_SIZE_OPTIONS = [
+  { id: "small", label: "Pequeño", hint: "Menos de 6 m²", area: 6 },
+  { id: "medium", label: "Mediano", hint: "6–10 m²", area: 9 },
+  { id: "large", label: "Grande", hint: "10–16 m²", area: 14 },
+  { id: "xl", label: "Extra grande", hint: "Más de 16 m²", area: 20 },
+];
+const OFFICE_AREA_BY_SIZE = Object.fromEntries(OFFICE_SIZE_OPTIONS.map((o) => [o.id, o.area]));
+
+const DESK_POSITION_OPTIONS = [
+  { id: "frente", label: "Frente a la ventana" },
+  { id: "espaldas", label: "De espaldas a la ventana" },
+  { id: "lateral", label: "De lado a la ventana" },
+  { id: "sinVentana", label: "Sin ventana cerca" },
+];
+
 const ACTIVITY_OPTIONS = {
   bedroom: BEDROOM_ACTIVITY_OPTIONS,
   terrace: TERRACE_ACTIVITY_OPTIONS,
@@ -706,6 +729,13 @@ const PROBLEM_REACTIONS = {
     decor: "Consideraremos apliques en la pared en vez de solo downlights en el techo.",
     renovating: "Con reforma desde cero, dejaremos cableado preparado para un sensor de movimiento.",
   },
+  office: {
+    glare: "Vamos a reorientar o suavizar la luz que se refleja en la pantalla.",
+    tired: "Añadiremos una luz de tarea más uniforme para descansar la vista.",
+    videocall: "Reforzaremos la luz frontal para que te veas mejor en cámara.",
+    cold: "Bajaremos el tono hacia una luz algo más cálida.",
+    renovating: "Con reforma desde cero, dejaremos previstas varias tomas para escritorio y estanterías.",
+  },
 };
 
 function problemStep(roomId) {
@@ -754,6 +784,13 @@ const PROBLEM_OPTIONS = {
     { id: "scary", label: "Da algo de reparo cruzarlo de noche" },
     { id: "energy", label: "Quiero ahorrar energía" },
     { id: "decor", label: "Busco algo más decorativo" },
+    { id: "renovating", label: "Estoy reformando desde cero", Icon: Hammer },
+  ],
+  office: [
+    { id: "glare", label: "Se refleja la luz en la pantalla" },
+    { id: "tired", label: "Se me cansa la vista" },
+    { id: "videocall", label: "No me veo bien en videollamadas" },
+    { id: "cold", label: "Se ve muy fría o clínica" },
     { id: "renovating", label: "Estoy reformando desde cero", Icon: Hammer },
   ],
 };
@@ -822,8 +859,9 @@ const EXTRA_INSIGHT = {
   },
   closet: {
     mirror: {
-      si: "Con espejo de cuerpo entero, ilumina desde ambos lados para ver el conjunto completo sin sombras duras.",
-      no: "Sin espejo de cuerpo entero, la luz general uniforme sobre la ropa es tu prioridad principal.",
+      tengo: "Añade iluminación frontal o lateral a ambos lados del espejo, a la altura de los ojos: la luz cenital sola genera sombras bajo la barbilla y los ojos. Busca un CRI de 90 o superior para ver bien los colores reales de la ropa.",
+      planeo: "Antes de instalar el espejo, coloca dos puntos de luz a ambos lados de donde irá ubicado, a la altura aproximada de los ojos, y deja prevista la instalación eléctrica en esa zona para no tener que abrir pared después. Busca un CRI de 90 o superior.",
+      no: "Con iluminación general uniforme es suficiente, sin necesidad de puntos de luz adicionales para el rostro.",
     },
     makeup: {
       si: "Como te maquillas o preparas aquí, añade un punto de luz de buena calidad de color cerca de donde te sientas o te miras.",
@@ -838,6 +876,18 @@ const EXTRA_INSIGHT = {
     night: {
       si: "Como la usas sobre todo de noche, prioriza la calidez y la posibilidad de regular la intensidad por encima de una luz general muy potente.",
       no: "Al usarla sobre todo de día, la luz artificial puede ser más discreta: la protagonista sigue siendo la luz natural.",
+    },
+  },
+  office: {
+    deskPosition: {
+      frente: "Al mirar hacia la ventana, la luz natural puede deslumbrarte directamente frente a la pantalla; usa una cortina o estor semitranslúcido para suavizarla en las horas de más sol.",
+      espaldas: "Con la ventana detrás de ti, la luz puede reflejarse en la pantalla y crear un contraluz molesto en videollamadas; orienta el monitor ligeramente en ángulo respecto a la ventana.",
+      lateral: "La posición lateral es la más favorable: aprovecha la luz natural sin generar reflejos directos ni deslumbramiento — solo hay que reforzarla con luz artificial en días nublados.",
+      sinVentana: "Sin luz natural cercana, prioriza una lámpara de escritorio con buena reproducción de color (CRI ≥ 90) para no forzar la vista durante jornadas largas.",
+    },
+    videoCalls: {
+      si: "Como haces videollamadas, añade una luz suave y difusa frente a tu cara, a la altura de los ojos, no solo cenital, para verte bien iluminada sin sombras duras.",
+      no: "Al no depender de videollamadas, puedes priorizar la comodidad visual sobre la estética frente a cámara.",
     },
   },
 };
@@ -908,6 +958,13 @@ const PROBLEM_INSIGHT = {
     decor: "Para un toque decorativo, considera apliques en la pared en lugar de solo downlights en el techo.",
     renovating: "Como estás reformando desde cero, aprovecha para dejar cableado preparado para un sensor de movimiento.",
   },
+  office: {
+    glare: "Para evitar reflejos en la pantalla, evita colocar luces justo detrás de ti o frente al monitor; opta por luz indirecta o lateral.",
+    tired: "El cansancio visual suele deberse a contrastes fuertes entre la pantalla y el entorno: iguala la luz ambiente con el brillo de la pantalla.",
+    videocall: "Coloca una fuente de luz suave frente a tu rostro, a la altura de los ojos, para verte bien en videollamadas sin sombras duras.",
+    cold: "Si la luz se siente demasiado fría o clínica, baja la temperatura de color hacia un blanco más neutro.",
+    renovating: "Con una reforma completa, aprovecha para dejar circuitos independientes para la luz general y la de tarea del escritorio.",
+  },
 };
 
 // Motor de cálculo compartido: dormitorio, baño, comedor, vestidor y terraza
@@ -944,6 +1001,12 @@ const ROOM_TECH_CONFIG = {
     minDownlights: 2,
     getTempK: () => 3000,
   },
+  office: {
+    areaMap: OFFICE_AREA_BY_SIZE,
+    defaultArea: 9,
+    minDownlights: 2,
+    getTempK: (a) => (a.problem === "cold" ? 3500 : 4000),
+  },
 };
 
 const ROOM_TECH_MISTAKES = {
@@ -967,6 +1030,10 @@ const ROOM_TECH_MISTAKES = {
   terrace: [
     "No uses luminarias sin certificación para exterior si la terraza está descubierta.",
     "No dependas de un único foco potente: reparte varios puntos de menor intensidad.",
+  ],
+  office: [
+    "No coloques una lámpara de escritorio que proyecte la sombra de tu propia mano al escribir: debe venir del lado contrario a tu mano dominante.",
+    "No dependas solo del brillo de la pantalla como fuente de luz: fuerza mucho la vista en sesiones largas.",
   ],
 };
 
@@ -1097,7 +1164,11 @@ const ROOM_FLOWS = {
       mixto: "Con armarios mixtos, iluminaremos primero los módulos cerrados por dentro.",
     } },
     { key: "size", title: "¿Cuántos metros cuadrados tiene el vestidor?", subtitle: "Un cálculo aproximado está bien.", info: "En un vestidor conviene entre 250 y 300 lm/m² para ver bien los colores. Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: CLOSET_SIZE_OPTIONS },
-    { key: "mirror", title: "¿Hay espejo de cuerpo entero?", subtitle: "Ideal para ver el conjunto completo.", type: "single", layout: "list", options: YES_NO_OPTIONS },
+    { key: "mirror", title: "¿Tienes o vas a instalar un espejo en esta zona?", subtitle: "Ideal para ver el conjunto completo.", type: "single", layout: "list", options: MIRROR_STATUS_OPTIONS, reactions: {
+      tengo: "Con espejo ya instalado, evitaremos sombras iluminando desde ambos lados, no solo desde arriba.",
+      planeo: "Antes de instalarlo, dejaremos previstos los puntos de luz y la instalación eléctrica en esa zona.",
+      no: "Sin espejo en esta zona, la luz general uniforme del vestidor será suficiente.",
+    } },
     { key: "makeup", title: "¿Te maquillas o preparas aquí?", subtitle: "Esto pide una luz de mejor calidad de color.", type: "single", layout: "list", options: YES_NO_OPTIONS },
     lightStep,
     problemStep("closet"),
@@ -1125,6 +1196,19 @@ const ROOM_FLOWS = {
     { key: "sensor", title: "¿Quieres sensor de movimiento?", subtitle: "Ideal para pasillos que se cruzan de paso.", type: "single", layout: "list", options: HALLWAY_SENSOR_OPTIONS },
     { key: "connects", title: "¿Conecta muchas habitaciones?", subtitle: "Cuantas más conecte, más se usará.", type: "single", layout: "list", options: YES_NO_OPTIONS },
     problemStep("hallway"),
+    renovationStep,
+  ],
+  office: [
+    { key: "deskPosition", title: "¿Dónde está el escritorio respecto a la ventana?", subtitle: "Esto determina el riesgo de reflejos en la pantalla.", type: "single", layout: "list", options: DESK_POSITION_OPTIONS, reactions: {
+      frente: "Con el escritorio frente a la ventana, cuidaremos que la luz no te deslumbre al mirar la pantalla.",
+      espaldas: "De espaldas a la ventana, evitaremos que la luz se refleje en tu pantalla.",
+      lateral: "De lado a la ventana, es la posición más equilibrada: aprovechamos la luz sin deslumbrar ni generar reflejos.",
+      sinVentana: "Sin ventana cerca, la luz artificial va a tener que cubrir todo el trabajo por sí sola.",
+    } },
+    { key: "size", title: "¿Cuántos metros cuadrados tiene el despacho?", subtitle: "Un cálculo aproximado está bien.", info: "Para trabajar con pantallas y papeleo suelen recomendarse entre 300 y 400 lm/m². Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: OFFICE_SIZE_OPTIONS },
+    { key: "light", title: "¿Cuánta luz natural recibe durante el día?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
+    { key: "videoCalls", title: "¿Haces videollamadas con frecuencia?", subtitle: "Cambia cómo debe iluminarse tu rostro frente a la cámara.", type: "single", layout: "list", options: YES_NO_OPTIONS },
+    problemStep("office"),
     renovationStep,
   ],
 };
@@ -1686,7 +1770,7 @@ function TechnicalReportCard({ room, answers, expanded, onToggle }) {
         </div>
         <div className="flex-1">
           <p className="font-body text-[14.5px] font-medium" style={{ color: COLORS.text }}>{room.label}</p>
-          <p className="font-body text-[14px]" style={{ color: COLORS.subtext }}>Informe técnico de iluminación</p>
+          <p className="font-body text-[14px]" style={{ color: COLORS.subtext }}>Estudio de iluminación</p>
         </div>
         <ChevronDown size={16} color={COLORS.subtext} style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
       </button>
@@ -1732,7 +1816,7 @@ function KitchenReportCard({ room, answers, expanded, onToggle }) {
         </div>
         <div className="flex-1">
           <p className="font-body text-[14.5px] font-medium" style={{ color: COLORS.text }}>{room.label}</p>
-          <p className="font-body text-[14px]" style={{ color: COLORS.subtext }}>Informe técnico de iluminación</p>
+          <p className="font-body text-[14px]" style={{ color: COLORS.subtext }}>Estudio de iluminación</p>
         </div>
         <ChevronDown size={16} color={COLORS.subtext} style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
       </button>
@@ -1815,7 +1899,7 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle }) {
         </div>
         <div className="flex-1">
           <p className="font-body text-[14.5px] font-medium" style={{ color: COLORS.text }}>{room.label}</p>
-          <p className="font-body text-[14px]" style={{ color: COLORS.subtext }}>Informe técnico de iluminación</p>
+          <p className="font-body text-[14px]" style={{ color: COLORS.subtext }}>Estudio de iluminación</p>
         </div>
         <ChevronDown size={16} color={COLORS.subtext} style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
       </button>
@@ -1859,7 +1943,7 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle }) {
   );
 }
 
-const GENERIC_TECH_ROOMS = ["bedroom", "bathroom", "dining", "closet", "terrace"];
+const GENERIC_TECH_ROOMS = ["bedroom", "bathroom", "dining", "closet", "terrace", "office"];
 
 function ReportCard({ room, answers, expanded, onToggle }) {
   if (room.id === "living" || room.id === "livingDining") return <TechnicalReportCard room={room} answers={answers} expanded={expanded} onToggle={onToggle} />;
@@ -1962,6 +2046,13 @@ function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
   useEffect(() => {
     track("viewed_report", { rooms: rooms.map((r) => r.id).join(",") });
     gaEvent("viewed_report", { rooms: rooms.map((r) => r.id).join(",") });
+    rooms.forEach((r) => {
+      const problem = answersByRoom[r.id]?.problem;
+      if (problem) {
+        track("problem_selected", { room: r.id, problem });
+        gaEvent("problem_selected", { room: r.id, problem });
+      }
+    });
   }, []);
 
   const handleDownloadPdf = async () => {
@@ -2214,21 +2305,22 @@ function Reveal({ children, delay = 0, className = "" }) {
 const LANDING_COPY = {
   es: {
     navCta: "Empieza gratis",
-    heroTitle: "La forma más sencilla de diseñar la iluminación de tu hogar.",
-    heroSubtitle: "Recibe recomendaciones profesionales en pocos minutos. Sin conocimientos técnicos.",
-    heroCta: "✨ Empieza gratis",
-    heroTrust: "Sin registro. Sin compromiso. Informe gratuito en pocos minutos.",
+    heroTitle: "Diseña la iluminación de tu hogar.",
+    heroSubtitle: "Recibe una propuesta de iluminación personalizada en pocos minutos. No necesitas conocimientos técnicos.",
+    heroCta: "Diseña tu iluminación",
+    heroTrust: "Gratis · Sin registro · En pocos minutos",
     langNotice: "",
     howTitle: "¿Cómo funciona?",
+    howSubtitle: "Responde unas preguntas y recibe un estudio personalizado para tu estancia.",
     steps: [
       { n: "1", title: "Elige una estancia", text: "Salón, cocina, dormitorio... empieza por el espacio que más te importa ahora mismo." },
       { n: "2", title: "Responde unas preguntas sencillas", text: "Nada de términos técnicos: te preguntamos cómo vives ese espacio, no cómo diseñar luz." },
-      { n: "3", title: "Recibe tu estudio de iluminación", text: "Temperatura, lúmenes, distribución de focos y consejos, explicados en lenguaje simple." },
+      { n: "3", title: "Recibe tu estudio de iluminación", text: "Temperatura, lúmenes, distribución de focos y una propuesta adaptada a tu estancia." },
     ],
     showcaseTitle: "¿Qué vas a recibir con Nemul?",
     showcasePreviewLabel: "Vista previa del informe (resumen)",
     showcaseExampleLabel: "Ejemplo: Salón",
-    showcaseSubLabel: "Informe técnico de iluminación",
+    showcaseSubLabel: "Estudio de iluminación",
     showcaseItems: [
       "Luz necesaria según los m²",
       "Temperatura de color",
@@ -2238,19 +2330,19 @@ const LANDING_COPY = {
       "Recomendaciones profesionales",
     ],
     showcaseFooter: "El informe completo incluye todos los cálculos, recomendaciones y explicaciones para cada estancia.",
-    credentialTitle: "Creado por Dayami, diseñadora de interiores",
-    credentialText: "Aplica criterios profesionales de interiorismo y los explica de forma sencilla para ayudarte a tomar mejores decisiones.",
+    credentialTitle: "Creado por Dayami, con formación en diseño de interiores",
+    credentialText: "Aplica criterios de interiorismo y los explica de forma sencilla para ayudarte a tomar mejores decisiones.",
     accessLabel: "Acceso",
     accessTitle: "Empieza gratis con una habitación",
     accessText: "Prueba Nemul sin coste en el espacio que más te importe ahora. Muy pronto abriremos el acceso a toda la vivienda.",
     accessCta: "Empieza gratis",
     guideLabel: "¿Quieres aprender más?",
-    guideTitle: "Guía Profesional de Iluminación",
+    guideTitle: "Guía práctica de iluminación",
     guideText: "Aprende a iluminar cualquier estancia como un profesional, con ejemplos reales y consejos prácticos.",
     guideCta: "Ver en Etsy",
     faqTitle: "Preguntas frecuentes",
     faqs: [
-      { q: "¿Necesito saber de iluminación para usar Nemul?", a: "No. Todas las preguntas están pensadas para cualquier persona, sin necesidad de conocer términos técnicos. Nemul se encarga de la parte profesional por ti." },
+      { q: "¿Necesito saber de iluminación para usar Nemul?", a: "No. Todas las preguntas están pensadas para cualquier persona, sin necesidad de conocer términos técnicos. Nemul traduce los aspectos técnicos a recomendaciones fáciles de entender." },
       { q: "¿Nemul sustituye a un electricista?", a: "No. Las recomendaciones son orientativas; para la instalación eléctrica siempre debes consultar a un profesional certificado." },
       { q: "¿Cuántas habitaciones puedo probar gratis?", a: "Una habitación completa, sin ningún coste. Muy pronto abriremos el acceso a toda la vivienda." },
       { q: "¿Cómo sé cuándo esté disponible el acceso completo?", a: "Al intentar entrar a otra habitación te ofrecemos dejar tu email para avisarte en cuanto esté listo." },
@@ -2284,6 +2376,7 @@ const LANDING_COPY = {
     heroTrust: "No sign-up. No commitment. Free report in minutes.",
     langNotice: "Note: the interactive questionnaire is currently only available in Spanish. Full English support is coming soon.",
     howTitle: "How does it work?",
+    howSubtitle: "Answer a few questions and get a personalized study for your room.",
     steps: [
       { n: "1", title: "Choose a room", text: "Living room, kitchen, bedroom... start with the space that matters most to you right now." },
       { n: "2", title: "Answer a few simple questions", text: "No technical jargon: we ask how you live in that space, not how to design lighting." },
@@ -2302,8 +2395,8 @@ const LANDING_COPY = {
       "Professional recommendations",
     ],
     showcaseFooter: "The full report includes every calculation, recommendation, and explanation for each room.",
-    credentialTitle: "Created by Dayami, interior designer",
-    credentialText: "Applies professional interior design criteria and explains it simply, to help you make better decisions.",
+    credentialTitle: "Created by Dayami, trained in interior design",
+    credentialText: "Applies interior design criteria and explains it simply, to help you make better decisions.",
     accessLabel: "Access",
     accessTitle: "Start free with one room",
     accessText: "Try Nemul at no cost in the space that matters most to you right now. We'll soon open access to your whole home.",
@@ -2419,7 +2512,10 @@ function LandingHero({ onStart, t }) {
 function HowItWorksSection({ t }) {
   return (
     <section className="max-w-4xl mx-auto px-6 py-14">
-      <Reveal><h2 className="font-display text-[28px] font-medium text-center mb-10" style={{ color: COLORS.text }}>{t.howTitle}</h2></Reveal>
+      <Reveal>
+        <h2 className="font-display text-[28px] font-medium text-center mb-3" style={{ color: COLORS.text }}>{t.howTitle}</h2>
+        <p className="font-body text-[14.5px] text-center mb-10 max-w-md mx-auto leading-relaxed" style={{ color: COLORS.subtext }}>{t.howSubtitle}</p>
+      </Reveal>
       <div className="grid md:grid-cols-3 gap-5">
         {t.steps.map((s, i) => (
           <Reveal key={s.n} delay={i * 120}>
@@ -2832,3 +2928,4 @@ export default function NemulApp() {
     </div>
   );
 }
+
