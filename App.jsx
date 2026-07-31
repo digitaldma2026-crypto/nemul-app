@@ -886,7 +886,7 @@ const EXTRA_INSIGHT = {
       sinVentana: "Sin luz natural cercana, prioriza una lámpara de escritorio con buena reproducción de color (CRI ≥ 90) para no forzar la vista durante jornadas largas.",
     },
     videoCalls: {
-      si: "Como haces videollamadas, añade una luz suave y difusa frente a tu cara, a la altura de los ojos, no solo cenital, para verte bien iluminada sin sombras duras.",
+      si: "Si haces videollamadas, coloca una luz suave y difusa frente a tu rostro, a la altura de los ojos. Evita depender solo de la luz del techo para reducir las sombras duras y verte mejor en cámara.",
       no: "Al no depender de videollamadas, puedes priorizar la comodidad visual sobre la estética frente a cámara.",
     },
   },
@@ -961,7 +961,7 @@ const PROBLEM_INSIGHT = {
   office: {
     glare: "Para evitar reflejos en la pantalla, evita colocar luces justo detrás de ti o frente al monitor; opta por luz indirecta o lateral.",
     tired: "El cansancio visual suele deberse a contrastes fuertes entre la pantalla y el entorno: iguala la luz ambiente con el brillo de la pantalla.",
-    videocall: "Coloca una fuente de luz suave frente a tu rostro, a la altura de los ojos, para verte bien en videollamadas sin sombras duras.",
+    videocall: "Además de la luz, revisa la posición de la cámara: colócala a la altura de los ojos, no por debajo, para evitar un ángulo poco favorecedor.",
     cold: "Si la luz se siente demasiado fría o clínica, baja la temperatura de color hacia un blanco más neutro.",
     renovating: "Con una reforma completa, aprovecha para dejar circuitos independientes para la luz general y la de tarea del escritorio.",
   },
@@ -1207,7 +1207,7 @@ const ROOM_FLOWS = {
     } },
     { key: "size", title: "¿Cuántos metros cuadrados tiene el despacho?", subtitle: "Un cálculo aproximado está bien.", info: "Para trabajar con pantallas y papeleo suelen recomendarse entre 300 y 400 lm/m². Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: OFFICE_SIZE_OPTIONS },
     { key: "light", title: "¿Cuánta luz natural recibe durante el día?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
-    { key: "videoCalls", title: "¿Haces videollamadas con frecuencia?", subtitle: "Cambia cómo debe iluminarse tu rostro frente a la cámara.", type: "single", layout: "list", options: YES_NO_OPTIONS },
+    { key: "videoCalls", title: "¿Haces videollamadas con frecuencia?", subtitle: "Para adaptar la iluminación de tu zona de trabajo.", type: "single", layout: "list", options: YES_NO_OPTIONS },
     problemStep("office"),
     renovationStep,
   ],
@@ -2928,4 +2928,3 @@ export default function NemulApp() {
     </div>
   );
 }
-
