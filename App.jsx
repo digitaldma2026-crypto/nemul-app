@@ -154,8 +154,8 @@ const CEILING_OPTIONS = [
 ];
 
 const CEILING_INSIGHT = {
-  liso: "Un techo liso no tiene cámara donde empotrar focos: sin reforma, lo más viable son luminarias de superficie o carriles; si vas a reformar, se puede construir un falso techo para tener más libertad.",
-  pladur: "Un falso techo de pladur ya tiene la cámara necesaria para empotrar focos e integrar tiras LED sin obra adicional.",
+  liso: "Un techo liso no tiene cámara donde empotrar focos: sin reforma, lo más viable son luminarias de superficie o carriles; si vas a reformar, se puede construir un falso techo para tener más libertad. Si te preocupa el deslumbramiento lateral de los focos de superficie, un accesorio tipo \"honeycomb\" lo reduce bastante.",
+  pladur: "Un falso techo de pladur ya tiene la cámara necesaria para empotrar focos e integrar tiras LED sin obra adicional. Al elegir el downlight, uno con acabado negro y la fuente de luz más hundida respecto al techo da más confort visual que uno blanco y superficial, porque reduce el deslumbramiento.",
   vigas: "Con vigas vistas, evita empotrar focos en la madera: opta por soluciones de superficie o carriles.",
   noSe: "Antes de instalar focos empotrados, confirma con un instalador qué tipo de techo tienes.",
 };
@@ -293,6 +293,7 @@ function generateLivingReport(answers = {}) {
   const tips = [];
   tips.push("Coloca los downlights separados aproximadamente entre 1,2 y 1,5 m.");
   tips.push("Evita colocar focos justo encima del sofá para reducir deslumbramientos.");
+  tips.push("Al ser una zona de relax, prioriza lámparas de pared, de pie o de sobremesa sobre la luz general de techo; mejor varios puntos suaves repartidos que pocos focos potentes.");
 
   if (activities.includes("read") || goals.includes("reading") || problem === "reading") tips.push("Añade una lámpara de pie regulable junto al sofá, pensada para leer sin depender de la luz general.");
   if (goals.includes("tvFurniture")) tips.push("Una tira LED en el mueble de televisión aportará profundidad y hará el ambiente más acogedor.");
@@ -311,8 +312,8 @@ function generateLivingReport(answers = {}) {
   if (diningShape || diningSeats || diningPendant) tips.push("Como el salón y el comedor comparten el mismo espacio, mantén una temperatura de luz similar en ambas zonas: usa la mesa para marcar la diferencia con un punto de luz propio, no con un tono distinto.");
 
   if (ceiling === "vigas") tips.push("Con vigas vistas, evita empotrar downlights en la madera: opta por focos de superficie o carriles que se adapten a la estructura.");
-  if (ceiling === "pladur") tips.push("Un falso techo de pladur es ideal para empotrar downlights e integrar tiras LED perimetrales sin obra adicional.");
-  if (ceiling === "liso") tips.push("Un techo liso te da libertad total para distribuir los downlights donde más los necesites.");
+  if (ceiling === "pladur") tips.push("Un falso techo de pladur es ideal para empotrar downlights e integrar tiras LED perimetrales sin obra adicional. Elige uno con acabado negro y la fuente de luz más hundida: da más confort visual que uno blanco y superficial.");
+  if (ceiling === "liso") tips.push("Un techo liso no tiene cámara para empotrar: si no vas a reformar, usa downlights de superficie, y si te preocupa el deslumbramiento lateral, un accesorio tipo \"honeycomb\" lo reduce bastante.");
   if (ceiling === "noSe") tips.push("Antes de instalar downlights empotrados, confirma con un instalador qué tipo de techo tienes.");
 
   if (light === "bright") tips.push("Como el salón recibe mucha luz natural de día, reserva la calidez de la luz artificial sobre todo para la noche.");
@@ -531,7 +532,6 @@ const BEDROOM_ACTIVITY_OPTIONS = [
 
 const BEDROOM_CLOSET_TYPE_OPTIONS = [
   { id: "empotrado", label: "Armario empotrado" },
-  { id: "vestidor", label: "Vestidor" },
   { id: "independiente", label: "Armario independiente" },
 ];
 
@@ -801,12 +801,11 @@ const EXTRA_INSIGHT = {
   bedroom: {
     closetType: {
       empotrado: "Con armario empotrado, una luz continua en la parte superior evita que el interior quede en sombra al abrir las puertas.",
-      vestidor: "Al tener vestidor, trátalo casi como una habitación aparte: necesita su propia luz general, neutra y sin sombras.",
       independiente: "Con un armario independiente, un punto de luz cercano evita que el propio mueble haga sombra sobre sí mismo al abrirlo.",
     },
     closetLight: {
-      dentro: "Con luz dentro del armario, una tira LED en la parte superior o lateral ilumina la ropa sin que el propio mueble haga sombra.",
-      delante: "Con luz delante del armario, un punto de luz cercano te ayuda a elegir bien la ropa antes incluso de abrirlo.",
+      dentro: "Coloca una tira LED vertical en un lateral si el armario mide alrededor de 60 cm de ancho, o en ambos laterales si ronda los 120 cm. Usa tiras de unos 10W/m con los puntos de led muy juntos, para que no se note el punteado.",
+      delante: "Cuando la luz dentro del armario no es posible, coloca luminarias empotrables o de superficie delante, a unos 15-20 cm de las puertas, para que la luz no quede detrás de ti al vestirte y genere sombras.",
       no: "Al no necesitar luz específica en el armario, la luz general del dormitorio bien colocada será suficiente.",
     },
   },
@@ -1007,17 +1006,19 @@ const ROOM_TECH_CONFIG = {
 
 const ROOM_TECH_MISTAKES = {
   bedroom: [
-    "No uses una única luz cenital muy intensa: resulta poco agradable para conciliar el sueño.",
+    "No ilumines la zona de la cama con un único punto de techo: combina apliques, una lámpara de sobremesa, una suspensión o tiras de led escondidas, cuidando siempre que ninguna deslumbre estando tumbado.",
     "No mezcles tonos de luz muy distintos entre la zona de la cama y la zona de vestir.",
   ],
   bathroom: [
-    "No coloques un único punto de luz cenital sobre el espejo: crea sombras bajo los ojos y la nariz.",
+    "No coloques un único punto de luz cenital sobre el espejo: usa apliques de luz directa a ambos lados para evitar sombras bajo los ojos y la nariz.",
     "No mezcles temperaturas de color muy distintas entre la zona del espejo y el resto del baño.",
-    "No instales luminarias sin certificación para zonas húmedas cerca de la ducha o la bañera.",
+    "No dejes el lavabo sin un punto de luz propio: un downlight de haz algo cerrado sobre esa zona la enmarca y aporta luz general al baño.",
+    "No empotres luminarias directamente en el techo de la ducha: mejor luz indirecta con tiras led estancas (IP67) ocultas en un foseado de techo o una hornacina.",
   ],
   dining: [
     "No cuelgues la lámpara demasiado alta sobre la mesa: pierde función si queda muy por encima de la superficie.",
     "No ilumines solo el centro si la mesa es grande: deja los extremos en sombra.",
+    "No dependas solo de luz general difusa: sin un punto centrado sobre la mesa, el comedor se ve plano y la mesa mal iluminada.",
   ],
   closet: [
     "No uses luz muy cálida como única fuente: distorsiona el color real de la ropa.",
@@ -1117,12 +1118,11 @@ const ROOM_FLOWS = {
     { key: "ceiling", title: "¿Qué tipo de techo tienes?", subtitle: "Esto determina qué soluciones de instalación son posibles.", type: "single", layout: "list", options: CEILING_OPTIONS },
     { key: "size", title: "¿Cuántos metros cuadrados tiene el dormitorio?", subtitle: "Un cálculo aproximado está bien.", info: "En un dormitorio suelen bastar entre 100 y 150 lm/m². Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: BEDROOM_SIZE_OPTIONS },
     activityStep("bedroom", "Puedes elegir varias opciones."),
-    { key: "closetType", title: "¿Tienes armario o vestidor?", subtitle: "Cada uno necesita una luz distinta.", type: "single", layout: "list", options: BEDROOM_CLOSET_TYPE_OPTIONS, reactions: {
+    { key: "closetType", title: "¿Tienes armario empotrado o independiente?", subtitle: "Si tienes vestidor, hazlo aparte como su propia habitación en Nemul, para un cálculo completo de ese espacio.", type: "single", layout: "list", options: BEDROOM_CLOSET_TYPE_OPTIONS, reactions: {
       empotrado: "Con armario empotrado, una luz continua arriba evitará que el interior quede en sombra.",
-      vestidor: "Al ser un vestidor, lo trataremos casi como una habitación aparte, con su propia luz general.",
       independiente: "Con un armario independiente, un punto de luz cercano evitará que el propio mueble haga sombra.",
     } },
-    ...(answers.closetType === "vestidor" ? [] : [{ key: "closetLight", title: "¿Quieres iluminación dentro o delante del armario?", subtitle: "Ideal si te vistes ahí mismo.", type: "single", layout: "list", options: CLOSET_LIGHT_OPTIONS }]),
+    { key: "closetLight", title: "¿Quieres iluminación dentro o delante del armario?", subtitle: "Ideal si te vistes ahí mismo.", type: "single", layout: "list", options: CLOSET_LIGHT_OPTIONS },
     problemStep("bedroom"),
     renovationStep,
   ],
