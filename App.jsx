@@ -589,9 +589,9 @@ const DINING_SIZE_OPTIONS = [
 const DINING_AREA_BY_SIZE = Object.fromEntries(DINING_SIZE_OPTIONS.map((o) => [o.id, o.area]));
 
 const CLOSET_TYPE_OPTIONS = [
-  { id: "abierto", label: "Armarios abiertos" },
-  { id: "cerrado", label: "Armarios cerrados" },
-  { id: "mixto", label: "Mixto" },
+  { id: "abierto", label: "Abiertos" },
+  { id: "cerrado", label: "Con puertas" },
+  { id: "mixto", label: "Combinación de ambos" },
 ];
 
 const CLOSET_SIZE_OPTIONS = [
@@ -862,10 +862,6 @@ const EXTRA_INSIGHT = {
       tengo: "Añade iluminación frontal o lateral a ambos lados del espejo, a la altura de los ojos: la luz cenital sola genera sombras bajo la barbilla y los ojos. Busca un CRI de 90 o superior para ver bien los colores reales de la ropa.",
       planeo: "Antes de instalar el espejo, coloca dos puntos de luz a ambos lados de donde irá ubicado, a la altura aproximada de los ojos, y deja prevista la instalación eléctrica en esa zona para no tener que abrir pared después. Busca un CRI de 90 o superior.",
       no: "Con iluminación general uniforme es suficiente, sin necesidad de puntos de luz adicionales para el rostro.",
-    },
-    makeup: {
-      si: "Como te maquillas o preparas aquí, añade un punto de luz de buena calidad de color cerca de donde te sientas o te miras.",
-      no: "Al no maquillarte aquí, puedes priorizar una luz más funcional que estética.",
     },
   },
   terrace: {
@@ -1158,18 +1154,17 @@ const ROOM_FLOWS = {
     renovationStep,
   ],
   closet: [
-    { key: "type", title: "¿Qué tipo de armario tienes?", subtitle: "Esto cambia cómo debe repartirse la luz.", type: "single", layout: "list", options: CLOSET_TYPE_OPTIONS, reactions: {
+    { key: "type", title: "¿Cómo son los armarios del vestidor?", subtitle: "Solo para decidir la iluminación interior del armario.", type: "single", layout: "list", options: CLOSET_TYPE_OPTIONS, reactions: {
       abierto: "Con armarios abiertos, la luz general ya alcanza la ropa; reforzaremos sobre todo el espejo, si tienes uno.",
-      cerrado: "Con armarios cerrados, añadiremos luz interior en cada módulo para que no quede oscuro el fondo.",
-      mixto: "Con armarios mixtos, iluminaremos primero los módulos cerrados por dentro.",
+      cerrado: "Con armarios de puertas, añadiremos luz interior en cada módulo para que no quede oscuro el fondo.",
+      mixto: "Con una combinación de ambos, iluminaremos primero los módulos cerrados por dentro.",
     } },
-    { key: "size", title: "¿Cuántos metros cuadrados tiene el vestidor?", subtitle: "Un cálculo aproximado está bien.", info: "En un vestidor conviene entre 250 y 300 lm/m² para ver bien los colores. Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: CLOSET_SIZE_OPTIONS },
-    { key: "mirror", title: "¿Tienes o vas a instalar un espejo en esta zona?", subtitle: "Ideal para ver el conjunto completo.", type: "single", layout: "list", options: MIRROR_STATUS_OPTIONS, reactions: {
+    { key: "mirror", title: "¿Te preparas frente al espejo en este vestidor?", subtitle: "Para saber si hace falta iluminación específica en el espejo.", type: "single", layout: "list", options: MIRROR_STATUS_OPTIONS, reactions: {
       tengo: "Con espejo ya instalado, evitaremos sombras iluminando desde ambos lados, no solo desde arriba.",
       planeo: "Antes de instalarlo, dejaremos previstos los puntos de luz y la instalación eléctrica en esa zona.",
       no: "Sin espejo en esta zona, la luz general uniforme del vestidor será suficiente.",
     } },
-    { key: "makeup", title: "¿Te maquillas o preparas aquí?", subtitle: "Esto pide una luz de mejor calidad de color.", type: "single", layout: "list", options: YES_NO_OPTIONS },
+    { key: "size", title: "¿Qué superficie tiene el vestidor?", subtitle: "Esto sí cambia la iluminación general de todo el espacio.", info: "En un vestidor conviene entre 250 y 300 lm/m² para ver bien los colores. Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: CLOSET_SIZE_OPTIONS },
     lightStep,
     problemStep("closet"),
     renovationStep,
