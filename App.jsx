@@ -1787,7 +1787,7 @@ function TechnicalReportCard({ room, answers, expanded, onToggle }) {
           <CalculationBlock area={area} lux={lux} lumens={lumens} downlightsLow={downlightsLow} downlightsHigh={downlightsHigh} />
 
           <div>
-            <p className="font-body text-[13px] tracking-[0.12em] uppercase mb-2.5" style={{ color: COLORS.accent }}>Recomendaciones profesionales</p>
+            <p className="font-body text-[13px] tracking-[0.12em] uppercase mb-2.5" style={{ color: COLORS.accent }}>Recomendaciones personalizadas</p>
             <div className="flex flex-col gap-2">
               {tips.map((tip, i) => (
                 <div key={i} className="flex items-start gap-3 rounded-xl p-3.5" style={{ backgroundColor: COLORS.bg }}>
@@ -1925,7 +1925,7 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle }) {
           )}
 
           <div>
-            <p className="font-body text-[13px] tracking-[0.12em] uppercase mb-2.5" style={{ color: COLORS.accent }}>Recomendaciones profesionales</p>
+            <p className="font-body text-[13px] tracking-[0.12em] uppercase mb-2.5" style={{ color: COLORS.accent }}>Recomendaciones personalizadas</p>
             <div className="flex flex-col gap-2">
               {tips.map((tip, i) => (
                 <div key={i} className="flex items-start gap-3 rounded-xl p-3.5" style={{ backgroundColor: COLORS.bg }}>
@@ -2327,7 +2327,7 @@ const LANDING_COPY = {
       "Distribución de luminarias",
       "Capas de iluminación",
       "Errores a evitar",
-      "Recomendaciones profesionales",
+      "Recomendaciones personalizadas",
     ],
     showcaseFooter: "El informe completo incluye todos los cálculos, recomendaciones y explicaciones para cada estancia.",
     credentialTitle: "Creado por Dayami, con formación en diseño de interiores",
@@ -2392,7 +2392,7 @@ const LANDING_COPY = {
       "Fixture layout",
       "Lighting layers",
       "Mistakes to avoid",
-      "Professional recommendations",
+      "Personalized recommendations",
     ],
     showcaseFooter: "The full report includes every calculation, recommendation, and explanation for each room.",
     credentialTitle: "Created by Dayami, trained in interior design",
