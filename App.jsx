@@ -141,8 +141,8 @@ const CLOSET_LIGHT_OPTIONS = [
 ];
 
 const MIRROR_STATUS_OPTIONS = [
-  { id: "tengo", label: "Sí, ya tengo" },
-  { id: "planeo", label: "Sí, planeo instalarlo" },
+  { id: "tengo", label: "Sí, ya tengo uno" },
+  { id: "planeo", label: "Sí, voy a instalar uno" },
   { id: "no", label: "No" },
 ];
 
@@ -1159,7 +1159,7 @@ const ROOM_FLOWS = {
       cerrado: "Con armarios de puertas, añadiremos luz interior en cada módulo para que no quede oscuro el fondo.",
       mixto: "Con una combinación de ambos, iluminaremos primero los módulos cerrados por dentro.",
     } },
-    { key: "mirror", title: "¿Te preparas frente al espejo en este vestidor?", subtitle: "Para saber si hace falta iluminación específica en el espejo.", type: "single", layout: "list", options: MIRROR_STATUS_OPTIONS, reactions: {
+    { key: "mirror", title: "¿Tienes o piensas instalar un espejo en el vestidor?", subtitle: "Así podremos recomendar la iluminación adecuada para esa zona.", type: "single", layout: "list", options: MIRROR_STATUS_OPTIONS, reactions: {
       tengo: "Con espejo ya instalado, evitaremos sombras iluminando desde ambos lados, no solo desde arriba.",
       planeo: "Antes de instalarlo, dejaremos previstos los puntos de luz y la instalación eléctrica en esa zona.",
       no: "Sin espejo en esta zona, la luz general uniforme del vestidor será suficiente.",
