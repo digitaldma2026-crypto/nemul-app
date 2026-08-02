@@ -2435,10 +2435,7 @@ function LandingNav({ onStart, lang, setLang, t }) {
     <div className="sticky top-0 z-10 backdrop-blur-md" style={{ backgroundColor: "rgba(248,246,242,0.85)", borderBottom: `1px solid ${COLORS.border}` }}>
       <div className="max-w-5xl mx-auto flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: COLORS.card, boxShadow: "0 4px 12px rgba(244,181,66,0.35)" }}>
-            <Lightbulb size={15} color="#F4B942" fill="#FFDE8A" strokeWidth={1.4} />
-          </div>
-          <span className="font-body text-[15px] font-semibold tracking-wide" style={{ color: COLORS.text }}>Nemul</span>
+          <img src="/logo.png" alt="Nemul" className="h-9 w-auto" />
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center rounded-full p-0.5" style={{ backgroundColor: COLORS.bg, border: `1px solid ${COLORS.border}` }}>
@@ -2472,13 +2469,9 @@ function LandingNav({ onStart, lang, setLang, t }) {
 function LandingHero({ onStart, t }) {
   return (
     <section className="max-w-3xl mx-auto px-6 pt-16 pb-14 text-center">
-      <div className="relative w-24 h-24 mx-auto mb-8 flex items-center justify-center">
-        <div className="absolute inset-0 rounded-full glow-orb" style={{ background: "radial-gradient(circle, #FFC94Db3 0%, #FFC94D33 45%, transparent 72%)" }} />
-        <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor: COLORS.card, boxShadow: "0 8px 24px rgba(244,181,66,0.45)" }}>
-          <Lightbulb size={26} color="#F4B942" fill="#FFDE8A" strokeWidth={1.4} />
-        </div>
+      <div className="mb-6">
+        <img src="/logo.png" alt="Nemul" className="h-36 w-auto mx-auto" />
       </div>
-      <p className="font-body text-[13px] tracking-[0.25em] uppercase mb-4" style={{ color: COLORS.accent }}>Nemul</p>
       <h1 className="font-display text-[40px] md:text-[52px] leading-[1.1] font-medium mb-5" style={{ color: COLORS.text }}>
         {t.heroTitle}
       </h1>
