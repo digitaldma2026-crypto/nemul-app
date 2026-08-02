@@ -1333,13 +1333,7 @@ function WelcomeScreen({ onStart }) {
   return (
     <div className="flex flex-col h-full px-7 pt-8 pb-8 rise-in">
       <div className="flex-1 flex flex-col items-center justify-center text-center">
-        <div className="relative w-28 h-28 mb-8 flex items-center justify-center">
-          <div className="absolute inset-0 rounded-full glow-orb" style={{ background: "radial-gradient(circle, #FFC94Db3 0%, #FFC94D33 45%, transparent 72%)" }} />
-          <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor: COLORS.card, boxShadow: "0 8px 24px rgba(244,181,66,0.45)" }}>
-            <Lightbulb size={26} color="#F4B942" fill="#FFDE8A" strokeWidth={1.4} />
-          </div>
-        </div>
-        <p className="font-body text-[13px] tracking-[0.25em] uppercase mb-3" style={{ color: COLORS.accent }}>Nemul</p>
+        <img src="/logo.png" alt="Nemul" className="h-28 w-auto mb-6" />
         <h1 className="font-display text-[34px] leading-[1.15] font-medium mb-4" style={{ color: COLORS.text }}>Iluminemos<br />tu hogar</h1>
         <p className="font-body text-[14.5px] leading-relaxed max-w-[280px]" style={{ color: COLORS.subtext }}>
           Cuéntanos cómo vives cada espacio. Nosotros nos encargamos de la parte técnica.
@@ -2434,8 +2428,9 @@ function LandingNav({ onStart, lang, setLang, t }) {
   return (
     <div className="sticky top-0 z-10 backdrop-blur-md" style={{ backgroundColor: "rgba(248,246,242,0.85)", borderBottom: `1px solid ${COLORS.border}` }}>
       <div className="max-w-5xl mx-auto flex items-center justify-between px-6 py-4">
-        <div className="flex items-center gap-2">
-          <img src="/logo.png" alt="Nemul" className="h-9 w-auto" />
+        <div className="flex items-center gap-2.5">
+          <img src="/logo-icon.png" alt="" className="h-10 w-auto" />
+          <span className="font-display text-[22px] font-medium" style={{ color: COLORS.text }}>Nemul</span>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center rounded-full p-0.5" style={{ backgroundColor: COLORS.bg, border: `1px solid ${COLORS.border}` }}>
