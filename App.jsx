@@ -13,8 +13,10 @@ function gaEvent(name, params = {}) {
     // silencioso: la analítica nunca debe romper la experiencia del usuario
   }
 }
-import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
+// jspdf y html2canvas pesan bastante y solo hacen falta cuando alguien pulsa
+// "Descargar informe en PDF". Se cargan en ese momento (ver
+// downloadReportAsPdf), no al abrir la web, para que la primera visita sea
+// más ligera.
 import {
   Sofa, ChefHat, BedDouble, Bath, UtensilsCrossed, DoorOpen, Shirt, TreePine,
   ArrowLeft, Check, ChevronRight, ChevronDown, Sun, Moon, CloudSun, Lightbulb,
@@ -22,57 +24,94 @@ import {
   Package, Palette, Wind, Tv, Briefcase, Droplets, Zap, Laptop, Lamp, X, Hammer, Info, Pencil, Lock, Download,
 } from "lucide-react";
 
+/* ---------------------------------------------------------------------------
+ * SISTEMA DE DISEÑO NEMUL
+ *
+ * Un solo sitio donde se decide cómo se ve todo. Si algo hay que cambiarlo
+ * (un color, un tamaño de texto, un radio), se cambia aquí y cambia en toda
+ * la app. Nada de valores sueltos repartidos por el archivo.
+ *
+ * Principios: superficie plana, un único acento, y que el peso visual lo
+ * lleven el espacio en blanco y la tipografía — no las sombras.
+ * ------------------------------------------------------------------------- */
+
+const COLORS = {
+  bg: "#FAF6EF",       // Crema — fondo de toda la marca
+  bgAlt: "#E8DFD3",    // Beige — bloques y bandas secundarias
+  card: "#FFFFFF",
+  text: "#3A2E22",     // Marrón casi negro — 12,2:1 sobre crema
+  subtext: "#6B5744",  // Marrón tierra — 6,3:1 sobre crema (antes fallaba)
+  primary: "#3A2E22",  // Énfasis y estado seleccionado
+  accent: "#6B5744",   // Rótulos e iconos (antes dorado #C1A16B, 2,3:1)
+  bulb: "#F2B84B",     // Amarillo bombilla — SOLO CTA, checks y señales de luz
+  bulbInk: "#3A2E22",  // Texto sobre el amarillo — 7,4:1
+  success: "#5C6B53",
+  warning: "#8C4A32",
+  border: "#E7DFD3",
+};
+
+/* Escala tipográfica: 7 pasos, ni uno más. Antes había 18 tamaños distintos
+ * con medios píxeles, que es la razón principal de que nada "encajara". */
 const FONT_STYLE = `
-  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Montserrat:wght@400;500;600&display=swap');
-  .font-display { font-family: 'Cormorant Garamond', serif; }
-  .font-body { font-family: 'Montserrat', sans-serif; }
-  @keyframes glow-pulse {
-    0%, 100% { opacity: 0.55; transform: scale(1); }
-    50% { opacity: 0.85; transform: scale(1.06); }
+  .font-display { font-family: 'Cormorant Garamond', Georgia, serif; }
+  .font-body { font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, sans-serif; }
+
+  .t-caption { font-size: 12px;  line-height: 1.5; }
+  .t-small   { font-size: 13px;  line-height: 1.55; }
+  .t-body    { font-size: 15px;  line-height: 1.6; }
+  .t-lead    { font-size: 18px;  line-height: 1.55; }
+  .t-title   { font-size: 22px;  line-height: 1.3; }
+  .t-display { font-size: 28px;  line-height: 1.2; }
+  .t-hero    { font-size: 34px;  line-height: 1.15; }
+  @media (min-width: 768px) {
+    .t-lead  { font-size: 19px; }
+    .t-hero  { font-size: 48px; }
   }
-  .glow-orb { animation: glow-pulse 4.5s ease-in-out infinite; }
+
+  /* Rótulo en versalitas: el patrón que se repite encima de cada título */
+  .t-eyebrow {
+    font-size: 12px; line-height: 1.4;
+    letter-spacing: 0.18em; text-transform: uppercase; font-weight: 500;
+  }
+
+  /* Foco visible para navegación por teclado. Antes no había ninguno. */
+  :focus-visible {
+    outline: 2px solid ${COLORS.text};
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Deja respirar el botón de acción sobre la barra de gestos del móvil. */
+  .screen-actions { padding-bottom: max(20px, env(safe-area-inset-bottom)); }
   .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   @keyframes option-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .option-in { animation: option-in 0.35s cubic-bezier(0.22,1,0.36,1) both; }
+  .check-pop { animation: option-in 0.2s ease-out both; }
+  /* Una sola transición para todo lo interactivo, sin desplazamientos. */
+  .tap-scale { transition: border-color 0.18s ease, background-color 0.18s ease, opacity 0.18s ease; }
+  .tap-scale:active { opacity: 0.7; }
+  @keyframes rise-in {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
   }
-  .option-in { animation: option-in 0.4s cubic-bezier(0.22,1,0.36,1) both; }
-  @keyframes check-pop {
-    0% { transform: scale(0.4); }
-    60% { transform: scale(1.15); }
-    100% { transform: scale(1); }
-  }
-  .check-pop { animation: check-pop 0.32s cubic-bezier(0.34,1.56,0.64,1) both; }
-  .tap-scale { transition: transform 0.15s ease, box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease; }
-  .tap-scale:active { transform: scale(0.965); }
-  @keyframes rise-in {
-    from { opacity: 0; transform: translateY(14px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  .rise-in { animation: rise-in 0.45s cubic-bezier(0.22,1,0.36,1) both; }
+  .rise-in { animation: rise-in 0.4s cubic-bezier(0.22,1,0.36,1) both; }
   @keyframes toast-in {
     from { opacity: 0; transform: translate(-50%, 8px); }
     to { opacity: 1; transform: translate(-50%, 0); }
   }
   .toast-in { animation: toast-in 0.3s ease-out both; }
   @media (prefers-reduced-motion: reduce) {
-    .glow-orb, .rise-in, .toast-in, .option-in, .check-pop { animation: none; }
-    .tap-scale:active { transform: none; }
+    .rise-in, .toast-in, .option-in, .check-pop { animation: none; }
+    /* El centrado del aviso vivía dentro de la animación: sin ella se iba
+       al lado derecho de la pantalla. */
+    .toast-in { transform: translate(-50%, 0); }
+    .tap-scale:active { opacity: 1; }
   }
 `;
-
-const COLORS = {
-  bg: "#F8F6F2",
-  card: "#FFFFFF",
-  text: "#2E2A27",
-  subtext: "#6F6A64",
-  primary: "#6F5E4D",
-  accent: "#C1A16B",
-  success: "#7C8470",
-  warning: "#B3684F",
-  border: "#E9E4DD",
-};
 
 const ROOMS = [
   { id: "living", label: "Salón", Icon: Sofa },
@@ -317,7 +356,7 @@ function generateLivingReport(answers = {}) {
   if (ceiling === "noSe") tips.push("Antes de instalar downlights empotrados, confirma con un instalador qué tipo de techo tienes.");
 
   if (light === "bright") tips.push("Como el salón recibe mucha luz natural de día, reserva la calidez de la luz artificial sobre todo para la noche.");
-  if (light === "moderate") tips.push("Con una luz natural media, un punto cálido adicional para las tardes es suficiente para no notar el cambio de luz.");
+  if (light === "moderate") tips.push("Con una luz natural media, la zona del salón más alejada de la ventana se queda corta buena parte del día: refuerza ahí la luz artificial en lugar de subir la intensidad general de toda la estancia.");
   if (light === "low" || problem === "dark") tips.push("Como el salón necesita más luz, sube ligeramente los lúmenes generales calculados y refuerza también las esquinas.");
 
   if (renovationStatus === "renovation" || problem === "renovating") tips.push("Como vas a reformar desde cero, aprovecha para dejar previstos varios circuitos independientes y reguladores de intensidad.");
@@ -906,9 +945,10 @@ const HALLWAY_SENSOR_INSIGHT = {
 
 const LIGHT_INSIGHT = {
   bright: "Como el espacio recibe mucha luz natural, reserva los tonos cálidos para la noche y evita saturar de luz durante el día.",
-  moderate: "Con una luz natural media, un punto cálido adicional para las tardes es suficiente para no notar el cambio de luz.",
+  moderate: "Con una luz natural media, la zona más alejada de por donde entra la luz se queda corta buena parte del día: refuerza ahí la luz artificial en lugar de subir la intensidad general de todo el espacio.",
   low: "Al recibir poca luz natural, compensa con un tono blanco cálido algo más intenso de lo habitual durante el día.",
 };
+
 
 const PROBLEM_INSIGHT = {
   bedroom: {
@@ -1246,42 +1286,33 @@ function formatDate(d) {
   return d.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
 }
 
-function StatusBar() {
-  return (
-    <div className="flex items-center justify-between px-6 pt-3 pb-1 font-body text-[13px]" style={{ color: COLORS.text }}>
-      <span className="font-medium">9:41</span>
-      <div className="flex items-center gap-1">
-        <div className="w-4 h-2.5 rounded-[2px] border" style={{ borderColor: COLORS.text }} />
-      </div>
-    </div>
-  );
-}
-
-function HomeIndicator() {
-  return (
-    <div className="flex justify-center pt-2 pb-2">
-      <div className="w-32 h-1 rounded-full" style={{ backgroundColor: COLORS.text, opacity: 0.25 }} />
-    </div>
-  );
-}
+// La barra de estado falsa ("9:41") y el indicador de home de iOS se han
+// eliminado: eran atrezzo de mockup dentro de un producto real.
 
 function TopNav({ onBack, step, total, eyebrow }) {
   return (
-    <div className="px-6 pt-2 pb-3">
-      <div className="flex items-center justify-between mb-2">
-        <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center transition-colors" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
-          <ArrowLeft size={16} color={COLORS.text} />
+    <div className="px-6 pt-4 pb-5">
+      <div className="flex items-center justify-between mb-3">
+        <button
+          onClick={onBack}
+          aria-label="Volver"
+          className="tap-scale w-10 h-10 -ml-2 rounded-full flex items-center justify-center"
+        >
+          <ArrowLeft size={18} color={COLORS.text} strokeWidth={1.8} />
         </button>
         {total ? (
-          <div className="flex items-center gap-1.5">
-            {Array.from({ length: total }).map((_, i) => (
-              <div key={i} className="rounded-full transition-all duration-300" style={{ width: i === step ? 18 : 6, height: 6, backgroundColor: i <= step ? COLORS.accent : COLORS.border }} />
-            ))}
+          // Barra de progreso continua: más legible que una fila de puntos y
+          // no crece indefinidamente cuando el cuestionario tiene muchos pasos.
+          <div className="flex-1 mx-4 h-[3px] rounded-full overflow-hidden" style={{ backgroundColor: COLORS.border }}>
+            <div
+              className="h-full rounded-full transition-all duration-300"
+              style={{ width: `${((step + 1) / total) * 100}%`, backgroundColor: COLORS.text }}
+            />
           </div>
-        ) : <div className="w-9" />}
-        <div className="w-9" />
+        ) : <div className="flex-1" />}
+        <div className="w-10" />
       </div>
-      {eyebrow && <p className="font-body text-[13px] tracking-[0.15em] uppercase text-center" style={{ color: COLORS.subtext }}>{eyebrow}</p>}
+      {eyebrow && <p className="font-body t-eyebrow text-center" style={{ color: COLORS.subtext }}>{eyebrow}</p>}
     </div>
   );
 }
@@ -1291,13 +1322,29 @@ function PrimaryButton({ children, onClick, disabled }) {
     <button
       onClick={onClick}
       disabled={disabled}
-      className="tap-scale w-full font-body font-medium text-[15px] tracking-wide rounded-2xl py-4 transition-all duration-200"
+      className="tap-scale w-full font-body font-medium t-body rounded-xl py-4"
       style={{
-        background: disabled ? COLORS.border : `linear-gradient(135deg, #7C6A56 0%, ${COLORS.primary} 55%, #5E4F41 100%)`,
-        color: disabled ? COLORS.subtext : "#FFFFFF",
-        boxShadow: disabled ? "none" : "0 8px 20px rgba(111,94,77,0.3)",
+        backgroundColor: disabled ? COLORS.border : COLORS.bulb,
+        color: disabled ? COLORS.subtext : COLORS.bulbInk,
+        cursor: disabled ? "default" : "pointer",
       }}
     >
+      {children}
+    </button>
+  );
+}
+
+// Acción secundaria: mismo peso de forma, sin relleno. Evita que dos botones
+// compitan por la atención en la misma pantalla.
+function SecondaryButton({ children, onClick, disabled, Icon }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="tap-scale w-full flex items-center justify-center gap-2 font-body font-medium t-body rounded-xl py-4"
+      style={{ backgroundColor: "transparent", border: `1px solid ${COLORS.text}`, color: COLORS.text }}
+    >
+      {Icon && <Icon size={16} color={COLORS.text} strokeWidth={1.8} />}
       {children}
     </button>
   );
@@ -1307,23 +1354,25 @@ function OptionRow({ selected, onClick, Icon, label, hint, multi, delay = 0 }) {
   return (
     <button
       onClick={onClick}
-      className="option-in tap-scale w-full flex items-center gap-4 rounded-2xl px-5 py-4 text-left"
-      style={{ backgroundColor: COLORS.card, border: `1.5px solid ${selected ? COLORS.accent : COLORS.border}`, boxShadow: selected ? "0 6px 18px rgba(193,161,107,0.20)" : "0 2px 10px rgba(46,42,39,0.04)", animationDelay: `${delay}ms` }}
+      aria-pressed={selected}
+      className="option-in tap-scale w-full flex items-center gap-4 rounded-xl px-5 py-4 text-left"
+      style={{
+        backgroundColor: selected ? COLORS.bgAlt : COLORS.card,
+        border: `1px solid ${selected ? COLORS.text : COLORS.border}`,
+        animationDelay: `${delay}ms`,
+      }}
     >
-      {Icon && (
-        <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ background: selected ? "linear-gradient(135deg, #F3E9D8, #EAD9BC)" : COLORS.bg }}>
-          <Icon size={19} color={selected ? COLORS.accent : COLORS.subtext} strokeWidth={1.6} />
-        </div>
-      )}
+      {/* El icono va suelto, sin círculo de fondo: menos ruido por fila. */}
+      {Icon && <Icon size={20} color={selected ? COLORS.text : COLORS.subtext} strokeWidth={1.5} className="shrink-0" />}
       <div className="flex-1">
-        <p className="font-body text-[14.5px] font-medium" style={{ color: COLORS.text }}>{label}</p>
-        {hint && <p className="font-body text-[14px] mt-0.5" style={{ color: COLORS.subtext }}>{hint}</p>}
+        <p className="font-body t-body font-medium" style={{ color: COLORS.text }}>{label}</p>
+        {hint && <p className="font-body t-small mt-0.5" style={{ color: COLORS.subtext }}>{hint}</p>}
       </div>
       <div
-        className={`w-5 h-5 flex items-center justify-center shrink-0 transition-all duration-200 ${multi ? "rounded-[6px]" : "rounded-full"}`}
-        style={{ backgroundColor: selected ? COLORS.accent : "transparent", border: `1.5px solid ${selected ? COLORS.accent : COLORS.border}` }}
+        className={`w-5 h-5 flex items-center justify-center shrink-0 ${multi ? "rounded-[4px]" : "rounded-full"}`}
+        style={{ backgroundColor: selected ? COLORS.text : "transparent", border: `1px solid ${selected ? COLORS.text : COLORS.border}` }}
       >
-        {selected && <Check size={11} color="#FFFFFF" strokeWidth={3} className="check-pop" />}
+        {selected && <Check size={12} color="#FFFFFF" strokeWidth={3} className="check-pop" />}
       </div>
     </button>
   );
@@ -1331,11 +1380,12 @@ function OptionRow({ selected, onClick, Icon, label, hint, multi, delay = 0 }) {
 
 function WelcomeScreen({ onStart }) {
   return (
-    <div className="flex flex-col h-full px-7 pt-8 pb-8 rise-in">
+    <div className="flex flex-col h-full screen-actions px-6 pt-10 rise-in">
       <div className="flex-1 flex flex-col items-center justify-center text-center">
-        <img src="/logo.png" alt="Nemul" className="h-28 w-auto mb-6" />
-        <h1 className="font-display text-[34px] leading-[1.15] font-medium mb-4" style={{ color: COLORS.text }}>Iluminemos<br />tu hogar</h1>
-        <p className="font-body text-[14.5px] leading-relaxed max-w-[280px]" style={{ color: COLORS.subtext }}>
+        <Lightbulb size={32} color={COLORS.bulb} fill={COLORS.bulb} strokeWidth={1.2} className="mb-8" />
+        <p className="font-body t-eyebrow mb-4" style={{ color: COLORS.subtext }}>Nemul</p>
+        <h1 className="font-display t-hero font-medium mb-5" style={{ color: COLORS.text }}>Iluminemos<br />tu hogar</h1>
+        <p className="font-body t-body max-w-[300px]" style={{ color: COLORS.subtext }}>
           Cuéntanos cómo vives cada espacio. Nosotros nos encargamos de la parte técnica.
         </p>
       </div>
@@ -1378,14 +1428,14 @@ function PremiumGateScreen({ freeRoomLabel, onBack, onContinueFree }) {
   return (
     <div className="flex flex-col h-full rise-in">
       <TopNav onBack={onBack} />
-      <div className="flex-1 overflow-y-auto px-7">
+      <div className="flex-1 overflow-y-auto px-6">
         <div className="text-center mb-6 pt-2">
-          <div className="w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ backgroundColor: "#F3E9D8" }}>
+          <div className="w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ backgroundColor: COLORS.bgAlt }}>
             <Lock size={22} color={COLORS.accent} strokeWidth={1.8} />
           </div>
-          <p className="font-body text-[13.5px] tracking-[0.2em] uppercase mb-2" style={{ color: COLORS.accent }}>Premium</p>
-          <h2 className="font-display text-[26px] font-medium mb-2" style={{ color: COLORS.text }}>Desbloquea toda tu vivienda</h2>
-          <p className="font-body text-[14px] leading-relaxed" style={{ color: COLORS.subtext }}>
+          <p className="font-body t-eyebrow mb-2" style={{ color: COLORS.accent }}>Premium</p>
+          <h2 className="font-display t-display font-medium mb-2" style={{ color: COLORS.text }}>Desbloquea toda tu vivienda</h2>
+          <p className="font-body t-body" style={{ color: COLORS.subtext }}>
             Ya probaste {freeRoomLabel} gratis. El resto de habitaciones forman parte de Premium.
           </p>
         </div>
@@ -1393,17 +1443,15 @@ function PremiumGateScreen({ freeRoomLabel, onBack, onContinueFree }) {
         <div className="flex flex-col gap-2.5 mb-6">
           {["Toda la vivienda", "Informe en PDF", "Recomendaciones avanzadas"].map((f) => (
             <div key={f} className="flex items-center gap-3 rounded-xl px-4 py-3" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
-              <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "#EEF0EA" }}>
-                <Check size={12} color={COLORS.success} strokeWidth={3} />
-              </div>
-              <span className="font-body text-[14px] font-medium" style={{ color: COLORS.text }}>{f}</span>
+              <Check size={15} color={COLORS.success} strokeWidth={2.5} className="shrink-0" />
+              <span className="font-body t-body font-medium" style={{ color: COLORS.text }}>{f}</span>
             </div>
           ))}
         </div>
 
         {!submitted ? (
-          <div className="rounded-2xl p-5" style={{ backgroundColor: "#F3E9D8", border: `1px solid #C1A16B55` }}>
-            <p className="font-body text-[13px] leading-relaxed mb-3" style={{ color: COLORS.text }}>
+          <div className="rounded-xl p-5" style={{ backgroundColor: COLORS.bgAlt, border: `1px solid ${COLORS.border}` }}>
+            <p className="font-body t-small mb-3" style={{ color: COLORS.text }}>
               Premium todavía no está activo. Déjanos tu email y te avisamos en cuanto esté disponible.
             </p>
             <input
@@ -1411,27 +1459,27 @@ function PremiumGateScreen({ freeRoomLabel, onBack, onContinueFree }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="tu@email.com"
-              className="w-full rounded-xl px-4 py-3 mb-3 font-body text-[14px]"
+              className="w-full rounded-xl px-4 py-3 mb-3 font-body t-body"
               style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, color: COLORS.text }}
             />
             <PrimaryButton onClick={handleSubmit} disabled={!email.trim() || sending}>
               {sending ? "Enviando..." : "Avísame cuando esté listo"}
             </PrimaryButton>
             {error && (
-              <p className="font-body text-[12.5px] mt-2 text-center" style={{ color: COLORS.warning }}>
+              <p className="font-body t-caption mt-2 text-center" style={{ color: COLORS.warning }}>
                 No se pudo enviar. Vuelve a intentarlo en un momento.
               </p>
             )}
           </div>
         ) : (
-          <div className="rounded-2xl p-5 text-center" style={{ backgroundColor: "#EEF0EA" }}>
+          <div className="rounded-xl p-5 text-center" style={{ backgroundColor: COLORS.bgAlt }}>
             <Check size={20} color={COLORS.success} strokeWidth={2.5} className="mx-auto mb-2" />
-            <p className="font-body text-[14px] font-medium" style={{ color: COLORS.text }}>¡Listo! Te avisaremos en cuanto Premium esté disponible.</p>
+            <p className="font-body t-body font-medium" style={{ color: COLORS.text }}>¡Listo! Te avisaremos en cuanto Premium esté disponible.</p>
           </div>
         )}
       </div>
-      <div className="px-7 pt-3 pb-1">
-        <button onClick={onContinueFree} className="w-full font-body text-[13.5px] font-medium py-2 flex items-center justify-center gap-1" style={{ color: COLORS.subtext }}>
+      <div className="screen-actions px-6 pt-4">
+        <button onClick={onContinueFree} className="w-full font-body t-small font-medium py-2 flex items-center justify-center gap-1" style={{ color: COLORS.subtext }}>
           Seguir explorando {freeRoomLabel}
         </button>
       </div>
@@ -1443,15 +1491,15 @@ function RoomsScreen({ selected, toggle, onContinue, onBack, freeRoomId }) {
   return (
     <div className="flex flex-col h-full rise-in">
       <TopNav onBack={onBack} />
-      <div className="px-7 pb-4">
-        <h2 className="font-display text-[26px] font-medium mb-1.5" style={{ color: COLORS.text }}>¿Qué espacio?</h2>
-        <p className="font-body text-[13.5px]" style={{ color: COLORS.subtext }}>
+      <div className="px-6 pb-4">
+        <h2 className="font-display t-display font-medium mb-1.5" style={{ color: COLORS.text }}>¿Qué espacio?</h2>
+        <p className="font-body t-small" style={{ color: COLORS.subtext }}>
           {freeRoomId
             ? "Tu habitación gratuita ya está elegida. El resto son parte de Premium."
             : "Elige el espacio para el que quieras planear la iluminación. La primera es gratis."}
         </p>
       </div>
-      <div className="flex-1 overflow-y-auto px-7">
+      <div className="flex-1 overflow-y-auto px-6">
         <div className="grid grid-cols-2 gap-3 pb-3">
           {ROOMS.map(({ id, label, Icon }, i) => {
             const isSelected = selected.includes(id);
@@ -1460,24 +1508,20 @@ function RoomsScreen({ selected, toggle, onContinue, onBack, freeRoomId }) {
               <button
                 key={id}
                 onClick={() => toggle(id)}
-                className="option-in tap-scale relative flex flex-col items-center justify-center gap-3 rounded-2xl py-6 px-3"
-                style={{ backgroundColor: COLORS.card, border: `1.5px solid ${isSelected ? COLORS.accent : COLORS.border}`, boxShadow: isSelected ? "0 6px 18px rgba(193,161,107,0.20)" : "0 2px 10px rgba(46,42,39,0.04)", animationDelay: `${i * 40}ms` }}
+                className="option-in tap-scale relative flex flex-col items-center justify-center gap-3 rounded-xl py-6 px-3"
+                style={{ backgroundColor: isSelected ? COLORS.bgAlt : COLORS.card, border: `1px solid ${isSelected ? COLORS.text : COLORS.border}`, animationDelay: `${i * 40}ms` }}
               >
                 {isLocked && (
-                  <div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: "#F3E9D8" }}>
-                    <Lock size={10} color={COLORS.accent} strokeWidth={2} />
-                  </div>
+                  <Lock size={12} color={COLORS.subtext} strokeWidth={2} className="absolute top-3 right-3" />
                 )}
-                <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: isSelected ? "linear-gradient(135deg, #F3E9D8, #EAD9BC)" : COLORS.bg, opacity: isLocked ? 0.6 : 1 }}>
-                  <Icon size={20} color={isSelected ? COLORS.accent : COLORS.subtext} strokeWidth={1.5} />
-                </div>
-                <span className="font-body text-[14px] font-medium text-center leading-tight" style={{ color: isLocked ? COLORS.subtext : COLORS.text }}>{label}</span>
+                <Icon size={24} color={isSelected ? COLORS.text : COLORS.subtext} strokeWidth={1.4} style={{ opacity: isLocked ? 0.5 : 1 }} />
+                <span className="font-body t-body font-medium text-center" style={{ color: isLocked ? COLORS.subtext : COLORS.text }}>{label}</span>
               </button>
             );
           })}
         </div>
       </div>
-      <div className="px-7 pt-3 pb-1">
+      <div className="screen-actions px-6 pt-4">
         <PrimaryButton onClick={onContinue} disabled={selected.length === 0}>Continuar</PrimaryButton>
       </div>
     </div>
@@ -1491,10 +1535,10 @@ function QuestionScreen({ step, value, onSelect, onContinue, onBack, stepIndex, 
   return (
     <div className="flex flex-col h-full rise-in">
       <TopNav onBack={onBack} step={stepIndex} total={total} eyebrow={eyebrow} />
-      <div className="px-7 pb-5 pt-1">
-        <h2 className="font-display text-[25px] font-medium mb-1.5" style={{ color: COLORS.text }}>{step.title}</h2>
+      <div className="px-6 pb-5 pt-1">
+        <h2 className="font-display t-display font-medium mb-1.5" style={{ color: COLORS.text }}>{step.title}</h2>
         <div className="flex items-center gap-1.5">
-          <p className="font-body text-[13.5px]" style={{ color: COLORS.subtext }}>{step.subtitle}</p>
+          <p className="font-body t-small" style={{ color: COLORS.subtext }}>{step.subtitle}</p>
           {step.info && (
             <button
               onClick={() => setShowInfo((s) => !s)}
@@ -1507,12 +1551,12 @@ function QuestionScreen({ step, value, onSelect, onContinue, onBack, stepIndex, 
           )}
         </div>
         {step.info && showInfo && (
-          <p className="font-body text-[14px] leading-relaxed mt-2 rounded-xl p-3" style={{ color: COLORS.subtext, backgroundColor: COLORS.bg }}>
+          <p className="font-body t-body mt-2 rounded-xl p-3" style={{ color: COLORS.subtext, backgroundColor: COLORS.bg }}>
             {step.info}
           </p>
         )}
       </div>
-      <div className="flex-1 overflow-y-auto px-7">
+      <div className="flex-1 overflow-y-auto px-6">
         {step.layout === "list" && (
           <div className="flex flex-col gap-3">
             {step.options.map((opt, i) => {
@@ -1530,16 +1574,14 @@ function QuestionScreen({ step, value, onSelect, onContinue, onBack, stepIndex, 
                 <button
                   key={opt.id}
                   onClick={() => onSelect(opt.id)}
-                  className="option-in tap-scale rounded-2xl py-5 px-3 text-center flex flex-col items-center gap-2"
-                  style={{ backgroundColor: COLORS.card, border: `1.5px solid ${selected ? COLORS.accent : COLORS.border}`, boxShadow: selected ? "0 6px 18px rgba(193,161,107,0.20)" : "0 2px 10px rgba(46,42,39,0.04)", animationDelay: `${i * 45}ms` }}
+                  className="option-in tap-scale rounded-xl py-5 px-3 text-center flex flex-col items-center gap-2"
+                  style={{ backgroundColor: selected ? COLORS.bgAlt : COLORS.card, border: `1px solid ${selected ? COLORS.text : COLORS.border}`, animationDelay: `${i * 45}ms` }}
                 >
                   {Icon && (
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: selected ? "linear-gradient(135deg, #F3E9D8, #EAD9BC)" : COLORS.bg }}>
-                      <Icon size={16} color={selected ? COLORS.accent : COLORS.subtext} strokeWidth={1.6} />
-                    </div>
+                    <Icon size={22} color={selected ? COLORS.text : COLORS.subtext} strokeWidth={1.4} />
                   )}
-                  <p className="font-body text-[14.5px] font-medium" style={{ color: COLORS.text }}>{opt.label}</p>
-                  {opt.hint && <p className="font-body text-[13px]" style={{ color: COLORS.subtext }}>{opt.hint}</p>}
+                  <p className="font-body t-body font-medium" style={{ color: COLORS.text }}>{opt.label}</p>
+                  {opt.hint && <p className="font-body t-small" style={{ color: COLORS.subtext }}>{opt.hint}</p>}
                 </button>
               );
             })}
@@ -1547,16 +1589,16 @@ function QuestionScreen({ step, value, onSelect, onContinue, onBack, stepIndex, 
         )}
       </div>
       {!isMulti && step.reactions && value && step.reactions[value] && (
-        <div className="px-7 pb-2 rise-in">
-          <div className="flex items-start gap-2.5 rounded-xl px-4 py-3" style={{ backgroundColor: "#F3E9D8" }}>
+        <div className="px-6 pb-2 rise-in">
+          <div className="flex items-start gap-2.5 rounded-xl px-4 py-3" style={{ backgroundColor: COLORS.bgAlt }}>
             <Sparkles size={14} color={COLORS.accent} strokeWidth={1.8} className="mt-0.5 shrink-0" />
-            <p className="font-body text-[13px] leading-relaxed italic" style={{ color: COLORS.primary }}>
+            <p className="font-body t-small italic" style={{ color: COLORS.primary }}>
               {step.reactions[value]}
             </p>
           </div>
         </div>
       )}
-      <div className="px-7 pt-4 pb-1">
+      <div className="screen-actions px-6 pt-4">
         <PrimaryButton onClick={onContinue} disabled={!isAnswered}>Continuar</PrimaryButton>
       </div>
     </div>
@@ -1565,19 +1607,19 @@ function QuestionScreen({ step, value, onSelect, onContinue, onBack, stepIndex, 
 
 function RoomDoneScreen({ roomLabel, RoomIcon, nextLabel, onContinue }) {
   return (
-    <div className="flex flex-col h-full px-7 pt-10 pb-8 rise-in">
+    <div className="flex flex-col h-full screen-actions px-6 pt-10 rise-in">
       <div className="flex-1 flex flex-col items-center justify-center text-center">
-        <div className="w-16 h-16 rounded-full flex items-center justify-center mb-6" style={{ backgroundColor: "#EEF0EA" }}>
+        <div className="w-16 h-16 rounded-full flex items-center justify-center mb-6" style={{ backgroundColor: COLORS.bgAlt }}>
           <Check size={26} color={COLORS.success} strokeWidth={2} />
         </div>
-        <p className="font-body text-[13.5px] tracking-[0.2em] uppercase mb-2" style={{ color: COLORS.accent }}>{roomLabel} listo</p>
-        <h2 className="font-display text-[26px] font-medium mb-3" style={{ color: COLORS.text }}>Muy bien</h2>
-        <p className="font-body text-[14px] leading-relaxed max-w-[260px]" style={{ color: COLORS.subtext }}>
+        <p className="font-body t-eyebrow mb-2" style={{ color: COLORS.accent }}>{roomLabel} listo</p>
+        <h2 className="font-display t-display font-medium mb-3" style={{ color: COLORS.text }}>Muy bien</h2>
+        <p className="font-body t-body max-w-[260px]" style={{ color: COLORS.subtext }}>
           El plan de iluminación de tu {roomLabel.toLowerCase()} está listo. Sigamos con el siguiente espacio.
         </p>
-        <div className="flex items-center gap-3 mt-8 rounded-2xl px-5 py-3" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
+        <div className="flex items-center gap-3 mt-8 rounded-xl px-5 py-3" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
           {RoomIcon && <RoomIcon size={18} color={COLORS.accent} strokeWidth={1.6} />}
-          <span className="font-body text-[13.5px] font-medium" style={{ color: COLORS.text }}>Siguiente: {nextLabel}</span>
+          <span className="font-body t-small font-medium" style={{ color: COLORS.text }}>Siguiente: {nextLabel}</span>
         </div>
       </div>
       <PrimaryButton onClick={onContinue}>Continuar a {nextLabel}</PrimaryButton>
@@ -1607,30 +1649,30 @@ function ReviewScreen({ room, summary, onEdit, onConfirm, onBack }) {
   return (
     <div className="flex flex-col h-full rise-in">
       <TopNav onBack={onBack} />
-      <div className="px-7 pb-4">
-        <p className="font-body text-[13.5px] tracking-[0.2em] uppercase mb-2" style={{ color: COLORS.accent }}>{room.label}</p>
-        <h2 className="font-display text-[26px] font-medium mb-1.5" style={{ color: COLORS.text }}>Antes de continuar</h2>
-        <p className="font-body text-[13.5px]" style={{ color: COLORS.subtext }}>Revisa que todo esté correcto. Toca cualquier respuesta para cambiarla.</p>
+      <div className="px-6 pb-4">
+        <p className="font-body t-eyebrow mb-2" style={{ color: COLORS.accent }}>{room.label}</p>
+        <h2 className="font-display t-display font-medium mb-1.5" style={{ color: COLORS.text }}>Antes de continuar</h2>
+        <p className="font-body t-small" style={{ color: COLORS.subtext }}>Revisa que todo esté correcto. Toca cualquier respuesta para cambiarla.</p>
       </div>
-      <div className="flex-1 overflow-y-auto px-7">
+      <div className="flex-1 overflow-y-auto px-6">
         <div className="flex flex-col gap-2.5 pb-4">
           {summary.map((item) => (
             <button
               key={item.index}
               onClick={() => onEdit(item.index)}
-              className="w-full flex items-center gap-3 rounded-2xl p-4 text-left transition-all duration-200"
-              style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 2px 10px rgba(46,42,39,0.04)" }}
+              className="w-full flex items-center gap-3 rounded-xl p-4 text-left transition-all duration-200"
+              style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}
             >
               <div className="flex-1 min-w-0">
-                <p className="font-body text-[13px]" style={{ color: COLORS.subtext }}>{item.title}</p>
-                <p className="font-body text-[13.5px] font-medium mt-0.5" style={{ color: COLORS.text }}>{item.text}</p>
+                <p className="font-body t-small" style={{ color: COLORS.subtext }}>{item.title}</p>
+                <p className="font-body t-small font-medium mt-0.5" style={{ color: COLORS.text }}>{item.text}</p>
               </div>
               <Pencil size={15} color={COLORS.subtext} strokeWidth={1.8} className="shrink-0" />
             </button>
           ))}
         </div>
       </div>
-      <div className="px-7 pt-3 pb-1">
+      <div className="screen-actions px-6 pt-4">
         <PrimaryButton onClick={onConfirm}>Confirmar y ver mi informe</PrimaryButton>
       </div>
     </div>
@@ -1640,10 +1682,8 @@ function ReviewScreen({ room, summary, onEdit, onConfirm, onBack }) {
 function StatRow({ label, value }) {
   return (
     <div className="flex items-center gap-3">
-      <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "#EEF0EA" }}>
-        <Check size={12} color={COLORS.success} strokeWidth={3} />
-      </div>
-      <p className="font-body text-[13.5px]" style={{ color: COLORS.text }}>
+      <Check size={15} color={COLORS.success} strokeWidth={2.5} className="shrink-0" />
+      <p className="font-body t-small" style={{ color: COLORS.text }}>
         <span style={{ color: COLORS.subtext }}>{label}: </span>
         <span className="font-medium">{value}</span>
       </p>
@@ -1654,12 +1694,12 @@ function StatRow({ label, value }) {
 function MistakesList({ mistakes }) {
   return (
     <div>
-      <p className="font-body text-[13px] tracking-[0.12em] uppercase mb-2.5" style={{ color: COLORS.warning }}>Errores que debes evitar</p>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.warning }}>Errores que debes evitar</p>
       <div className="flex flex-col gap-2">
         {mistakes.map((m, i) => (
-          <div key={i} className="option-in flex items-start gap-3 rounded-xl p-3.5" style={{ backgroundColor: "#FBF1EC", border: "1px solid #F0D9CE", animationDelay: `${i * 60}ms` }}>
+          <div key={i} className="option-in flex items-start gap-3 rounded-xl p-3.5" style={{ backgroundColor: COLORS.bgAlt, border: `1px solid ${COLORS.border}`, animationDelay: `${i * 60}ms` }}>
             <X size={15} color={COLORS.warning} strokeWidth={2.2} className="mt-0.5 shrink-0" />
-            <p className="font-body text-[14px] leading-relaxed" style={{ color: COLORS.text }}>{m}</p>
+            <p className="font-body t-body" style={{ color: COLORS.text }}>{m}</p>
           </div>
         ))}
       </div>
@@ -1672,22 +1712,22 @@ function MistakesList({ mistakes }) {
 function CalculationBlock({ area, lux, lumens, downlightsLow, downlightsHigh }) {
   return (
     <div>
-      <p className="font-body text-[13px] tracking-[0.12em] uppercase mb-2.5" style={{ color: COLORS.accent }}>Cálculo realizado</p>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Cálculo realizado</p>
       <div className="flex flex-col gap-3 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
         <StatRow label="Superficie" value={`${area} m²`} />
         <div>
           <StatRow label="Nivel de iluminación recomendado" value={`${lux} lm/m²`} />
-          <p className="font-body text-[13.5px] italic mt-1 ml-9" style={{ color: COLORS.subtext }}>{describeLux(lux)}</p>
+          <p className="font-body t-small italic mt-1 ml-9" style={{ color: COLORS.subtext }}>{describeLux(lux)}</p>
         </div>
         <StatRow label="Iluminación total necesaria" value={`${lumens.toLocaleString("es-ES")} lúmenes`} />
         <div>
           <StatRow label="Downlights recomendados" value={`${downlightsLow}–${downlightsHigh} × ${LUMENS_PER_DOWNLIGHT} lm`} />
-          <p className="font-body text-[13.5px] italic mt-1 ml-9" style={{ color: COLORS.subtext }}>
+          <p className="font-body t-small italic mt-1 ml-9" style={{ color: COLORS.subtext }}>
             Equivale a downlights LED de unos {WATTS_PER_DOWNLIGHT}W cada uno, el estándar más habitual en casa.
           </p>
         </div>
       </div>
-      <p className="font-body text-[12.5px] leading-relaxed mt-2.5" style={{ color: COLORS.subtext }}>
+      <p className="font-body t-caption mt-2.5" style={{ color: COLORS.subtext }}>
         La cantidad de luminarias se calcula según los m² de la estancia, el nivel de iluminación recomendado y el flujo luminoso de cada downlight. La recomendación es orientativa y puede ajustarse al diseño final.
       </p>
     </div>
@@ -1713,35 +1753,35 @@ function TerraceZoneScheme({ activities = [], covered, night }) {
         <div className="flex flex-wrap justify-center gap-4 py-1">
           {zones.map((z, i) => (
             <div key={i} className="flex flex-col items-center gap-1.5" style={{ width: 76 }}>
-              <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: "#F3E9D8" }}>
+              <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: COLORS.bgAlt }}>
                 <z.Icon size={20} color={COLORS.accent} strokeWidth={1.6} />
               </div>
-              <span className="font-body text-[13px] text-center leading-tight" style={{ color: COLORS.text }}>{z.label}</span>
+              <span className="font-body t-small text-center" style={{ color: COLORS.text }}>{z.label}</span>
             </div>
           ))}
         </div>
       ) : (
-        <p className="font-body text-[14px] text-center" style={{ color: COLORS.subtext }}>Cuéntanos cómo usas la terraza para ver aquí sus zonas de luz.</p>
+        <p className="font-body t-body text-center" style={{ color: COLORS.subtext }}>Cuéntanos cómo usas la terraza para ver aquí sus zonas de luz.</p>
       )}
 
       {(covered === "descubierta" || night === "si") && (
         <div className="flex flex-col gap-1.5 mt-3">
           {covered === "descubierta" && (
             <div className="flex items-center gap-2 justify-center">
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#F4B942" }} />
-              <span className="font-body text-[13px]" style={{ color: COLORS.subtext }}>Luminarias aptas para exterior (IP44 o superior)</span>
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.bulb }} />
+              <span className="font-body t-small" style={{ color: COLORS.subtext }}>Luminarias aptas para exterior (IP44 o superior)</span>
             </div>
           )}
           {night === "si" && (
             <div className="flex items-center gap-2 justify-center">
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#F4B942" }} />
-              <span className="font-body text-[13px]" style={{ color: COLORS.subtext }}>Prioriza calidez y luz regulable</span>
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.bulb }} />
+              <span className="font-body t-small" style={{ color: COLORS.subtext }}>Prioriza calidez y luz regulable</span>
             </div>
           )}
         </div>
       )}
 
-      <p className="font-body text-[14px] text-center mt-2.5 leading-relaxed" style={{ color: COLORS.subtext }}>
+      <p className="font-body t-body text-center mt-2.5" style={{ color: COLORS.subtext }}>
         Sin plano fijo: cada terraza tiene una forma distinta. Estas son las zonas a iluminar según cómo la usas.
       </p>
     </div>
@@ -1752,36 +1792,34 @@ function TechnicalReportCard({ room, answers, expanded, onToggle }) {
   const { tempK, lumens, downlightsLow, downlightsHigh, area, lux, tips, mistakes } = generateLivingReport(answers);
   const { Icon } = room;
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 2px 12px rgba(46,42,39,0.05)" }}>
+    <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
       <button onClick={onToggle} className="w-full flex items-center gap-4 p-5 text-left">
-        <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "#F3E9D8" }}>
-          <Icon size={19} color={COLORS.accent} strokeWidth={1.6} />
-        </div>
+        <Icon size={22} color={COLORS.subtext} strokeWidth={1.5} className="shrink-0" />
         <div className="flex-1">
-          <p className="font-body text-[14.5px] font-medium" style={{ color: COLORS.text }}>{room.label}</p>
-          <p className="font-body text-[14px]" style={{ color: COLORS.subtext }}>Estudio de iluminación</p>
+          <p className="font-body t-body font-medium" style={{ color: COLORS.text }}>{room.label}</p>
+          <p className="font-body t-body" style={{ color: COLORS.subtext }}>Estudio de iluminación</p>
         </div>
         <ChevronDown size={16} color={COLORS.subtext} style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
       </button>
       {expanded && (
         <div className="px-5 pb-5 flex flex-col gap-5">
           <div>
-            <p className="font-body text-[13px] tracking-[0.12em] uppercase mb-2.5" style={{ color: COLORS.accent }}>Recomendación general</p>
+            <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Recomendación general</p>
             <div className="flex flex-col gap-2 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
               <StatRow label="Temperatura de color" value={`${tempK} K`} />
-              <p className="font-body text-[13.5px] italic mt-1" style={{ color: COLORS.subtext }}>{describeTempK(tempK)}</p>
+              <p className="font-body t-small italic mt-1" style={{ color: COLORS.subtext }}>{describeTempK(tempK)}</p>
             </div>
           </div>
 
           <CalculationBlock area={area} lux={lux} lumens={lumens} downlightsLow={downlightsLow} downlightsHigh={downlightsHigh} />
 
           <div>
-            <p className="font-body text-[13px] tracking-[0.12em] uppercase mb-2.5" style={{ color: COLORS.accent }}>Recomendaciones personalizadas</p>
+            <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Recomendaciones personalizadas</p>
             <div className="flex flex-col gap-2">
               {tips.map((tip, i) => (
                 <div key={i} className="flex items-start gap-3 rounded-xl p-3.5" style={{ backgroundColor: COLORS.bg }}>
                   <Lightbulb size={15} color={COLORS.accent} strokeWidth={1.8} className="mt-0.5 shrink-0" />
-                  <p className="font-body text-[14px] leading-relaxed" style={{ color: COLORS.text }}>{tip}</p>
+                  <p className="font-body t-body" style={{ color: COLORS.text }}>{tip}</p>
                 </div>
               ))}
             </div>
@@ -1798,24 +1836,22 @@ function KitchenReportCard({ room, answers, expanded, onToggle }) {
   const { tempK, lumens, downlightsLow, downlightsHigh, area, lux, distribution, narrative, mistakes } = generateKitchenReport(answers);
   const { Icon } = room;
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 2px 12px rgba(46,42,39,0.05)" }}>
+    <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
       <button onClick={onToggle} className="w-full flex items-center gap-4 p-5 text-left">
-        <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "#F3E9D8" }}>
-          <Icon size={19} color={COLORS.accent} strokeWidth={1.6} />
-        </div>
+        <Icon size={22} color={COLORS.subtext} strokeWidth={1.5} className="shrink-0" />
         <div className="flex-1">
-          <p className="font-body text-[14.5px] font-medium" style={{ color: COLORS.text }}>{room.label}</p>
-          <p className="font-body text-[14px]" style={{ color: COLORS.subtext }}>Estudio de iluminación</p>
+          <p className="font-body t-body font-medium" style={{ color: COLORS.text }}>{room.label}</p>
+          <p className="font-body t-body" style={{ color: COLORS.subtext }}>Estudio de iluminación</p>
         </div>
         <ChevronDown size={16} color={COLORS.subtext} style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
       </button>
       {expanded && (
         <div className="px-5 pb-5 flex flex-col gap-5">
           <div>
-            <p className="font-body text-[13px] tracking-[0.12em] uppercase mb-2.5" style={{ color: COLORS.accent }}>Recomendación general</p>
+            <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Recomendación general</p>
             <div className="flex flex-col gap-2 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
               <StatRow label="Temperatura de color" value={`${tempK} K`} />
-              <p className="font-body text-[13.5px] italic mt-1" style={{ color: COLORS.subtext }}>{describeTempK(tempK)}</p>
+              <p className="font-body t-small italic mt-1" style={{ color: COLORS.subtext }}>{describeTempK(tempK)}</p>
               <StatRow label="Separación entre downlights" value="1,20–1,50 m" />
             </div>
           </div>
@@ -1823,21 +1859,21 @@ function KitchenReportCard({ room, answers, expanded, onToggle }) {
           <CalculationBlock area={area} lux={lux} lumens={lumens} downlightsLow={downlightsLow} downlightsHigh={downlightsHigh} />
 
           <div>
-            <p className="font-body text-[13px] tracking-[0.12em] uppercase mb-2.5" style={{ color: COLORS.accent }}>📍 Distribución recomendada de los focos</p>
+            <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>📍 Distribución recomendada de los focos</p>
             <div className="flex flex-col gap-2">
               {distribution.map((line, i) => (
                 <div key={i} className="flex items-start gap-3 rounded-xl p-3.5" style={{ backgroundColor: COLORS.bg }}>
                   <div className="w-1.5 h-1.5 rounded-full mt-2 shrink-0" style={{ backgroundColor: COLORS.accent }} />
-                  <p className="font-body text-[14px] leading-relaxed" style={{ color: COLORS.text }}>{line}</p>
+                  <p className="font-body t-body" style={{ color: COLORS.text }}>{line}</p>
                 </div>
               ))}
             </div>
           </div>
 
           <div>
-            <p className="font-body text-[13px] tracking-[0.12em] uppercase mb-2.5" style={{ color: COLORS.accent }}>Recomendación de diseño</p>
+            <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Recomendación de diseño</p>
             <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
-              <p className="font-body text-[13px] leading-relaxed" style={{ color: COLORS.text }}>{narrative}</p>
+              <p className="font-body t-small" style={{ color: COLORS.text }}>{narrative}</p>
             </div>
           </div>
 
@@ -1852,14 +1888,12 @@ function RoomReportCard({ room, answers, expanded, onToggle }) {
   const insights = getReport(room.id, answers);
   const { Icon } = room;
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 2px 12px rgba(46,42,39,0.05)" }}>
+    <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
       <button onClick={onToggle} className="w-full flex items-center gap-4 p-5 text-left">
-        <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "#F3E9D8" }}>
-          <Icon size={19} color={COLORS.accent} strokeWidth={1.6} />
-        </div>
+        <Icon size={22} color={COLORS.subtext} strokeWidth={1.5} className="shrink-0" />
         <div className="flex-1">
-          <p className="font-body text-[14.5px] font-medium" style={{ color: COLORS.text }}>{room.label}</p>
-          <p className="font-body text-[14px]" style={{ color: COLORS.subtext }}>Informe de diseño · {insights.length} recomendaciones</p>
+          <p className="font-body t-body font-medium" style={{ color: COLORS.text }}>{room.label}</p>
+          <p className="font-body t-body" style={{ color: COLORS.subtext }}>Informe de diseño · {insights.length} recomendaciones</p>
         </div>
         <ChevronDown size={16} color={COLORS.subtext} style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
       </button>
@@ -1868,7 +1902,7 @@ function RoomReportCard({ room, answers, expanded, onToggle }) {
           {insights.map((text, i) => (
             <div key={i} className="flex items-start gap-3 rounded-xl p-3.5" style={{ backgroundColor: COLORS.bg }}>
               <div className="w-1.5 h-1.5 rounded-full mt-2 shrink-0" style={{ backgroundColor: COLORS.accent }} />
-              <p className="font-body text-[14px] leading-relaxed" style={{ color: COLORS.text }}>{text}</p>
+              <p className="font-body t-body" style={{ color: COLORS.text }}>{text}</p>
             </div>
           ))}
         </div>
@@ -1881,24 +1915,22 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle }) {
   const { tempK, lumens, downlightsLow, downlightsHigh, area, lux, tips, mistakes } = generateGenericTechnicalReport(room.id, answers);
   const { Icon } = room;
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 2px 12px rgba(46,42,39,0.05)" }}>
+    <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
       <button onClick={onToggle} className="w-full flex items-center gap-4 p-5 text-left">
-        <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "#F3E9D8" }}>
-          <Icon size={19} color={COLORS.accent} strokeWidth={1.6} />
-        </div>
+        <Icon size={22} color={COLORS.subtext} strokeWidth={1.5} className="shrink-0" />
         <div className="flex-1">
-          <p className="font-body text-[14.5px] font-medium" style={{ color: COLORS.text }}>{room.label}</p>
-          <p className="font-body text-[14px]" style={{ color: COLORS.subtext }}>Estudio de iluminación</p>
+          <p className="font-body t-body font-medium" style={{ color: COLORS.text }}>{room.label}</p>
+          <p className="font-body t-body" style={{ color: COLORS.subtext }}>Estudio de iluminación</p>
         </div>
         <ChevronDown size={16} color={COLORS.subtext} style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
       </button>
       {expanded && (
         <div className="px-5 pb-5 flex flex-col gap-5">
           <div>
-            <p className="font-body text-[13px] tracking-[0.12em] uppercase mb-2.5" style={{ color: COLORS.accent }}>Recomendación general</p>
+            <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Recomendación general</p>
             <div className="flex flex-col gap-2 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
               <StatRow label="Temperatura de color" value={`${tempK} K`} />
-              <p className="font-body text-[13.5px] italic mt-1" style={{ color: COLORS.subtext }}>{describeTempK(tempK)}</p>
+              <p className="font-body t-small italic mt-1" style={{ color: COLORS.subtext }}>{describeTempK(tempK)}</p>
             </div>
           </div>
 
@@ -1906,7 +1938,7 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle }) {
 
           {room.id === "terrace" && (
             <div>
-              <p className="font-body text-[13px] tracking-[0.12em] uppercase mb-2.5" style={{ color: COLORS.accent }}>Zonas a iluminar</p>
+              <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Zonas a iluminar</p>
               <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
                 <TerraceZoneScheme activities={answers.activities} covered={answers.covered} night={answers.night} />
               </div>
@@ -1914,12 +1946,12 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle }) {
           )}
 
           <div>
-            <p className="font-body text-[13px] tracking-[0.12em] uppercase mb-2.5" style={{ color: COLORS.accent }}>Recomendaciones personalizadas</p>
+            <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Recomendaciones personalizadas</p>
             <div className="flex flex-col gap-2">
               {tips.map((tip, i) => (
                 <div key={i} className="flex items-start gap-3 rounded-xl p-3.5" style={{ backgroundColor: COLORS.bg }}>
                   <Lightbulb size={15} color={COLORS.accent} strokeWidth={1.8} className="mt-0.5 shrink-0" />
-                  <p className="font-body text-[14px] leading-relaxed" style={{ color: COLORS.text }}>{tip}</p>
+                  <p className="font-body t-body" style={{ color: COLORS.text }}>{tip}</p>
                 </div>
               ))}
             </div>
@@ -1943,15 +1975,13 @@ function ReportCard({ room, answers, expanded, onToggle }) {
 
 function GuidePromoCard() {
   return (
-    <div className="rounded-2xl p-5" style={{ backgroundColor: "#F3E9D8", border: `1px solid #C1A16B55` }}>
-      <p className="font-body text-[14px] tracking-[0.15em] uppercase mb-3" style={{ color: COLORS.primary }}>¿Quieres ir un paso más allá?</p>
+    <div className="rounded-xl p-5" style={{ backgroundColor: COLORS.bgAlt, border: `1px solid ${COLORS.border}` }}>
+      <p className="font-body t-eyebrow mb-3" style={{ color: COLORS.primary }}>¿Quieres ir un paso más allá?</p>
       <div className="flex items-start gap-3 mb-4">
-        <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: COLORS.card }}>
-          <BookOpen size={19} color={COLORS.accent} strokeWidth={1.6} />
-        </div>
+        <BookOpen size={22} color={COLORS.subtext} strokeWidth={1.5} className="shrink-0 mt-1" />
         <div>
-          <p className="font-display text-[17px] font-medium leading-tight" style={{ color: COLORS.text }}>Guía Profesional de Iluminación</p>
-          <p className="font-body text-[14px] leading-relaxed mt-1.5" style={{ color: COLORS.subtext }}>
+          <p className="font-display t-lead font-medium" style={{ color: COLORS.text }}>Guía Profesional de Iluminación</p>
+          <p className="font-body t-body mt-1.5" style={{ color: COLORS.subtext }}>
             Aprende a iluminar cualquier estancia como un profesional, con ejemplos reales y consejos prácticos.
           </p>
         </div>
@@ -1960,8 +1990,8 @@ function GuidePromoCard() {
         href="https://www.etsy.com/es/listing/4427720777/guia-de-iluminacion-del-hogar-consejos?ref=share_ios_native_control"
         target="_blank"
         rel="noopener noreferrer"
-        className="tap-scale w-full flex items-center justify-center font-body font-medium text-[14px] rounded-xl py-3.5 transition-all duration-200"
-        style={{ background: `linear-gradient(135deg, #7C6A56 0%, ${COLORS.primary} 55%, #5E4F41 100%)`, color: "#FFFFFF", boxShadow: "0 8px 20px rgba(111,94,77,0.25)" }}
+        className="tap-scale w-full flex items-center justify-center font-body font-medium t-body rounded-xl py-3.5 transition-all duration-200"
+        style={{ backgroundColor: COLORS.text, color: "#FFFFFF" }}
       >
         Ver la guía en Etsy
       </a>
@@ -1971,7 +2001,7 @@ function GuidePromoCard() {
 
 function LegalNote() {
   return (
-    <p className="font-body text-[12px] leading-relaxed text-center px-3" style={{ color: COLORS.subtext }}>
+    <p className="font-body t-caption text-center px-3" style={{ color: COLORS.subtext }}>
       Estas recomendaciones son orientativas. Para la instalación eléctrica, consulta siempre a un profesional certificado.
     </p>
   );
@@ -1983,9 +2013,9 @@ function PrintableReport({ rooms, answersByRoom }) {
   return (
     <div style={{ width: 700 }} className="bg-white p-10">
       <div className="text-center mb-8">
-        <p className="font-body text-[13px] tracking-[0.2em] uppercase mb-2" style={{ color: COLORS.accent }}>Nemul</p>
-        <p className="font-display text-[28px] font-medium" style={{ color: COLORS.text }}>Estudio de iluminación</p>
-        <p className="font-body text-[13px] mt-1.5" style={{ color: COLORS.subtext }}>
+        <p className="font-body t-eyebrow mb-2" style={{ color: COLORS.accent }}>Nemul</p>
+        <p className="font-display t-display font-medium" style={{ color: COLORS.text }}>Estudio de iluminación</p>
+        <p className="font-body t-small mt-1.5" style={{ color: COLORS.subtext }}>
           {new Date().toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}
         </p>
       </div>
@@ -1994,7 +2024,7 @@ function PrintableReport({ rooms, answersByRoom }) {
           <ReportCard key={room.id} room={room} answers={answersByRoom[room.id]} expanded={true} onToggle={() => {}} />
         ))}
       </div>
-      <p className="font-body text-[12px] text-center mt-8 leading-relaxed" style={{ color: COLORS.subtext }}>
+      <p className="font-body t-caption text-center mt-8" style={{ color: COLORS.subtext }}>
         Estas recomendaciones son orientativas. Para la instalación eléctrica, consulta siempre a un profesional certificado.
       </p>
     </div>
@@ -2003,33 +2033,182 @@ function PrintableReport({ rooms, answersByRoom }) {
 
 async function downloadReportAsPdf(node, filename) {
   if (!node) return;
-  const canvas = await html2canvas(node, { scale: 2, backgroundColor: "#FFFFFF", useCORS: true });
-  const imgData = canvas.toDataURL("image/png");
+  // Aquí es donde se descargan de verdad las dos librerías del PDF. El
+  // navegador las guarda en caché, así que solo pasa la primera vez.
+  // Ojo: jspdf 4 exporta el constructor con nombre ({ jsPDF }), no por
+  // defecto como hacía la versión 2. Cambiar esto rompe la descarga del PDF
+  // sin que la compilación avise de nada.
+  const [{ jsPDF }, { default: html2canvas }] = await Promise.all([
+    import("jspdf"),
+    import("html2canvas"),
+  ]);
+  // Los navegadores limitan el tamaño de un lienzo, y al superarlo lo recortan
+  // en silencio: el informe salía sin el final. Bajamos la resolución de
+  // captura lo justo para no pasarnos, en vez de fijar siempre el doble.
+  const MAX_LADO = 8000;
+  const alto = node.scrollHeight || 1;
+  const ancho = node.scrollWidth || 1;
+  const scale = Math.max(1, Math.min(2, MAX_LADO / alto, MAX_LADO / ancho));
+
+  const canvas = await html2canvas(node, {
+    scale,
+    backgroundColor: "#FFFFFF",
+    useCORS: true,
+    // El informe se dibuja fuera de pantalla; sin esto html2canvas puede
+    // capturar solo la parte que cabría en la ventana visible.
+    scrollX: 0,
+    scrollY: 0,
+    windowWidth: ancho,
+    windowHeight: alto,
+    // Esta es la causa de que el informe saliera sin "Errores que debes
+    // evitar": para capturar, la librería clona el informe en un documento
+    // nuevo, y al clonarlo las animaciones de entrada vuelven a empezar. Como
+    // arrancan en opacidad 0 y algunos elementos llevan retardo, la foto se
+    // tomaba antes de que aparecieran y salían en blanco. Aquí las apagamos
+    // en la copia; la pantalla real no se toca.
+    onclone: (doc) => {
+      const style = doc.createElement("style");
+      style.textContent =
+        ".option-in, .check-pop, .rise-in, .toast-in {" +
+        " animation: none !important; opacity: 1 !important; transform: none !important; }";
+      doc.head.appendChild(style);
+    },
+  });
+
   const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
-  const imgWidth = pageWidth;
-  const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-  let heightLeft = imgHeight;
-  let position = 0;
+  // Cuántos píxeles de alto del lienzo entran en una página A4.
+  const pxPorPagina = Math.max(1, Math.floor((canvas.width * pageHeight) / pageWidth));
 
-  pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-  heightLeft -= pageHeight;
+  // Recortamos el lienzo página a página. Antes se incrustaba la imagen
+  // entera en cada página, desplazada hacia arriba: el PDF pesaba tantas
+  // veces el informe como páginas tuviera, y el último tramo podía perderse.
+  const trozo = document.createElement("canvas");
+  const ctx = trozo.getContext("2d");
+  trozo.width = canvas.width;
 
-  while (heightLeft > 0) {
-    position = heightLeft - imgHeight;
-    pdf.addPage();
-    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
+  let y = 0;
+  let primera = true;
+  while (y < canvas.height) {
+    const altoTrozo = Math.min(pxPorPagina, canvas.height - y);
+    trozo.height = altoTrozo;
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, trozo.width, altoTrozo);
+    ctx.drawImage(canvas, 0, y, canvas.width, altoTrozo, 0, 0, canvas.width, altoTrozo);
+
+    if (!primera) pdf.addPage();
+    pdf.addImage(
+      trozo.toDataURL("image/png"),
+      "PNG",
+      0,
+      0,
+      pageWidth,
+      (altoTrozo * pageWidth) / canvas.width,
+    );
+
+    primera = false;
+    y += altoTrozo;
   }
 
   pdf.save(filename);
 }
 
+// Aparece justo después de descargar el PDF, no antes: quien llega aquí ya
+// tiene su informe en la mano, así que dejar el correo es una comodidad y no
+// un peaje. Es el momento de más intención de toda la app.
+function EmailCaptureCard({ roomLabels }) {
+  const [email, setEmail] = useState("");
+  const [estado, setEstado] = useState("inicial"); // inicial | enviando | hecho | error
+  const ref = useRef(null);
+
+  // El informe es largo y la tarjeta nace por debajo de lo que se está viendo.
+  // Sin esto aparecería fuera de pantalla y no la vería nadie.
+  useEffect(() => {
+    ref.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
+
+  const enviar = async () => {
+    const limpio = email.trim();
+    // Validación mínima: evita el fallo tonto de enviar algo sin arroba.
+    if (!limpio || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(limpio) || estado === "enviando") {
+      setEstado("error");
+      return;
+    }
+    setEstado("enviando");
+    try {
+      const res = await fetch(PREMIUM_INTEREST_FORM_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          email: limpio,
+          interes: "Copia del informe por email",
+          estancias: roomLabels,
+        }),
+      });
+      if (!res.ok) throw new Error("request failed");
+      setEstado("hecho");
+      track("email_capture_submitted");
+      gaEvent("email_capture_submitted");
+    } catch (e) {
+      setEstado("error");
+    }
+  };
+
+  if (estado === "hecho") {
+    return (
+      <div ref={ref} className="rounded-xl p-5 text-center rise-in" style={{ backgroundColor: COLORS.bgAlt }}>
+        <Check size={20} color={COLORS.success} strokeWidth={2.5} className="mx-auto mb-2" />
+        <p className="font-body t-body font-medium" style={{ color: COLORS.text }}>Anotado</p>
+        <p className="font-body t-small mt-1" style={{ color: COLORS.subtext }}>
+          Te escribiremos con tu informe en un correo. Gracias por confiar en Nemul.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={ref} className="rounded-xl p-5" style={{ backgroundColor: COLORS.bgAlt }}>
+      <p className="font-body t-body font-medium mb-1" style={{ color: COLORS.text }}>
+        ¿Te guardamos una copia?
+      </p>
+      <p className="font-body t-small mb-4" style={{ color: COLORS.subtext }}>
+        Tu plan solo vive en este navegador: si lo limpias o cambias de dispositivo, se pierde.
+        Déjanos tu correo y te enviamos el informe para tenerlo siempre a mano.
+      </p>
+      <label htmlFor="email-informe" className="sr-only">Tu correo electrónico</label>
+      <input
+        id="email-informe"
+        type="email"
+        inputMode="email"
+        autoComplete="email"
+        value={email}
+        onChange={(e) => { setEmail(e.target.value); if (estado === "error") setEstado("inicial"); }}
+        onKeyDown={(e) => { if (e.key === "Enter") enviar(); }}
+        placeholder="tu@email.com"
+        className="w-full rounded-xl px-4 py-3 mb-3 font-body t-body"
+        style={{ backgroundColor: COLORS.card, border: `1px solid ${estado === "error" ? COLORS.warning : COLORS.border}`, color: COLORS.text }}
+      />
+      <PrimaryButton onClick={enviar} disabled={estado === "enviando"}>
+        {estado === "enviando" ? "Enviando..." : "Enviádmelo por correo"}
+      </PrimaryButton>
+      {estado === "error" && (
+        <p className="font-body t-small mt-2 text-center" style={{ color: COLORS.warning }}>
+          Revisa la dirección o vuelve a intentarlo en un momento.
+        </p>
+      )}
+      <p className="font-body t-caption mt-3 text-center" style={{ color: COLORS.subtext }}>
+        Solo para enviarte tu informe y avisarte de novedades de Nemul. Ni spam, ni cesión a terceros.
+      </p>
+    </div>
+  );
+}
+
 function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
   const [expandedId, setExpandedId] = useState(rooms[0]?.id);
   const [downloading, setDownloading] = useState(false);
+  const [pdfDescargado, setPdfDescargado] = useState(false);
   const printRef = useRef(null);
 
   useEffect(() => {
@@ -2052,6 +2231,9 @@ function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
       await downloadReportAsPdf(printRef.current, `nemul-informe-${dateStr}.pdf`);
       track("downloaded_pdf");
       gaEvent("downloaded_pdf");
+      setPdfDescargado(true);
+      track("email_capture_shown");
+      gaEvent("email_capture_shown");
     } catch (e) {
       // Si algo falla generando el PDF, no rompemos el resto de la app.
     } finally {
@@ -2062,15 +2244,15 @@ function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
   return (
     <div className="flex flex-col h-full rise-in relative">
       <TopNav onBack={onRestart} />
-      <div className="flex-1 overflow-y-auto px-7">
+      <div className="flex-1 overflow-y-auto px-6">
         <div className="text-center mb-6">
-          <div className="w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ backgroundColor: "#EEF0EA" }}>
+          <div className="w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ backgroundColor: COLORS.bgAlt }}>
             <Check size={22} color={COLORS.success} strokeWidth={2} />
           </div>
-          <p className="font-body text-[13.5px] tracking-[0.2em] uppercase mb-2" style={{ color: COLORS.accent }}>
+          <p className="font-body t-eyebrow mb-2" style={{ color: COLORS.accent }}>
             {rooms.length} espacio{rooms.length > 1 ? "s" : ""}, con criterio de diseño
           </p>
-          <h2 className="font-display text-[26px] font-medium" style={{ color: COLORS.text }}>
+          <h2 className="font-display t-display font-medium" style={{ color: COLORS.text }}>
             ✨ Tu estudio de iluminación está listo
           </h2>
         </div>
@@ -2081,6 +2263,12 @@ function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
           ))}
         </div>
 
+        {pdfDescargado && (
+          <div className="pb-3 rise-in">
+            <EmailCaptureCard roomLabels={rooms.map((r) => r.label).join(", ")} />
+          </div>
+        )}
+
         <div className="pb-3">
           <GuidePromoCard />
         </div>
@@ -2088,25 +2276,19 @@ function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
           <LegalNote />
         </div>
       </div>
-      <div className="px-7 pt-3 pb-1 flex flex-col gap-3">
+      <div className="screen-actions px-6 pt-4 flex flex-col gap-3">
         <PrimaryButton onClick={onSave}>Guardar este plan</PrimaryButton>
-        <button
-          onClick={handleDownloadPdf}
-          disabled={downloading}
-          className="w-full flex items-center justify-center gap-2 font-body font-medium text-[14px] rounded-2xl py-3.5 transition-all duration-200"
-          style={{ backgroundColor: COLORS.card, border: `1.5px solid ${COLORS.border}`, color: COLORS.text }}
-        >
-          <Download size={16} color={COLORS.text} strokeWidth={1.8} />
+        <SecondaryButton onClick={handleDownloadPdf} disabled={downloading} Icon={Download}>
           {downloading ? "Generando PDF..." : "Descargar informe en PDF"}
-        </button>
-        <button onClick={onRestart} className="w-full font-body text-[13.5px] font-medium py-2 flex items-center justify-center gap-1" style={{ color: COLORS.subtext }}>
+        </SecondaryButton>
+        <button onClick={onRestart} className="w-full font-body t-small font-medium py-2 flex items-center justify-center gap-1" style={{ color: COLORS.subtext }}>
           Crear un nuevo plan <ChevronRight size={14} />
         </button>
       </div>
       {saved && (
-        <div className="absolute left-1/2 bottom-24 toast-in flex items-center gap-2 px-4 py-2.5 rounded-full" style={{ backgroundColor: COLORS.text, boxShadow: "0 8px 20px rgba(0,0,0,0.2)" }}>
+        <div className="absolute left-1/2 bottom-24 toast-in flex items-center gap-2 px-4 py-2.5 rounded-full" style={{ backgroundColor: COLORS.text }}>
           <Check size={14} color="#FFFFFF" strokeWidth={3} />
-          <span className="font-body text-[14px] font-medium text-white">Plan guardado</span>
+          <span className="font-body t-body font-medium text-white">Plan guardado</span>
         </div>
       )}
       <div style={{ position: "absolute", left: -99999, top: 0 }} aria-hidden="true">
@@ -2122,17 +2304,17 @@ function PlanCard({ plan, onOpen, onDelete }) {
   const first = plan.rooms[0];
   const extra = plan.rooms.length - 1;
   return (
-    <button onClick={onOpen} className="w-full flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-200" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 2px 12px rgba(46,42,39,0.05)" }}>
+    <button onClick={onOpen} className="w-full flex items-center gap-4 rounded-xl p-5 text-left transition-all duration-200" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
       <div className="flex -space-x-3 shrink-0">
         {plan.rooms.slice(0, 3).map((r, i) => (
-          <div key={r.id} className="w-11 h-11 rounded-full flex items-center justify-center border-2" style={{ backgroundColor: "#F3E9D8", borderColor: COLORS.card, zIndex: 10 - i }}>
+          <div key={r.id} className="w-11 h-11 rounded-full flex items-center justify-center border-2" style={{ backgroundColor: COLORS.bgAlt, borderColor: COLORS.card, zIndex: 10 - i }}>
             <r.Icon size={16} color={COLORS.accent} strokeWidth={1.6} />
           </div>
         ))}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="font-body text-[14.5px] font-medium truncate" style={{ color: COLORS.text }}>{first.label}{extra > 0 ? ` + ${extra} más` : ""}</p>
-        <p className="font-body text-[13.5px]" style={{ color: COLORS.subtext }}>Guardado el {formatDate(plan.savedAt)}</p>
+        <p className="font-body t-body font-medium truncate" style={{ color: COLORS.text }}>{first.label}{extra > 0 ? ` + ${extra} más` : ""}</p>
+        <p className="font-body t-small" style={{ color: COLORS.subtext }}>Guardado el {formatDate(plan.savedAt)}</p>
       </div>
       <div role="button" onClick={(e) => { e.stopPropagation(); onDelete(); }} className="w-8 h-8 rounded-full flex items-center justify-center shrink-0">
         <Trash2 size={15} color={COLORS.subtext} strokeWidth={1.6} />
@@ -2145,18 +2327,18 @@ function PlanCard({ plan, onOpen, onDelete }) {
 function HomeScreen({ plans, onOpenPlan, onDeletePlan, onNewPlan }) {
   return (
     <div className="flex flex-col h-full rise-in">
-      <div className="px-7 pt-6 pb-5">
-        <p className="font-body text-[13.5px] tracking-[0.2em] uppercase mb-2" style={{ color: COLORS.accent }}>Nemul</p>
-        <h2 className="font-display text-[28px] font-medium mb-1.5" style={{ color: COLORS.text }}>Tus planes</h2>
-        <p className="font-body text-[13.5px]" style={{ color: COLORS.subtext }}>Cada espacio que has iluminado, todo en un solo lugar.</p>
+      <div className="px-6 pt-6 pb-5">
+        <p className="font-body t-eyebrow mb-2" style={{ color: COLORS.accent }}>Nemul</p>
+        <h2 className="font-display t-display font-medium mb-1.5" style={{ color: COLORS.text }}>Tus planes</h2>
+        <p className="font-body t-small" style={{ color: COLORS.subtext }}>Cada espacio que has iluminado, todo en un solo lugar.</p>
       </div>
-      <div className="flex-1 overflow-y-auto px-7">
+      <div className="flex-1 overflow-y-auto px-6">
         {plans.length === 0 ? (
           <div className="flex flex-col items-center text-center pt-14">
             <div className="w-16 h-16 rounded-full flex items-center justify-center mb-5" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
               <HomeIcon size={22} color={COLORS.subtext} strokeWidth={1.5} />
             </div>
-            <p className="font-body text-[14px] leading-relaxed max-w-[240px]" style={{ color: COLORS.subtext }}>Aún no tienes planes. Empieza con tu primer espacio y Nemul te guiará.</p>
+            <p className="font-body t-body max-w-[240px]" style={{ color: COLORS.subtext }}>Aún no tienes planes. Empieza con tu primer espacio y Nemul te guiará.</p>
           </div>
         ) : (
           <div className="flex flex-col gap-3 pb-4">
@@ -2164,8 +2346,8 @@ function HomeScreen({ plans, onOpenPlan, onDeletePlan, onNewPlan }) {
           </div>
         )}
       </div>
-      <div className="px-7 pt-3 pb-1">
-        <button onClick={onNewPlan} className="tap-scale w-full flex items-center justify-center gap-2 font-body font-medium text-[15px] tracking-wide rounded-2xl py-4 transition-all duration-200" style={{ background: `linear-gradient(135deg, #7C6A56 0%, ${COLORS.primary} 55%, #5E4F41 100%)`, color: "#FFFFFF", boxShadow: "0 8px 20px rgba(111,94,77,0.25)" }}>
+      <div className="screen-actions px-6 pt-4">
+        <button onClick={onNewPlan} className="tap-scale w-full flex items-center justify-center gap-2 font-body font-medium t-body tracking-wide rounded-xl py-4 transition-all duration-200" style={{ background: COLORS.bulb, color: COLORS.bulbInk }}>
           <Plus size={16} strokeWidth={2.2} /> Planear un nuevo espacio
         </button>
       </div>
@@ -2194,28 +2376,22 @@ function PlanDetailScreen({ plan, onBack }) {
   return (
     <div className="flex flex-col h-full rise-in">
       <TopNav onBack={onBack} />
-      <div className="px-7 pb-5">
-        <p className="font-body text-[13.5px] tracking-[0.2em] uppercase mb-2" style={{ color: COLORS.accent }}>Guardado el {formatDate(plan.savedAt)}</p>
-        <h2 className="font-display text-[26px] font-medium" style={{ color: COLORS.text }}>
+      <div className="px-6 pb-5">
+        <p className="font-body t-eyebrow mb-2" style={{ color: COLORS.accent }}>Guardado el {formatDate(plan.savedAt)}</p>
+        <h2 className="font-display t-display font-medium" style={{ color: COLORS.text }}>
           {plan.rooms.length} espacio{plan.rooms.length > 1 ? "s" : ""}, con criterio de diseño
         </h2>
       </div>
-      <div className="flex-1 overflow-y-auto px-7">
+      <div className="flex-1 overflow-y-auto px-6">
         <div className="flex flex-col gap-3 pb-4">
           {plan.rooms.map((room) => (
             <ReportCard key={room.id} room={room} answers={plan.answersByRoom[room.id]} expanded={expandedId === room.id} onToggle={() => setExpandedId(expandedId === room.id ? null : room.id)} />
           ))}
         </div>
         <div className="pb-3">
-          <button
-            onClick={handleDownloadPdf}
-            disabled={downloading}
-            className="w-full flex items-center justify-center gap-2 font-body font-medium text-[14px] rounded-2xl py-3.5 transition-all duration-200"
-            style={{ backgroundColor: COLORS.card, border: `1.5px solid ${COLORS.border}`, color: COLORS.text }}
-          >
-            <Download size={16} color={COLORS.text} strokeWidth={1.8} />
+          <SecondaryButton onClick={handleDownloadPdf} disabled={downloading} Icon={Download}>
             {downloading ? "Generando PDF..." : "Descargar informe en PDF"}
-          </button>
+          </SecondaryButton>
         </div>
         <div className="pb-3">
           <GuidePromoCard />
@@ -2342,15 +2518,15 @@ const LANDING_COPY = {
     footerPrivacy: "Política de privacidad",
     privacy: {
       dataTitle: "Qué datos recopilamos",
-      dataText: "Nemul solo te pide tu email si tú decides dejarlo voluntariamente en la pantalla de acceso Premium, para avisarte cuando esa función esté disponible. No pedimos contraseña, datos de pago, ni ningún otro dato personal para usar la habitación gratuita.",
+      dataText: "Nemul solo te pide tu email si tú decides dejarlo voluntariamente: al descargar tu informe, por si quieres que te enviemos una copia, o en la pantalla de acceso Premium, para avisarte cuando esa función esté disponible. En ambos casos es opcional. No pedimos contraseña, datos de pago, ni ningún otro dato personal para usar la habitación gratuita.",
       useTitle: "Cómo lo usamos",
-      useText: "Únicamente para enviarte un aviso relacionado con el acceso Premium. No lo usamos para ningún otro fin, y no lo compartimos, vendemos ni cedemos a terceros bajo ninguna circunstancia.",
+      useText: "Únicamente para enviarte tu informe si lo has pedido y para avisarte de novedades de Nemul, como el acceso Premium. No lo usamos para ningún otro fin, y no lo compartimos, vendemos ni cedemos a terceros bajo ninguna circunstancia. Puedes pedirnos que te demos de baja en cualquier momento.",
       whereTitle: "Dónde se guarda",
       whereText: "Tu email se almacena de forma segura en Formspree, el servicio que usamos para gestionar este formulario de interés.",
       localTitle: "Almacenamiento en tu propio dispositivo",
       localText: "Para que Nemul funcione bien, guardamos cierta información directamente en tu navegador (no en nuestros servidores): qué habitación probaste gratis y los planes que decidas guardar. Esta información se queda únicamente en tu dispositivo, nunca se nos envía, y puedes borrarla en cualquier momento eliminando los datos de navegación de tu navegador.",
       cookiesTitle: "Cookies",
-      cookiesText: "Nemul no utiliza cookies de seguimiento ni analíticas de terceros en esta versión.",
+      cookiesText: "Nemul utiliza Google Analytics y Vercel Analytics para medir de forma agregada cuánta gente visita la web y qué secciones se usan más. Estos datos no se emplean para identificarte personalmente ni para mostrarte publicidad, y no se cruzan con el email que puedas dejarnos.",
       rightsTitle: "Tus derechos",
       rightsTextPrefix: "Puedes pedirnos en cualquier momento que eliminemos tu email de nuestros registros escribiendo a ",
       changesTitle: "Cambios futuros",
@@ -2407,15 +2583,15 @@ const LANDING_COPY = {
     footerPrivacy: "Privacy policy",
     privacy: {
       dataTitle: "What data we collect",
-      dataText: "Nemul only asks for your email if you choose to leave it on the Premium access screen, so we can notify you when that feature is available. We don't ask for a password, payment details, or any other personal data to use the free room.",
+      dataText: "Nemul only asks for your email if you choose to leave it: when you download your report, in case you want us to send you a copy, or on the Premium access screen, so we can notify you when that feature is available. Both are optional. We don't ask for a password, payment details, or any other personal data to use the free room.",
       useTitle: "How we use it",
-      useText: "Only to send you a notice related to Premium access. We never use it for any other purpose, and we never share, sell, or transfer it to third parties under any circumstances.",
+      useText: "Only to send you your report if you asked for it, and to let you know about Nemul updates such as Premium access. We never use it for any other purpose, and we never share, sell, or transfer it to third parties under any circumstances. You can ask to be removed at any time.",
       whereTitle: "Where it's stored",
       whereText: "Your email is securely stored in Formspree, the service we use to manage this interest form.",
       localTitle: "Storage on your own device",
       localText: "To make Nemul work properly, we store certain information directly in your browser (not on our servers): which room you tried for free, and any plans you choose to save. This information stays only on your device, is never sent to us, and you can delete it anytime by clearing your browser's browsing data.",
       cookiesTitle: "Cookies",
-      cookiesText: "Nemul does not use tracking cookies or third-party analytics in this version.",
+      cookiesText: "Nemul uses Google Analytics and Vercel Analytics to measure, in aggregate, how many people visit the site and which sections are used most. This data is never used to identify you personally or to show you advertising, and it is not linked to any email you may leave us.",
       rightsTitle: "Your rights",
       rightsTextPrefix: "You can ask us at any time to delete your email from our records by writing to ",
       changesTitle: "Future changes",
@@ -2426,21 +2602,28 @@ const LANDING_COPY = {
 
 function LandingNav({ onStart, lang, setLang, t }) {
   return (
-    <div className="sticky top-0 z-10 backdrop-blur-md" style={{ backgroundColor: "rgba(248,246,242,0.85)", borderBottom: `1px solid ${COLORS.border}` }}>
-      <div className="max-w-5xl mx-auto flex items-center justify-between px-6 py-4">
-        <div className="flex items-center gap-2.5">
-          <img src="/logo-icon.png" alt="" className="h-10 w-auto" />
-          <span className="font-display text-[22px] font-medium" style={{ color: COLORS.text }}>Nemul</span>
+    <div className="sticky top-0 z-10 backdrop-blur-md" style={{ backgroundColor: "rgba(250,246,239,0.88)", borderBottom: `1px solid ${COLORS.border}` }}>
+      <div className="max-w-3xl mx-auto flex items-center justify-between px-6 py-4">
+        {/* El logotipo es texto, no una imagen: nítido en cualquier pantalla,
+            una petición de red menos, y no puede salir roto. El punto amarillo
+            es la bombilla reducida a su mínima expresión — el símbolo completo
+            vive en el favicon, donde se ve lo bastante grande. */}
+        <div className="flex items-end gap-1.5">
+          <span className="font-display" style={{ fontSize: 30, lineHeight: 1, fontWeight: 500, color: COLORS.text }}>
+            Nemul
+          </span>
+          <span className="rounded-full mb-[3px]" style={{ width: 6, height: 6, backgroundColor: COLORS.bulb }} />
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center rounded-full p-0.5" style={{ backgroundColor: COLORS.bg, border: `1px solid ${COLORS.border}` }}>
+          <div className="flex items-center rounded-full p-0.5" style={{ border: `1px solid ${COLORS.border}` }}>
             {["es", "en"].map((code) => (
               <button
                 key={code}
                 onClick={() => setLang(code)}
-                className="font-body text-[12px] font-semibold rounded-full px-3 py-1.5 transition-all duration-200"
+                aria-pressed={lang === code}
+                className="tap-scale font-body t-caption font-medium rounded-full px-3 py-1.5"
                 style={{
-                  backgroundColor: lang === code ? COLORS.primary : "transparent",
+                  backgroundColor: lang === code ? COLORS.text : "transparent",
                   color: lang === code ? "#FFFFFF" : COLORS.subtext,
                 }}
               >
@@ -2448,10 +2631,12 @@ function LandingNav({ onStart, lang, setLang, t }) {
               </button>
             ))}
           </div>
+          {/* CTA de la barra en versión discreta: el botón amarillo del hero
+              debe ser el único elemento que grita en la primera pantalla. */}
           <button
             onClick={onStart}
-            className="tap-scale font-body text-[13.5px] font-medium rounded-full px-5 py-2.5 transition-all duration-200"
-            style={{ background: `linear-gradient(135deg, #7C6A56 0%, ${COLORS.primary} 55%, #5E4F41 100%)`, color: "#FFFFFF" }}
+            className="tap-scale font-body t-small font-medium rounded-full px-5 py-2.5"
+            style={{ backgroundColor: "transparent", border: `1px solid ${COLORS.text}`, color: COLORS.text }}
           >
             {t.navCta}
           </button>
@@ -2463,28 +2648,27 @@ function LandingNav({ onStart, lang, setLang, t }) {
 
 function LandingHero({ onStart, t }) {
   return (
-    <section className="max-w-3xl mx-auto px-6 pt-16 pb-14 text-center">
-      <div className="mb-6">
-        <img src="/logo.png" alt="Nemul" className="h-36 w-auto mx-auto" />
-      </div>
-      <h1 className="font-display text-[40px] md:text-[52px] leading-[1.1] font-medium mb-5" style={{ color: COLORS.text }}>
+    // El logo ya está en la barra fija justo encima; repetirlo aquí a 144 px
+    // de alto empujaba el titular fuera de la primera pantalla en móvil.
+    <section className="max-w-3xl mx-auto px-6 pt-24 pb-28 text-center">
+      <h1 className="font-display t-hero font-medium mb-6 max-w-2xl mx-auto" style={{ color: COLORS.text }}>
         {t.heroTitle}
       </h1>
-      <p className="font-body text-[16px] md:text-[17px] leading-relaxed max-w-xl mx-auto mb-9" style={{ color: COLORS.subtext }}>
+      <p className="font-body t-lead max-w-xl mx-auto mb-10" style={{ color: COLORS.subtext }}>
         {t.heroSubtitle}
       </p>
       <button
         onClick={onStart}
-        className="tap-scale font-body font-medium text-[15px] tracking-wide rounded-2xl px-8 py-4 transition-all duration-200 hover:scale-[1.02]"
-        style={{ background: `linear-gradient(135deg, #7C6A56 0%, ${COLORS.primary} 55%, #5E4F41 100%)`, color: "#FFFFFF", boxShadow: "0 10px 26px rgba(111,94,77,0.3)" }}
+        className="tap-scale font-body font-medium t-body rounded-xl px-8 py-4"
+        style={{ backgroundColor: COLORS.bulb, color: COLORS.bulbInk }}
       >
         {t.heroCta}
       </button>
-      <p className="font-body text-[12.5px] mt-3.5" style={{ color: COLORS.subtext }}>
+      <p className="font-body t-caption mt-4" style={{ color: COLORS.subtext }}>
         {t.heroTrust}
       </p>
       {t.langNotice && (
-        <p className="font-body text-[12px] leading-relaxed mt-3 max-w-sm mx-auto rounded-xl px-4 py-2.5" style={{ color: COLORS.primary, backgroundColor: "#F3E9D8" }}>
+        <p className="font-body t-caption mt-5 max-w-sm mx-auto rounded-lg px-4 py-3" style={{ color: COLORS.text, backgroundColor: COLORS.bgAlt }}>
           {t.langNotice}
         </p>
       )}
@@ -2494,23 +2678,21 @@ function LandingHero({ onStart, t }) {
 
 function HowItWorksSection({ t }) {
   return (
-    <section className="max-w-4xl mx-auto px-6 py-14">
+    <section className="max-w-3xl mx-auto px-6 py-20">
       <Reveal>
-        <h2 className="font-display text-[28px] font-medium text-center mb-3" style={{ color: COLORS.text }}>{t.howTitle}</h2>
-        <p className="font-body text-[14.5px] text-center mb-10 max-w-md mx-auto leading-relaxed" style={{ color: COLORS.subtext }}>{t.howSubtitle}</p>
+        <h2 className="font-display t-display font-medium text-center mb-3" style={{ color: COLORS.text }}>{t.howTitle}</h2>
+        <p className="font-body t-body text-center mb-10 max-w-md mx-auto" style={{ color: COLORS.subtext }}>{t.howSubtitle}</p>
       </Reveal>
       <div className="grid md:grid-cols-3 gap-5">
         {t.steps.map((s, i) => (
           <Reveal key={s.n} delay={i * 120}>
             <div
-              className="rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1.5"
-              style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 2px 12px rgba(46,42,39,0.05)" }}
+              className="rounded-xl p-6 transition-all duration-300"
+              style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}
             >
-              <div className="w-9 h-9 rounded-full flex items-center justify-center mb-4 font-body text-[14px] font-semibold" style={{ background: "linear-gradient(135deg, #F3E9D8, #EAD9BC)", color: COLORS.accent }}>
-                {s.n}
-              </div>
-              <p className="font-body text-[15px] font-medium mb-2" style={{ color: COLORS.text }}>{s.title}</p>
-              <p className="font-body text-[13.5px] leading-relaxed" style={{ color: COLORS.subtext }}>{s.text}</p>
+              <p className="font-display t-title mb-3" style={{ color: COLORS.subtext }}>{s.n}</p>
+              <p className="font-body t-body font-medium mb-2" style={{ color: COLORS.text }}>{s.title}</p>
+              <p className="font-body t-small" style={{ color: COLORS.subtext }}>{s.text}</p>
             </div>
           </Reveal>
         ))}
@@ -2522,32 +2704,28 @@ function HowItWorksSection({ t }) {
 function PreviewRow({ label }) {
   return (
     <div className="flex items-center justify-between gap-3 py-3" style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-      <p className="font-body text-[14px] font-medium" style={{ color: COLORS.text }}>{label}</p>
-      <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "#EEF0EA" }}>
-        <Check size={11} color={COLORS.success} strokeWidth={3} />
-      </div>
+      <p className="font-body t-body font-medium" style={{ color: COLORS.text }}>{label}</p>
+      <Check size={15} color={COLORS.success} strokeWidth={2.5} className="shrink-0" />
     </div>
   );
 }
 
 function ProductShowcaseSection({ t }) {
   return (
-    <section className="max-w-md mx-auto px-6 py-14">
+    <section className="max-w-3xl mx-auto px-6 py-20">
       <Reveal>
-        <h2 className="font-display text-[28px] font-medium text-center mb-3" style={{ color: COLORS.text }}>{t.showcaseTitle}</h2>
-        <p className="font-body text-[13px] tracking-wide text-center mb-6" style={{ color: COLORS.accent }}>
+        <h2 className="font-display t-display font-medium text-center mb-3" style={{ color: COLORS.text }}>{t.showcaseTitle}</h2>
+        <p className="font-body t-small tracking-wide text-center mb-6" style={{ color: COLORS.accent }}>
           {t.showcasePreviewLabel}
         </p>
       </Reveal>
       <Reveal delay={150}>
-        <div className="rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 12px 32px rgba(46,42,39,0.08)" }}>
+        <div className="rounded-xl p-6 transition-all duration-300" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: "linear-gradient(135deg, #F3E9D8, #EAD9BC)" }}>
-              <Sofa size={18} color={COLORS.accent} strokeWidth={1.6} />
-            </div>
+            <Sofa size={22} color={COLORS.subtext} strokeWidth={1.5} />
             <div>
-              <p className="font-body text-[14px] font-medium" style={{ color: COLORS.text }}>{t.showcaseExampleLabel}</p>
-              <p className="font-body text-[12px]" style={{ color: COLORS.subtext }}>{t.showcaseSubLabel}</p>
+              <p className="font-body t-body font-medium" style={{ color: COLORS.text }}>{t.showcaseExampleLabel}</p>
+              <p className="font-body t-caption" style={{ color: COLORS.subtext }}>{t.showcaseSubLabel}</p>
             </div>
           </div>
           <div>
@@ -2555,7 +2733,7 @@ function ProductShowcaseSection({ t }) {
           </div>
         </div>
       </Reveal>
-      <p className="font-body text-[12.5px] text-center mt-5 leading-relaxed" style={{ color: COLORS.subtext }}>
+      <p className="font-body t-caption text-center mt-5" style={{ color: COLORS.subtext }}>
         {t.showcaseFooter}
       </p>
     </section>
@@ -2564,13 +2742,11 @@ function ProductShowcaseSection({ t }) {
 
 function CredentialSection({ t }) {
   return (
-    <section className="max-w-2xl mx-auto px-6 py-14 text-center">
+    <section className="max-w-3xl mx-auto px-6 py-20 text-center">
       <Reveal>
-        <div className="w-14 h-14 rounded-full mx-auto mb-5 flex items-center justify-center" style={{ background: "linear-gradient(135deg, #F3E9D8, #EAD9BC)" }}>
-          <Sparkles size={22} color={COLORS.accent} strokeWidth={1.6} />
-        </div>
-        <p className="font-display text-[22px] font-medium mb-3" style={{ color: COLORS.text }}>{t.credentialTitle}</p>
-        <p className="font-body text-[14.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
+        <div className="w-10 h-px mx-auto mb-8" style={{ backgroundColor: COLORS.subtext }} />
+        <p className="font-display t-title font-medium mb-3" style={{ color: COLORS.text }}>{t.credentialTitle}</p>
+        <p className="font-body t-body" style={{ color: COLORS.subtext }}>
           {t.credentialText}
         </p>
       </Reveal>
@@ -2580,18 +2756,18 @@ function CredentialSection({ t }) {
 
 function AccessSection({ onStart, t }) {
   return (
-    <section className="max-w-2xl mx-auto px-6 py-14 text-center">
+    <section className="max-w-3xl mx-auto px-6 py-20 text-center">
       <Reveal>
-      <div className="rounded-2xl p-8 transition-all duration-300 hover:-translate-y-1" style={{ backgroundColor: "#F3E9D8", border: `1px solid #C1A16B55` }}>
-        <p className="font-body text-[12px] tracking-[0.2em] uppercase mb-3" style={{ color: COLORS.primary }}>{t.accessLabel}</p>
-        <p className="font-display text-[22px] font-medium mb-3" style={{ color: COLORS.text }}>{t.accessTitle}</p>
-        <p className="font-body text-[14px] leading-relaxed mb-6" style={{ color: COLORS.subtext }}>
+      <div className="rounded-xl p-8 transition-all duration-300" style={{ backgroundColor: COLORS.bgAlt, border: `1px solid ${COLORS.border}` }}>
+        <p className="font-body t-eyebrow mb-3" style={{ color: COLORS.primary }}>{t.accessLabel}</p>
+        <p className="font-display t-title font-medium mb-3" style={{ color: COLORS.text }}>{t.accessTitle}</p>
+        <p className="font-body t-body mb-6" style={{ color: COLORS.subtext }}>
           {t.accessText}
         </p>
         <button
           onClick={onStart}
-          className="tap-scale font-body font-medium text-[14.5px] rounded-2xl px-7 py-3.5 transition-all duration-200"
-          style={{ background: `linear-gradient(135deg, #7C6A56 0%, ${COLORS.primary} 55%, #5E4F41 100%)`, color: "#FFFFFF", boxShadow: "0 8px 20px rgba(111,94,77,0.25)" }}
+          className="tap-scale font-body font-medium t-body rounded-xl px-6 py-3.5 transition-all duration-200"
+          style={{ background: COLORS.bulb, color: COLORS.bulbInk }}
         >
           {t.accessCta}
         </button>
@@ -2603,25 +2779,23 @@ function AccessSection({ onStart, t }) {
 
 function LandingGuideSection({ t }) {
   return (
-    <section className="max-w-2xl mx-auto px-6 py-14">
+    <section className="max-w-3xl mx-auto px-6 py-20">
       <Reveal>
-        <p className="font-body text-[12px] tracking-[0.2em] uppercase text-center mb-4" style={{ color: COLORS.accent }}>{t.guideLabel}</p>
-        <div className="rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}`, boxShadow: "0 2px 12px rgba(46,42,39,0.05)" }}>
+        <p className="font-body t-eyebrow text-center mb-4" style={{ color: COLORS.accent }}>{t.guideLabel}</p>
+        <div className="rounded-xl p-6 transition-all duration-300" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
           <div className="flex items-start gap-4">
-            <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, #F3E9D8, #EAD9BC)" }}>
-              <BookOpen size={19} color={COLORS.accent} strokeWidth={1.6} />
-            </div>
+            <BookOpen size={22} color={COLORS.subtext} strokeWidth={1.5} className="shrink-0 mt-1" />
             <div className="flex-1">
-              <p className="font-display text-[18px] font-medium mb-1" style={{ color: COLORS.text }}>{t.guideTitle}</p>
-              <p className="font-body text-[13px] leading-relaxed mb-4" style={{ color: COLORS.subtext }}>
+              <p className="font-display t-lead font-medium mb-1" style={{ color: COLORS.text }}>{t.guideTitle}</p>
+              <p className="font-body t-small mb-4" style={{ color: COLORS.subtext }}>
                 {t.guideText}
               </p>
               <a
                 href="https://www.etsy.com/es/listing/4427720777/guia-de-iluminacion-del-hogar-consejos?ref=share_ios_native_control"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="tap-scale inline-block font-body font-medium text-[13.5px] rounded-xl px-5 py-2.5"
-                style={{ background: `linear-gradient(135deg, #7C6A56 0%, ${COLORS.primary} 55%, #5E4F41 100%)`, color: "#FFFFFF" }}
+                className="tap-scale inline-block font-body font-medium t-small rounded-xl px-5 py-2.5"
+                style={{ backgroundColor: COLORS.text, color: "#FFFFFF" }}
               >
                 {t.guideCta}
               </a>
@@ -2636,14 +2810,14 @@ function LandingGuideSection({ t }) {
 function FAQItem({ q, a }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="tap-scale rounded-xl overflow-hidden transition-all duration-200 hover:-translate-y-0.5" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
+    <div className="tap-scale rounded-xl overflow-hidden transition-all duration-200" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
       <button onClick={() => setOpen((o) => !o)} className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left">
-        <span className="font-body text-[14px] font-medium" style={{ color: COLORS.text }}>{q}</span>
+        <span className="font-body t-body font-medium" style={{ color: COLORS.text }}>{q}</span>
         <ChevronDown size={16} color={COLORS.subtext} style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", flexShrink: 0 }} />
       </button>
       {open && (
         <div className="px-5 pb-4 option-in">
-          <p className="font-body text-[13.5px] leading-relaxed" style={{ color: COLORS.subtext }}>{a}</p>
+          <p className="font-body t-small" style={{ color: COLORS.subtext }}>{a}</p>
         </div>
       )}
     </div>
@@ -2652,8 +2826,8 @@ function FAQItem({ q, a }) {
 
 function FAQSection({ t }) {
   return (
-    <section id="faq" className="max-w-2xl mx-auto px-6 py-14">
-      <Reveal><h2 className="font-display text-[26px] font-medium text-center mb-8" style={{ color: COLORS.text }}>{t.faqTitle}</h2></Reveal>
+    <section id="faq" className="max-w-3xl mx-auto px-6 py-20">
+      <Reveal><h2 className="font-display t-display font-medium text-center mb-8" style={{ color: COLORS.text }}>{t.faqTitle}</h2></Reveal>
       <div className="flex flex-col gap-3">
         {t.faqs.map((f, i) => (
           <Reveal key={i} delay={i * 80}>
@@ -2670,50 +2844,50 @@ function LandingFooter({ t }) {
   const p = t.privacy;
   return (
     <footer className="border-t" style={{ borderColor: COLORS.border }}>
-      <div className="max-w-2xl mx-auto px-6 py-10 text-center">
-        <p className="font-body text-[12px] leading-relaxed mb-5" style={{ color: COLORS.subtext }}>
+      <div className="max-w-3xl mx-auto px-6 py-10 text-center">
+        <p className="font-body t-caption mb-5" style={{ color: COLORS.subtext }}>
           {t.footerLegal}
         </p>
         <div className="flex items-center justify-center gap-5 mb-5 flex-wrap">
-          <a href="#faq" className="font-body text-[13px] font-medium" style={{ color: COLORS.text }}>{t.footerFaqLink}</a>
-          <a href="mailto:digitaldma2026@gmail.com" className="font-body text-[13px] font-medium" style={{ color: COLORS.text }}>{t.footerContact}</a>
-          <button onClick={() => setShowPrivacy((s) => !s)} className="font-body text-[13px] font-medium" style={{ color: COLORS.text }}>{t.footerPrivacy}</button>
+          <a href="#faq" className="font-body t-small font-medium" style={{ color: COLORS.text }}>{t.footerFaqLink}</a>
+          <a href="mailto:digitaldma2026@gmail.com" className="font-body t-small font-medium" style={{ color: COLORS.text }}>{t.footerContact}</a>
+          <button onClick={() => setShowPrivacy((s) => !s)} className="font-body t-small font-medium" style={{ color: COLORS.text }}>{t.footerPrivacy}</button>
         </div>
         {showPrivacy && (
           <div className="rounded-xl p-6 text-left mb-5 flex flex-col gap-4" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
             <div>
-              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>{p.dataTitle}</p>
-              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>{p.dataText}</p>
+              <p className="font-body t-small font-medium mb-1.5" style={{ color: COLORS.text }}>{p.dataTitle}</p>
+              <p className="font-body t-caption" style={{ color: COLORS.subtext }}>{p.dataText}</p>
             </div>
             <div>
-              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>{p.useTitle}</p>
-              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>{p.useText}</p>
+              <p className="font-body t-small font-medium mb-1.5" style={{ color: COLORS.text }}>{p.useTitle}</p>
+              <p className="font-body t-caption" style={{ color: COLORS.subtext }}>{p.useText}</p>
             </div>
             <div>
-              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>{p.whereTitle}</p>
-              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>{p.whereText}</p>
+              <p className="font-body t-small font-medium mb-1.5" style={{ color: COLORS.text }}>{p.whereTitle}</p>
+              <p className="font-body t-caption" style={{ color: COLORS.subtext }}>{p.whereText}</p>
             </div>
             <div>
-              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>{p.localTitle}</p>
-              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>{p.localText}</p>
+              <p className="font-body t-small font-medium mb-1.5" style={{ color: COLORS.text }}>{p.localTitle}</p>
+              <p className="font-body t-caption" style={{ color: COLORS.subtext }}>{p.localText}</p>
             </div>
             <div>
-              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>{p.cookiesTitle}</p>
-              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>{p.cookiesText}</p>
+              <p className="font-body t-small font-medium mb-1.5" style={{ color: COLORS.text }}>{p.cookiesTitle}</p>
+              <p className="font-body t-caption" style={{ color: COLORS.subtext }}>{p.cookiesText}</p>
             </div>
             <div>
-              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>{p.rightsTitle}</p>
-              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>
+              <p className="font-body t-small font-medium mb-1.5" style={{ color: COLORS.text }}>{p.rightsTitle}</p>
+              <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
                 {p.rightsTextPrefix}<a href="mailto:digitaldma2026@gmail.com" style={{ color: COLORS.accent }}>digitaldma2026@gmail.com</a>.
               </p>
             </div>
             <div>
-              <p className="font-body text-[13.5px] font-medium mb-1.5" style={{ color: COLORS.text }}>{p.changesTitle}</p>
-              <p className="font-body text-[12.5px] leading-relaxed" style={{ color: COLORS.subtext }}>{p.changesText}</p>
+              <p className="font-body t-small font-medium mb-1.5" style={{ color: COLORS.text }}>{p.changesTitle}</p>
+              <p className="font-body t-caption" style={{ color: COLORS.subtext }}>{p.changesText}</p>
             </div>
           </div>
         )}
-        <p className="font-body text-[11.5px]" style={{ color: COLORS.subtext }}>© {new Date().getFullYear()} Nemul</p>
+        <p className="font-body t-caption" style={{ color: COLORS.subtext }}>© {new Date().getFullYear()} Nemul</p>
       </div>
     </footer>
   );
@@ -2722,6 +2896,12 @@ function LandingFooter({ t }) {
 function LandingPage({ onStart }) {
   const [lang, setLang] = useState("es");
   const t = LANDING_COPY[lang];
+
+  // El <html lang="..."> estaba fijo en "es" aunque la página tuviera
+  // selector ES/EN, lo que confunde a lectores de pantalla y a Google.
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
   return (
     <div className="min-h-screen w-full" style={{ backgroundColor: COLORS.bg }}>
       <style>{FONT_STYLE}</style>
@@ -2868,11 +3048,14 @@ export default function NemulApp() {
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center py-10 px-4" style={{ backgroundColor: "#EFECE5" }}>
+    // Antes: un marco de iPhone falso de 375×780 px fijos, con borde negro de
+    // 8 px. En un móvil real el contenido se comprimía y se cortaba por abajo,
+    // y en escritorio parecía un mockup, no un producto. Ahora es un contenedor
+    // real: pantalla completa en móvil, columna acotada y centrada en escritorio.
+    <div className="w-full flex justify-center" style={{ height: "100dvh", backgroundColor: COLORS.bg }}>
       <style>{FONT_STYLE}</style>
-      <div className="relative w-[375px] h-[780px] rounded-[48px] overflow-hidden" style={{ backgroundColor: COLORS.bg, boxShadow: "0 30px 70px rgba(46,42,39,0.28)", border: "8px solid #1C1A18" }}>
-        <StatusBar />
-        <div className="h-[calc(100%-88px)]">
+      <div className="relative w-full max-w-[560px] h-full" style={{ backgroundColor: COLORS.bg }}>
+        <div className="h-full">
           {screen === "welcome" && <WelcomeScreen onStart={() => setScreen("rooms")} />}
           {screen === "home" && <HomeScreen plans={savedPlans} onOpenPlan={openPlan} onDeletePlan={deletePlan} onNewPlan={startNewPlanFromHome} />}
           {screen === "rooms" && (
@@ -2906,7 +3089,6 @@ export default function NemulApp() {
           {screen === "result" && <ResultScreen rooms={selectedRooms} answersByRoom={answersByRoom} onRestart={restart} onSave={handleSave} saved={saved} />}
           {screen === "planDetail" && viewingPlan && <PlanDetailScreen plan={viewingPlan} onBack={() => setScreen("home")} />}
         </div>
-        <HomeIndicator />
       </div>
     </div>
   );
