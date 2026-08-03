@@ -1973,45 +1973,43 @@ function ReportCard({ room, answers, expanded, onToggle }) {
   return <RoomReportCard room={room} answers={answers} expanded={expanded} onToggle={onToggle} />;
 }
 
+// Antes era una tarjeta con recuadro, icono, titular, descripción y botón: ocupaba
+// más que algunas recomendaciones del informe. Reducida a una línea, deja de
+// competir con el contenido por el que la persona ha venido.
 function GuidePromoCard() {
   return (
-    <div className="rounded-xl p-5" style={{ backgroundColor: COLORS.bgAlt, border: `1px solid ${COLORS.border}` }}>
-      <p className="font-body t-eyebrow mb-3" style={{ color: COLORS.primary }}>¿Quieres ir un paso más allá?</p>
-      <div className="flex items-start gap-3 mb-4">
-        <BookOpen size={22} color={COLORS.subtext} strokeWidth={1.5} className="shrink-0 mt-1" />
-        <div>
-          <p className="font-display t-lead font-medium" style={{ color: COLORS.text }}>Guía Profesional de Iluminación</p>
-          <p className="font-body t-body mt-1.5" style={{ color: COLORS.subtext }}>
-            Aprende a iluminar cualquier estancia como un profesional, con ejemplos reales y consejos prácticos.
-          </p>
-        </div>
-      </div>
-      <a
-        href="https://www.etsy.com/es/listing/4427720777/guia-de-iluminacion-del-hogar-consejos?ref=share_ios_native_control"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="tap-scale w-full flex items-center justify-center font-body font-medium t-body rounded-xl py-3.5 transition-all duration-200"
-        style={{ backgroundColor: COLORS.text, color: "#FFFFFF" }}
-      >
-        Ver la guía en Etsy
-      </a>
-    </div>
+    <a
+      href="https://www.etsy.com/es/listing/4427720777/guia-de-iluminacion-del-hogar-consejos?ref=share_ios_native_control"
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={() => { track("etsy_click", { desde: "informe" }); gaEvent("etsy_click", { desde: "informe" }); }}
+      className="tap-scale w-full flex items-center justify-center gap-2 py-3 font-body t-small font-medium"
+      style={{ color: COLORS.text, borderTop: `1px solid ${COLORS.border}`, borderBottom: `1px solid ${COLORS.border}` }}
+    >
+      <BookOpen size={16} color={COLORS.subtext} strokeWidth={1.6} />
+      Visita mi tienda de Etsy para más consejos de diseño
+      <ChevronRight size={14} color={COLORS.subtext} />
+    </a>
   );
 }
 
-// El informe se ve entero en pantalla y la gente lo comparte por captura. Si no
-// lleva el nombre y el dominio, esa captura no lleva a nadie de vuelta aquí.
+// La marca va arriba del informe, no aquí: es lo primero que se ve y lo que
+// entra en una captura de pantalla. Al pie solo queda el aviso legal.
 function LegalNote() {
   return (
-    <div className="text-center px-3">
-      <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
-        Estas recomendaciones son orientativas. Para la instalación eléctrica, consulta siempre a un profesional certificado.
-      </p>
-      <div className="flex items-center justify-center gap-2 mt-3">
-        <span className="rounded-full" style={{ width: 5, height: 5, backgroundColor: COLORS.bulb }} />
-        <span className="font-display" style={{ fontSize: 15, color: COLORS.text }}>Nemul</span>
-        <span className="font-body t-caption" style={{ color: COLORS.subtext }}>nemul.app</span>
-      </div>
+    <p className="font-body t-caption text-center px-3" style={{ color: COLORS.subtext }}>
+      Estas recomendaciones son orientativas. Para la instalación eléctrica, consulta siempre a un profesional certificado.
+    </p>
+  );
+}
+
+// Firma de marca del informe. Legible en una captura, discreta en pantalla.
+function MarcaNemul() {
+  return (
+    <div className="flex items-center justify-center gap-2 mb-5">
+      <span className="rounded-full" style={{ width: 6, height: 6, backgroundColor: COLORS.bulb }} />
+      <span className="font-display" style={{ fontSize: 24, lineHeight: 1, color: COLORS.text }}>Nemul</span>
+      <span className="font-body t-small" style={{ color: COLORS.subtext }}>nemul.app</span>
     </div>
   );
 }
@@ -2290,16 +2288,13 @@ function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
       <TopNav onBack={onRestart} />
       <div className="flex-1 overflow-y-auto px-6">
         <div className="text-center mb-6">
-          <div className="w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ backgroundColor: COLORS.bgAlt }}>
-            <Check size={22} color={COLORS.success} strokeWidth={2} />
-          </div>
+          <MarcaNemul />
           <p className="font-body t-eyebrow mb-2" style={{ color: COLORS.accent }}>
             {rooms.length} espacio{rooms.length > 1 ? "s" : ""}, con criterio de diseño
           </p>
           <h2 className="font-display t-display font-medium" style={{ color: COLORS.text }}>
             Tu estudio de iluminación está listo
           </h2>
-          <p className="font-body t-caption mt-2" style={{ color: COLORS.subtext }}>nemul.app</p>
         </div>
 
         <div className="flex flex-col gap-3 pb-4">
@@ -2399,7 +2394,8 @@ function PlanDetailScreen({ plan, onBack }) {
   return (
     <div className="flex flex-col h-full rise-in">
       <TopNav onBack={onBack} />
-      <div className="px-6 pb-5">
+      <div className="px-6 pb-5 text-center">
+        <MarcaNemul />
         <p className="font-body t-eyebrow mb-2" style={{ color: COLORS.accent }}>Guardado el {formatDate(plan.savedAt)}</p>
         <h2 className="font-display t-display font-medium" style={{ color: COLORS.text }}>
           {plan.rooms.length} espacio{plan.rooms.length > 1 ? "s" : ""}, con criterio de diseño
@@ -2522,10 +2518,7 @@ const LANDING_COPY = {
     accessTitle: "Empieza gratis con una habitación",
     accessText: "Prueba Nemul sin coste en el espacio que más te importe ahora. Muy pronto abriremos el acceso a toda la vivienda.",
     accessCta: "Empieza gratis",
-    guideLabel: "¿Quieres aprender más?",
-    guideTitle: "Guía práctica de iluminación",
-    guideText: "Aprende a iluminar cualquier estancia como un profesional, con ejemplos reales y consejos prácticos.",
-    guideCta: "Ver en Etsy",
+    guideLine: "Visita mi tienda de Etsy para más consejos de diseño",
     faqTitle: "Preguntas frecuentes",
     faqs: [
       { q: "¿Necesito saber de iluminación para usar Nemul?", a: "No. Todas las preguntas están pensadas para cualquier persona, sin necesidad de conocer términos técnicos. Nemul traduce los aspectos técnicos a recomendaciones fáciles de entender." },
@@ -2587,10 +2580,7 @@ const LANDING_COPY = {
     accessTitle: "Start free with one room",
     accessText: "Try Nemul at no cost in the space that matters most to you right now. We'll soon open access to your whole home.",
     accessCta: "Start for free",
-    guideLabel: "Want to learn more?",
-    guideTitle: "Professional Lighting Guide",
-    guideText: "Learn to light any room like a professional, with real examples and practical tips.",
-    guideCta: "View on Etsy",
+    guideLine: "Visit my Etsy shop for more design tips",
     faqTitle: "Frequently asked questions",
     faqs: [
       { q: "Do I need to know about lighting to use Nemul?", a: "No. Every question is designed for anyone, no technical terms required. Nemul handles the professional part for you." },
@@ -2798,31 +2788,25 @@ function AccessSection({ onStart, t }) {
   );
 }
 
+// Antes era una tarjeta con rótulo, recuadro, icono, titular, descripción y
+// botón, y ocupaba una sección entera de la portada. Misma línea que en el
+// informe: la tienda se menciona, no se anuncia.
 function LandingGuideSection({ t }) {
   return (
-    <section className="max-w-3xl mx-auto px-6 py-20">
+    <section className="max-w-3xl mx-auto px-6 pb-6">
       <Reveal>
-        <p className="font-body t-eyebrow text-center mb-4" style={{ color: COLORS.accent }}>{t.guideLabel}</p>
-        <div className="rounded-xl p-6 transition-all duration-300" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
-          <div className="flex items-start gap-4">
-            <BookOpen size={22} color={COLORS.subtext} strokeWidth={1.5} className="shrink-0 mt-1" />
-            <div className="flex-1">
-              <p className="font-display t-lead font-medium mb-1" style={{ color: COLORS.text }}>{t.guideTitle}</p>
-              <p className="font-body t-small mb-4" style={{ color: COLORS.subtext }}>
-                {t.guideText}
-              </p>
-              <a
-                href="https://www.etsy.com/es/listing/4427720777/guia-de-iluminacion-del-hogar-consejos?ref=share_ios_native_control"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="tap-scale inline-block font-body font-medium t-small rounded-xl px-5 py-2.5"
-                style={{ backgroundColor: COLORS.text, color: "#FFFFFF" }}
-              >
-                {t.guideCta}
-              </a>
-            </div>
-          </div>
-        </div>
+        <a
+          href="https://www.etsy.com/es/listing/4427720777/guia-de-iluminacion-del-hogar-consejos?ref=share_ios_native_control"
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => { track("etsy_click", { desde: "landing" }); gaEvent("etsy_click", { desde: "landing" }); }}
+          className="tap-scale w-full flex items-center justify-center gap-2 py-4 font-body t-small font-medium"
+          style={{ color: COLORS.text, borderTop: `1px solid ${COLORS.border}`, borderBottom: `1px solid ${COLORS.border}` }}
+        >
+          <BookOpen size={16} color={COLORS.subtext} strokeWidth={1.6} />
+          {t.guideLine}
+          <ChevronRight size={14} color={COLORS.subtext} />
+        </a>
       </Reveal>
     </section>
   );
