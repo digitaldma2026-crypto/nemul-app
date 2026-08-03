@@ -1859,7 +1859,7 @@ function KitchenReportCard({ room, answers, expanded, onToggle }) {
           <CalculationBlock area={area} lux={lux} lumens={lumens} downlightsLow={downlightsLow} downlightsHigh={downlightsHigh} />
 
           <div>
-            <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>📍 Distribución recomendada de los focos</p>
+            <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Distribución recomendada de los focos</p>
             <div className="flex flex-col gap-2">
               {distribution.map((line, i) => (
                 <div key={i} className="flex items-start gap-3 rounded-xl p-3.5" style={{ backgroundColor: COLORS.bg }}>
@@ -1999,11 +1999,20 @@ function GuidePromoCard() {
   );
 }
 
+// El informe se ve entero en pantalla y la gente lo comparte por captura. Si no
+// lleva el nombre y el dominio, esa captura no lleva a nadie de vuelta aquí.
 function LegalNote() {
   return (
-    <p className="font-body t-caption text-center px-3" style={{ color: COLORS.subtext }}>
-      Estas recomendaciones son orientativas. Para la instalación eléctrica, consulta siempre a un profesional certificado.
-    </p>
+    <div className="text-center px-3">
+      <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
+        Estas recomendaciones son orientativas. Para la instalación eléctrica, consulta siempre a un profesional certificado.
+      </p>
+      <div className="flex items-center justify-center gap-2 mt-3">
+        <span className="rounded-full" style={{ width: 5, height: 5, backgroundColor: COLORS.bulb }} />
+        <span className="font-display" style={{ fontSize: 15, color: COLORS.text }}>Nemul</span>
+        <span className="font-body t-caption" style={{ color: COLORS.subtext }}>nemul.app</span>
+      </div>
+    </div>
   );
 }
 
@@ -2027,6 +2036,13 @@ function PrintableReport({ rooms, answersByRoom }) {
       <p className="font-body t-caption text-center mt-8" style={{ color: COLORS.subtext }}>
         Estas recomendaciones son orientativas. Para la instalación eléctrica, consulta siempre a un profesional certificado.
       </p>
+      <div className="flex items-center justify-center gap-2.5 mt-5 pt-5" style={{ borderTop: `1px solid ${COLORS.border}` }}>
+        <span className="rounded-full" style={{ width: 6, height: 6, backgroundColor: COLORS.bulb }} />
+        <span className="font-display" style={{ fontSize: 18, color: COLORS.text }}>Nemul</span>
+        <span className="font-body t-small" style={{ color: COLORS.subtext }}>
+          Diseña la iluminación de tu hogar en nemul.app
+        </span>
+      </div>
     </div>
   );
 }
@@ -2115,24 +2131,59 @@ async function downloadReportAsPdf(node, filename) {
   pdf.save(filename);
 }
 
-// Aparece justo después de descargar el PDF, no antes: quien llega aquí ya
-// tiene su informe en la mano, así que dejar el correo es una comodidad y no
-// un peaje. Es el momento de más intención de toda la app.
-function EmailCaptureCard({ roomLabels }) {
+// El PDF es lo que más se valora del informe, así que es lo que pide el correo
+// a cambio. En cuanto la persona lo deja, la descarga arranca sola: no se le
+// promete nada que no reciba en el momento, y Dayami se queda con el contacto.
+const EMAIL_GUARDADO = "nemul_email";
+
+function leerEmailGuardado() {
+  try {
+    return localStorage.getItem(EMAIL_GUARDADO) || "";
+  } catch {
+    return "";
+  }
+}
+
+function DescargaConEmail({ printRef, roomLabels }) {
+  const [pidiendoEmail, setPidiendoEmail] = useState(false);
   const [email, setEmail] = useState("");
-  const [estado, setEstado] = useState("inicial"); // inicial | enviando | hecho | error
-  const ref = useRef(null);
+  const [estado, setEstado] = useState("inicial"); // inicial | enviando | error
+  const [descargando, setDescargando] = useState(false);
+  const cajaRef = useRef(null);
 
-  // El informe es largo y la tarjeta nace por debajo de lo que se está viendo.
-  // Sin esto aparecería fuera de pantalla y no la vería nadie.
   useEffect(() => {
-    ref.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, []);
+    if (pidiendoEmail) cajaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [pidiendoEmail]);
 
-  const enviar = async () => {
+  const descargar = async () => {
+    if (descargando) return;
+    setDescargando(true);
+    try {
+      const fecha = new Date().toISOString().slice(0, 10);
+      await downloadReportAsPdf(printRef.current, `nemul-informe-${fecha}.pdf`);
+      track("downloaded_pdf");
+      gaEvent("downloaded_pdf");
+    } catch (e) {
+      // Si algo falla generando el PDF, no rompemos el resto de la app.
+    } finally {
+      setDescargando(false);
+    }
+  };
+
+  const alPulsar = () => {
+    // Quien ya nos dejó el correo no tiene que volver a escribirlo.
+    if (leerEmailGuardado()) {
+      descargar();
+      return;
+    }
+    setPidiendoEmail(true);
+    track("email_gate_shown");
+    gaEvent("email_gate_shown");
+  };
+
+  const enviarYDescargar = async () => {
     const limpio = email.trim();
-    // Validación mínima: evita el fallo tonto de enviar algo sin arroba.
-    if (!limpio || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(limpio) || estado === "enviando") {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(limpio) || estado === "enviando") {
       setEstado("error");
       return;
     }
@@ -2141,41 +2192,40 @@ function EmailCaptureCard({ roomLabels }) {
       const res = await fetch(PREMIUM_INTEREST_FORM_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
-          email: limpio,
-          interes: "Copia del informe por email",
-          estancias: roomLabels,
-        }),
+        body: JSON.stringify({ email: limpio, interes: "Descarga del informe", estancias: roomLabels }),
       });
       if (!res.ok) throw new Error("request failed");
-      setEstado("hecho");
+      try {
+        localStorage.setItem(EMAIL_GUARDADO, limpio);
+      } catch {
+        // Si el navegador bloquea el almacenamiento, volveremos a preguntar. No pasa nada.
+      }
       track("email_capture_submitted");
       gaEvent("email_capture_submitted");
+      setPidiendoEmail(false);
+      setEstado("inicial");
+      await descargar();
     } catch (e) {
       setEstado("error");
     }
   };
 
-  if (estado === "hecho") {
+  if (!pidiendoEmail) {
     return (
-      <div ref={ref} className="rounded-xl p-5 text-center rise-in" style={{ backgroundColor: COLORS.bgAlt }}>
-        <Check size={20} color={COLORS.success} strokeWidth={2.5} className="mx-auto mb-2" />
-        <p className="font-body t-body font-medium" style={{ color: COLORS.text }}>Anotado</p>
-        <p className="font-body t-small mt-1" style={{ color: COLORS.subtext }}>
-          Te escribiremos con tu informe en un correo. Gracias por confiar en Nemul.
-        </p>
-      </div>
+      <SecondaryButton onClick={alPulsar} disabled={descargando} Icon={Download}>
+        {descargando ? "Generando PDF..." : "Descargar informe en PDF"}
+      </SecondaryButton>
     );
   }
 
   return (
-    <div ref={ref} className="rounded-xl p-5" style={{ backgroundColor: COLORS.bgAlt }}>
+    <div ref={cajaRef} className="rounded-xl p-5 rise-in" style={{ backgroundColor: COLORS.bgAlt }}>
       <p className="font-body t-body font-medium mb-1" style={{ color: COLORS.text }}>
-        ¿Te guardamos una copia?
+        ¿A qué correo te lo enviamos?
       </p>
       <p className="font-body t-small mb-4" style={{ color: COLORS.subtext }}>
-        Tu plan solo vive en este navegador: si lo limpias o cambias de dispositivo, se pierde.
-        Déjanos tu correo y te enviamos el informe para tenerlo siempre a mano.
+        Te guardamos una copia del informe, para que no dependa de este navegador.
+        La descarga empieza en cuanto lo dejes.
       </p>
       <label htmlFor="email-informe" className="sr-only">Tu correo electrónico</label>
       <input
@@ -2183,23 +2233,37 @@ function EmailCaptureCard({ roomLabels }) {
         type="email"
         inputMode="email"
         autoComplete="email"
+        autoFocus
         value={email}
         onChange={(e) => { setEmail(e.target.value); if (estado === "error") setEstado("inicial"); }}
-        onKeyDown={(e) => { if (e.key === "Enter") enviar(); }}
+        onKeyDown={(e) => { if (e.key === "Enter") enviarYDescargar(); }}
         placeholder="tu@email.com"
         className="w-full rounded-xl px-4 py-3 mb-3 font-body t-body"
         style={{ backgroundColor: COLORS.card, border: `1px solid ${estado === "error" ? COLORS.warning : COLORS.border}`, color: COLORS.text }}
       />
-      <PrimaryButton onClick={enviar} disabled={estado === "enviando"}>
-        {estado === "enviando" ? "Enviando..." : "Enviádmelo por correo"}
+      <PrimaryButton onClick={enviarYDescargar} disabled={estado === "enviando" || descargando}>
+        {estado === "enviando" || descargando ? "Preparando tu informe..." : "Enviar y descargar"}
       </PrimaryButton>
       {estado === "error" && (
-        <p className="font-body t-small mt-2 text-center" style={{ color: COLORS.warning }}>
-          Revisa la dirección o vuelve a intentarlo en un momento.
-        </p>
+        <div className="mt-2 text-center">
+          <p className="font-body t-small" style={{ color: COLORS.warning }}>
+            Revisa la dirección o vuelve a intentarlo.
+          </p>
+          {/* Si falla nuestro servidor, no dejamos a nadie atrapado sin su informe. */}
+          <button onClick={descargar} className="font-body t-small font-medium mt-1 underline" style={{ color: COLORS.subtext }}>
+            Descargar sin dejar el correo
+          </button>
+        </div>
       )}
-      <p className="font-body t-caption mt-3 text-center" style={{ color: COLORS.subtext }}>
-        Solo para enviarte tu informe y avisarte de novedades de Nemul. Ni spam, ni cesión a terceros.
+      <button
+        onClick={() => { setPidiendoEmail(false); setEstado("inicial"); }}
+        className="w-full font-body t-small font-medium py-2 mt-1"
+        style={{ color: COLORS.subtext }}
+      >
+        Ahora no
+      </button>
+      <p className="font-body t-caption mt-1 text-center" style={{ color: COLORS.subtext }}>
+        Solo para enviarte tu informe y avisarte de novedades. Ni spam, ni cesión a terceros.
       </p>
     </div>
   );
@@ -2207,8 +2271,6 @@ function EmailCaptureCard({ roomLabels }) {
 
 function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
   const [expandedId, setExpandedId] = useState(rooms[0]?.id);
-  const [downloading, setDownloading] = useState(false);
-  const [pdfDescargado, setPdfDescargado] = useState(false);
   const printRef = useRef(null);
 
   useEffect(() => {
@@ -2223,24 +2285,6 @@ function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
     });
   }, []);
 
-  const handleDownloadPdf = async () => {
-    if (downloading) return;
-    setDownloading(true);
-    try {
-      const dateStr = new Date().toISOString().slice(0, 10);
-      await downloadReportAsPdf(printRef.current, `nemul-informe-${dateStr}.pdf`);
-      track("downloaded_pdf");
-      gaEvent("downloaded_pdf");
-      setPdfDescargado(true);
-      track("email_capture_shown");
-      gaEvent("email_capture_shown");
-    } catch (e) {
-      // Si algo falla generando el PDF, no rompemos el resto de la app.
-    } finally {
-      setDownloading(false);
-    }
-  };
-
   return (
     <div className="flex flex-col h-full rise-in relative">
       <TopNav onBack={onRestart} />
@@ -2253,8 +2297,9 @@ function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
             {rooms.length} espacio{rooms.length > 1 ? "s" : ""}, con criterio de diseño
           </p>
           <h2 className="font-display t-display font-medium" style={{ color: COLORS.text }}>
-            ✨ Tu estudio de iluminación está listo
+            Tu estudio de iluminación está listo
           </h2>
+          <p className="font-body t-caption mt-2" style={{ color: COLORS.subtext }}>nemul.app</p>
         </div>
 
         <div className="flex flex-col gap-3 pb-4">
@@ -2262,12 +2307,6 @@ function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
             <ReportCard key={room.id} room={room} answers={answersByRoom[room.id]} expanded={expandedId === room.id} onToggle={() => setExpandedId(expandedId === room.id ? null : room.id)} />
           ))}
         </div>
-
-        {pdfDescargado && (
-          <div className="pb-3 rise-in">
-            <EmailCaptureCard roomLabels={rooms.map((r) => r.label).join(", ")} />
-          </div>
-        )}
 
         <div className="pb-3">
           <GuidePromoCard />
@@ -2278,9 +2317,7 @@ function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
       </div>
       <div className="screen-actions px-6 pt-4 flex flex-col gap-3">
         <PrimaryButton onClick={onSave}>Guardar este plan</PrimaryButton>
-        <SecondaryButton onClick={handleDownloadPdf} disabled={downloading} Icon={Download}>
-          {downloading ? "Generando PDF..." : "Descargar informe en PDF"}
-        </SecondaryButton>
+        <DescargaConEmail printRef={printRef} roomLabels={rooms.map((r) => r.label).join(", ")} />
         <button onClick={onRestart} className="w-full font-body t-small font-medium py-2 flex items-center justify-center gap-1" style={{ color: COLORS.subtext }}>
           Crear un nuevo plan <ChevronRight size={14} />
         </button>
@@ -2357,21 +2394,7 @@ function HomeScreen({ plans, onOpenPlan, onDeletePlan, onNewPlan }) {
 
 function PlanDetailScreen({ plan, onBack }) {
   const [expandedId, setExpandedId] = useState(plan.rooms[0]?.id);
-  const [downloading, setDownloading] = useState(false);
   const printRef = useRef(null);
-
-  const handleDownloadPdf = async () => {
-    if (downloading) return;
-    setDownloading(true);
-    try {
-      const dateStr = new Date().toISOString().slice(0, 10);
-      await downloadReportAsPdf(printRef.current, `nemul-informe-${dateStr}.pdf`);
-    } catch (e) {
-      // Si algo falla generando el PDF, no rompemos el resto de la app.
-    } finally {
-      setDownloading(false);
-    }
-  };
 
   return (
     <div className="flex flex-col h-full rise-in">
@@ -2389,9 +2412,7 @@ function PlanDetailScreen({ plan, onBack }) {
           ))}
         </div>
         <div className="pb-3">
-          <SecondaryButton onClick={handleDownloadPdf} disabled={downloading} Icon={Download}>
-            {downloading ? "Generando PDF..." : "Descargar informe en PDF"}
-          </SecondaryButton>
+          <DescargaConEmail printRef={printRef} roomLabels={plan.rooms.map((r) => r.label).join(", ")} />
         </div>
         <div className="pb-3">
           <GuidePromoCard />
@@ -2537,7 +2558,7 @@ const LANDING_COPY = {
     navCta: "Start for free",
     heroTitle: "The simplest way to design your home's lighting.",
     heroSubtitle: "Get professional recommendations in minutes. No technical knowledge required.",
-    heroCta: "✨ Start for free",
+    heroCta: "Start for free",
     heroTrust: "No sign-up. No commitment. Free report in minutes.",
     langNotice: "Note: the interactive questionnaire is currently only available in Spanish. Full English support is coming soon.",
     howTitle: "How does it work?",
