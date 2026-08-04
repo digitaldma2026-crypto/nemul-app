@@ -1983,12 +1983,12 @@ function GuidePromoCard() {
       target="_blank"
       rel="noopener noreferrer"
       onClick={() => { track("etsy_click", { desde: "informe" }); gaEvent("etsy_click", { desde: "informe" }); }}
-      className="tap-scale w-full flex items-center justify-center gap-2 py-3 font-body t-small font-medium"
-      style={{ color: COLORS.text, borderTop: `1px solid ${COLORS.border}`, borderBottom: `1px solid ${COLORS.border}` }}
+      className="tap-scale w-full flex items-center justify-center gap-2 py-4 font-body t-small font-medium"
+      style={{ color: COLORS.text, borderTop: `1px solid ${COLORS.text}`, borderBottom: `1px solid ${COLORS.text}` }}
     >
-      <BookOpen size={16} color={COLORS.subtext} strokeWidth={1.6} />
+      <BookOpen size={16} color={COLORS.text} strokeWidth={1.7} />
       Visita mi tienda de Etsy para más consejos de diseño
-      <ChevronRight size={14} color={COLORS.subtext} />
+      <ChevronRight size={14} color={COLORS.text} />
     </a>
   );
 }
@@ -2801,11 +2801,11 @@ function LandingGuideSection({ t }) {
           rel="noopener noreferrer"
           onClick={() => { track("etsy_click", { desde: "landing" }); gaEvent("etsy_click", { desde: "landing" }); }}
           className="tap-scale w-full flex items-center justify-center gap-2 py-4 font-body t-small font-medium"
-          style={{ color: COLORS.text, borderTop: `1px solid ${COLORS.border}`, borderBottom: `1px solid ${COLORS.border}` }}
+          style={{ color: COLORS.text, borderTop: `1px solid ${COLORS.text}`, borderBottom: `1px solid ${COLORS.text}` }}
         >
-          <BookOpen size={16} color={COLORS.subtext} strokeWidth={1.6} />
+          <BookOpen size={16} color={COLORS.text} strokeWidth={1.7} />
           {t.guideLine}
-          <ChevronRight size={14} color={COLORS.subtext} />
+          <ChevronRight size={14} color={COLORS.text} />
         </a>
       </Reveal>
     </section>
