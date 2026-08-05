@@ -2153,14 +2153,41 @@ async function downloadReportAsPdf(node, filename) {
   const ancho = node.scrollWidth || 1;
   const scale = Math.max(1, Math.min(2, MAX_LADO / alto, MAX_LADO / ancho));
 
-  // Dónde empieza y acaba cada bloque que no se puede partir (los errores a
-  // evitar, la firma del pie). Se mide sobre el informe real, antes de la
-  // foto, y se traduce a píxeles del lienzo multiplicando por la escala.
+  // Todo lo que sigue se mide sobre el informe real, antes de la foto, y se
+  // traduce a píxeles del lienzo multiplicando por la escala.
+  //
+  // Se mide en vez de mirar los píxeles de la imagen a propósito. Safari en
+  // iPhone marca como "contaminado" cualquier lienzo donde se haya dibujado
+  // un SVG —y el informe está lleno de iconos—, así que prohíbe leer sus
+  // píxeles. Un detector basado en la imagen falla siempre ahí, en silencio.
   const origen = node.getBoundingClientRect().top;
-  const bloquesEnteros = Array.from(node.querySelectorAll("[data-pdf-keep]")).map((el) => {
-    const r = el.getBoundingClientRect();
-    return { top: (r.top - origen) * scale, bottom: (r.bottom - origen) * scale };
-  });
+  const aPx = (r) => ({ top: (r.top - origen) * scale, bottom: (r.bottom - origen) * scale });
+
+  // Bloques que no se pueden partir entre dos páginas.
+  const bloquesEnteros = Array.from(node.querySelectorAll("[data-pdf-keep]")).map((el) =>
+    aPx(el.getBoundingClientRect()),
+  );
+
+  // Cada línea de texto del informe, una a una. getClientRects() sobre un
+  // rango de texto devuelve un rectángulo por línea pintada, que es justo la
+  // precisión que hace falta para no cortar ninguna por la mitad.
+  const lineas = [];
+  const paseo = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+  while (paseo.nextNode()) {
+    const nodoTexto = paseo.currentNode;
+    if (!nodoTexto.nodeValue || !nodoTexto.nodeValue.trim()) continue;
+    const rango = document.createRange();
+    rango.selectNodeContents(nodoTexto);
+    for (const r of rango.getClientRects()) {
+      if (r.height > 0) lineas.push(aPx(r));
+    }
+  }
+  // Los iconos no son texto, pero tampoco se pueden partir.
+  for (const svg of node.querySelectorAll("svg")) {
+    const r = svg.getBoundingClientRect();
+    if (r.height > 0) lineas.push(aPx(r));
+  }
+  const finContenido = lineas.reduce((max, l) => Math.max(max, l.bottom), 0);
 
   const canvas = await html2canvas(node, {
     scale,
@@ -2194,84 +2221,31 @@ async function downloadReportAsPdf(node, filename) {
   // Cuántos píxeles de alto del lienzo entran en una página A4.
   const pxPorPagina = Math.max(1, Math.floor((canvas.width * pageHeight) / pageWidth));
 
-  // Cortar siempre a la misma altura exacta parte el texto por la mitad. Antes
-  // de cortar buscamos un poco más arriba una franja donde no pase ninguna
-  // letra.
-  //
-  // El primer intento de esto exigía que toda la fila fuese de un mismo color,
-  // y por eso no funcionaba: las tarjetas del informe llevan un borde de 1 px
-  // que baja por los dos costados, así que TODAS las filas contenían dos
-  // píxeles distintos del fondo y ninguna pasaba el examen. El criterio bueno
-  // no es "de un solo color" sino "sin texto": los fondos, los bordes y los
-  // separadores son claros; el texto y los iconos, oscuros.
-  const fuente = canvas.getContext("2d");
-  const MARGEN_BUSQUEDA = Math.floor(pxPorPagina * 0.14);
-  const FILAS_LIBRES = 3;
-  const TOLERANCIA = 10;
-  const LUZ_MINIMA = 200; // por debajo de esto es tinta, no fondo
-  const LUZ_HUECO = 245; // casi blanco: el aire entre dos tarjetas
-  // Unos píxeles de aire por encima de un bloque que baja de página, para no
-  // rozar su borde superior al cortar.
-  const AIRE_ANTES_DE_BLOQUE = Math.max(2, Math.round(scale * 4));
+  const MARGEN_BUSQUEDA = Math.floor(pxPorPagina * 0.25);
+  // Unos píxeles de aire por encima de lo que baja de página, para no rozar
+  // su borde superior al cortar.
+  const AIRE = Math.max(2, Math.round(scale * 3));
 
-  const luminancia = (datos, i) =>
-    (datos[i] * 299 + datos[i + 1] * 587 + datos[i + 2] * 114) / 1000;
-
-  // ¿Ninguna letra cruza esta fila? Con umbral alto encuentra además el hueco
-  // blanco que separa dos tarjetas, que es un sitio aún mejor para cortar.
-  const filaLibre = (datos, fila, umbral) => {
-    const base = fila * canvas.width * 4;
-    for (let x = 0; x < canvas.width; x++) {
-      if (luminancia(datos, base + x * 4) < umbral) return false;
-    }
-    return true;
-  };
-
-  const filaLisa = (datos, fila) => {
-    const base = fila * canvas.width * 4;
-    const r = datos[base], g = datos[base + 1], b = datos[base + 2];
-    for (let x = 1; x < canvas.width; x++) {
-      const i = base + x * 4;
-      if (
-        Math.abs(datos[i] - r) > TOLERANCIA ||
-        Math.abs(datos[i + 1] - g) > TOLERANCIA ||
-        Math.abs(datos[i + 2] - b) > TOLERANCIA
-      ) return false;
-    }
-    return true;
-  };
-
+  // Sube el corte hasta que no atraviese ninguna línea de texto ni ningún
+  // icono. Cada vez que tropieza con uno, se coloca justo por encima y vuelve
+  // a comprobarlo todo, porque puede haber varios a distintas alturas (dos
+  // columnas, un icono al lado de su frase).
   const buscarCorte = (ideal) => {
-    const inicio = Math.max(0, ideal - MARGEN_BUSQUEDA);
-    const alto = ideal - inicio;
-    if (alto <= FILAS_LIBRES) return ideal;
-    try {
-      const banda = fuente.getImageData(0, inicio, canvas.width, alto).data;
-      // Primero el hueco entre tarjetas; si no hay, cualquier franja sin texto.
-      for (const umbral of [LUZ_HUECO, LUZ_MINIMA]) {
-        for (let fila = alto - 1; fila >= FILAS_LIBRES - 1; fila--) {
-          let libres = 0;
-          while (libres < FILAS_LIBRES && filaLibre(banda, fila - libres, umbral)) libres++;
-          if (libres === FILAS_LIBRES) return inicio + fila - 1;
+    const minimo = ideal - MARGEN_BUSQUEDA;
+    let corte = ideal;
+    for (let vuelta = 0; vuelta < 40; vuelta++) {
+      let tropieza = false;
+      for (const l of lineas) {
+        if (l.top < corte && l.bottom > corte) {
+          corte = l.top - AIRE;
+          tropieza = true;
         }
       }
-    } catch {
-      // Si el lienzo no deja leer sus píxeles, cortamos a la altura fija.
+      if (!tropieza) return corte;
+      // Si hay que subir tanto que la página quedaría a medias, no compensa.
+      if (corte < minimo) return ideal;
     }
     return ideal;
-  };
-
-  // Una última página con solo el margen sobrante sale completamente vacía.
-  const bandaVacia = (y, alto) => {
-    try {
-      const datos = fuente.getImageData(0, y, canvas.width, alto).data;
-      for (let fila = 0; fila < alto; fila += 2) {
-        if (!filaLisa(datos, fila)) return false;
-      }
-      return true;
-    } catch {
-      return false;
-    }
   };
 
   // Recortamos el lienzo página a página. Antes se incrustaba la imagen
@@ -2293,12 +2267,13 @@ async function downloadReportAsPdf(node, filename) {
       // justo antes y el bloque pasa completo a la hoja siguiente.
       const parte = bloquesEnteros.find((b) => b.top > y && b.top < ideal && b.bottom > ideal);
       const corte = parte && parte.top - y > pxPorPagina * 0.3
-        ? Math.round(parte.top) - AIRE_ANTES_DE_BLOQUE
+        ? Math.round(parte.top) - AIRE
         : buscarCorte(ideal);
       // Nunca dejamos una página a menos de un tercio: si no hay forma
       // limpia, mejor el corte fijo que una hoja casi vacía.
       if (corte - y > pxPorPagina * 0.3) altoTrozo = corte - y;
-    } else if (!primera && bandaVacia(y, altoTrozo)) {
+    } else if (!primera && y >= finContenido) {
+      // Lo que queda por debajo de la última línea es margen: una hoja vacía.
       break;
     }
     trozo.height = altoTrozo;
