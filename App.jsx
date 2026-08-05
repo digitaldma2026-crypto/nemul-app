@@ -2118,11 +2118,14 @@ function PrintableReport({ rooms, answersByRoom }) {
       {/* El aviso legal y la firma viajan juntos y sin partirse: en la última
           página salía media línea de "Nemul" abajo y la otra media arriba de
           una hoja que, por lo demás, quedaba en blanco. */}
-      <div data-pdf-keep>
+      <div>
         <p className="font-body t-caption text-center mt-8" style={{ color: COLORS.subtext }}>
           Estas recomendaciones son orientativas. Para la instalación eléctrica, consulta siempre a un profesional certificado.
         </p>
-        <div className="flex items-center justify-center gap-2.5 mt-5 pt-5" style={{ borderTop: `1px solid ${COLORS.border}` }}>
+        {/* Solo la firma es indivisible. Marcando también el aviso legal, los
+            dos juntos ocupaban demasiado y se iban a una página para ellos
+            solos. */}
+        <div data-pdf-keep className="flex items-center justify-center gap-2.5 mt-5 pt-5" style={{ borderTop: `1px solid ${COLORS.border}` }}>
           <span className="rounded-full" style={{ width: 6, height: 6, backgroundColor: COLORS.bulb }} />
           <span className="font-display" style={{ fontSize: 18, color: COLORS.text }}>Nemul</span>
           <span className="font-body t-small" style={{ color: COLORS.subtext }}>
@@ -2156,10 +2159,13 @@ async function downloadReportAsPdf(node, filename) {
   // Todo lo que sigue se mide sobre el informe real, antes de la foto, y se
   // traduce a píxeles del lienzo multiplicando por la escala.
   //
-  // Se mide en vez de mirar los píxeles de la imagen a propósito. Safari en
-  // iPhone marca como "contaminado" cualquier lienzo donde se haya dibujado
-  // un SVG —y el informe está lleno de iconos—, así que prohíbe leer sus
-  // píxeles. Un detector basado en la imagen falla siempre ahí, en silencio.
+  // Se mide con querySelectorAll + getBoundingClientRect y nada más. El
+  // intento anterior recorría los nodos de texto con un TreeWalker y pedía
+  // getClientRects() de cada uno, para tener precisión de línea: devolvía una
+  // lista vacía, y con la lista vacía esto cortaba a ciegas y además creía
+  // que el informe se acababa en el píxel cero. Un párrafo entero es menos
+  // preciso que una línea, pero se mide con la única vía que sabemos que
+  // responde bien aquí.
   const origen = node.getBoundingClientRect().top;
   const aPx = (r) => ({ top: (r.top - origen) * scale, bottom: (r.bottom - origen) * scale });
 
@@ -2168,26 +2174,17 @@ async function downloadReportAsPdf(node, filename) {
     aPx(el.getBoundingClientRect()),
   );
 
-  // Cada línea de texto del informe, una a una. getClientRects() sobre un
-  // rango de texto devuelve un rectángulo por línea pintada, que es justo la
-  // precisión que hace falta para no cortar ninguna por la mitad.
-  const lineas = [];
-  const paseo = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
-  while (paseo.nextNode()) {
-    const nodoTexto = paseo.currentNode;
-    if (!nodoTexto.nodeValue || !nodoTexto.nodeValue.trim()) continue;
-    const rango = document.createRange();
-    rango.selectNodeContents(nodoTexto);
-    for (const r of rango.getClientRects()) {
-      if (r.height > 0) lineas.push(aPx(r));
-    }
+  // Todo lo que lleva tinta: párrafos, rótulos e iconos. Ningún corte puede
+  // caer dentro de uno de estos rectángulos.
+  const bloquesTinta = [];
+  for (const el of node.querySelectorAll("p, span, svg")) {
+    const r = el.getBoundingClientRect();
+    if (r.height > 0) bloquesTinta.push(aPx(r));
   }
-  // Los iconos no son texto, pero tampoco se pueden partir.
-  for (const svg of node.querySelectorAll("svg")) {
-    const r = svg.getBoundingClientRect();
-    if (r.height > 0) lineas.push(aPx(r));
-  }
-  const finContenido = lineas.reduce((max, l) => Math.max(max, l.bottom), 0);
+  // Si por lo que sea no se ha podido medir nada, finContenido se queda a cero
+  // y más abajo eso NO puede servir para descartar páginas: perder el final
+  // del informe es mucho peor que dejar una hoja de más.
+  const finContenido = bloquesTinta.reduce((max, l) => Math.max(max, l.bottom), 0);
 
   const canvas = await html2canvas(node, {
     scale,
@@ -2226,18 +2223,18 @@ async function downloadReportAsPdf(node, filename) {
   // su borde superior al cortar.
   const AIRE = Math.max(2, Math.round(scale * 3));
 
-  // Sube el corte hasta que no atraviese ninguna línea de texto ni ningún
-  // icono. Cada vez que tropieza con uno, se coloca justo por encima y vuelve
-  // a comprobarlo todo, porque puede haber varios a distintas alturas (dos
-  // columnas, un icono al lado de su frase).
+  // Sube el corte hasta que no atraviese ningún párrafo, rótulo ni icono.
+  // Cada vez que tropieza con uno, se coloca justo por encima y vuelve a
+  // comprobarlo todo, porque puede haber varios a distintas alturas (un icono
+  // al lado de su frase, un rótulo pegado a su tarjeta).
   const buscarCorte = (ideal) => {
     const minimo = ideal - MARGEN_BUSQUEDA;
     let corte = ideal;
-    for (let vuelta = 0; vuelta < 40; vuelta++) {
+    for (let vuelta = 0; vuelta < 60; vuelta++) {
       let tropieza = false;
-      for (const l of lineas) {
-        if (l.top < corte && l.bottom > corte) {
-          corte = l.top - AIRE;
+      for (const b of bloquesTinta) {
+        if (b.top < corte && b.bottom > corte) {
+          corte = b.top - AIRE;
           tropieza = true;
         }
       }
@@ -2272,8 +2269,10 @@ async function downloadReportAsPdf(node, filename) {
       // Nunca dejamos una página a menos de un tercio: si no hay forma
       // limpia, mejor el corte fijo que una hoja casi vacía.
       if (corte - y > pxPorPagina * 0.3) altoTrozo = corte - y;
-    } else if (!primera && y >= finContenido) {
-      // Lo que queda por debajo de la última línea es margen: una hoja vacía.
+    } else if (!primera && finContenido > 0 && y >= finContenido) {
+      // Lo que queda por debajo del último texto es margen: una hoja vacía.
+      // El "finContenido > 0" es deliberado: si la medición falla, esta línea
+      // se desactiva sola en vez de tirar la última página del informe.
       break;
     }
     trozo.height = altoTrozo;
