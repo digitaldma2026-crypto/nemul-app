@@ -372,13 +372,16 @@ function generateLivingReport(answers = {}) {
   if (renovationStatus === "renovation" || problem === "renovating") tips.push("Como vas a reformar desde cero, aprovecha para dejar previstos varios circuitos independientes y reguladores de intensidad.");
   if (renovationStatus === "onlyLights") tips.push("Como solo vas a cambiar las luminarias, prioriza soluciones que aprovechen los puntos de luz ya existentes, como sustituir un plafón por un foco orientable en el mismo lugar.");
 
+  // Los errores se redactan siempre igual: qué evitar y por qué. Antes eran
+  // imperativos secos ("No utilices...") que sonaban a lista de
+  // prohibiciones y, sobre todo, no explicaban la consecuencia.
   const mistakes = [
-    "No utilices una única lámpara en el centro del salón.",
-    "No mezcles temperaturas de color muy diferentes.",
-    "No coloques todos los focos pegados a las paredes.",
+    "Evita depender de una única lámpara en el centro del salón, ya que genera una luz plana y deja las esquinas apagadas.",
+    "Evita mezclar temperaturas de color muy diferentes en la misma estancia, ya que el contraste hace que el conjunto se perciba desordenado.",
+    "Evita colocar todos los focos pegados a las paredes, ya que iluminan más el muro que la zona donde realmente se hace vida.",
   ];
-  if (activities.includes("tv") || problem === "glare") mistakes.push("No ilumines directamente la pantalla del televisor.");
-  if (ceiling === "vigas") mistakes.push("No empotres focos en las vigas de madera sin consultarlo antes con un instalador.");
+  if (activities.includes("tv") || problem === "glare") mistakes.push("Evita dirigir la luz directamente hacia la pantalla del televisor, ya que produce reflejos que obligan a forzar la vista.");
+  if (ceiling === "vigas") mistakes.push("No es recomendable empotrar focos en las vigas de madera sin consultarlo antes con un instalador, ya que son elementos estructurales y no siempre admiten perforaciones.");
 
   return { tempK, lumens, downlightsLow, downlightsHigh, area, lux, tips: [...new Set(tips)], mistakes: [...new Set(mistakes)] };
 }
@@ -536,9 +539,17 @@ function generateKitchenReport(answers = {}) {
   // península. La casilla de "varias zonas" añade su consejo encima, porque
   // se puede tener isla y cocinar además en la encimera.
   if (layout === "isla") {
-    sentences.push("Sobre la isla, dos o tres lámparas colgantes crearán un punto focal y una luz más agradable para desayunar o reunirte con la familia.");
+    sentences.push("Sobre la isla, dos o tres lámparas colgantes ayudan a crear un punto focal y una iluminación más agradable para cocinar, desayunar o reunirse.");
+    // Las medidas concretas faltaban: el informe decía "no las cuelgues
+    // demasiado bajas" sin decir nunca cuál era la altura buena. En el
+    // comedor sí se daba el número, y la isla es la pieza más visible de
+    // una cocina.
+    sentences.push("Cuélgalas entre 75 y 85 cm por encima de la encimera. Esa altura ofrece una buena iluminación de trabajo y evita deslumbramientos.");
+    sentences.push("Sepáralas entre 60 y 80 cm entre sí, y deja unos 30 cm libres hasta cada extremo de la isla para conseguir una distribución más uniforme de la luz.");
+    sentences.push("Con dos colgantes cubres una isla de hasta 1,80 m; a partir de 2,20 m, reparte mejor la luz con tres.");
   } else if (layout === "peninsula") {
-    sentences.push("Sobre la península, un par de colgantes lineales marcan la zona de trabajo sin cerrar la vista hacia el resto de la cocina.");
+    sentences.push("Sobre la península, un par de colgantes lineales ayudan a marcar la zona de trabajo sin cerrar la vista hacia el resto de la cocina.");
+    sentences.push("Cuélgalos entre 75 y 85 cm por encima de la encimera, la misma altura que sobre una isla. Si la península mide menos de 1,20 m, suele ser suficiente con un solo colgante centrado.");
   } else if (!multiZone) {
     sentences.push("Sobre la encimera principal, una regleta de luz continua bajo los muebles altos elimina las sombras que tus propias manos proyectan al cocinar.");
   }
@@ -566,14 +577,17 @@ function generateKitchenReport(answers = {}) {
   else if (adjoiningStyle === "equilibrado") sentences.push("Como el salón contiguo tiene un ambiente equilibrado, tu cocina puede mantener su temperatura de trabajo sin que se note un salto brusco entre ambos espacios.");
 
   const mistakes = [
-    "No coloques un único punto de luz general en el centro: dejarás la encimera en sombra.",
+    "Evita concentrar toda la luz en un único punto central, ya que tu propio cuerpo proyectará sombra sobre la encimera al cocinar.",
     "Evita diferencias muy marcadas de temperatura de color entre las distintas zonas de la cocina.",
-    "No ilumines la zona de trabajo únicamente con luz cálida: dificulta ver bien el punto de cocción.",
+    "Evita iluminar la zona de trabajo únicamente con luz cálida, ya que dificulta apreciar el color real de los alimentos y el punto de cocción.",
   ];
-  if (upperCabinets && upperCabinets !== "no") mistakes.push("No dejes los muebles altos sin luz debajo: proyectan sombra justo sobre donde más la necesitas.");
-  if (layout === "isla") mistakes.push("No cuelgues las lámparas demasiado bajas sobre la isla: interfieren con la vista entre comensales.");
-  if (problem === "onlyLighting") mistakes.push("No elijas soluciones que requieran romper alicatado o encimera si no vas a hacer obra.");
-  if (adjoiningStyle) mistakes.push("No dejes la cocina con una temperatura de luz totalmente distinta a la del salón: en un espacio abierto, el contraste se nota mucho más que en una habitación cerrada.");
+  if (upperCabinets && upperCabinets !== "no") mistakes.push("Evita dejar los muebles altos sin iluminación debajo, ya que proyectan sombra justo sobre la superficie de trabajo.");
+  // Un error a evitar tiene que dar la medida. "Demasiado bajas" dejaba a
+  // quien lo leía igual que estaba.
+  if (layout === "isla") mistakes.push("Evita instalar las lámparas a menos de 75 cm de la encimera, ya que pueden producir deslumbramientos y obstaculizar la visión entre las personas situadas a ambos lados de la isla.");
+  else if (layout === "peninsula") mistakes.push("Evita instalar las lámparas a menos de 75 cm de la encimera, ya que pueden producir deslumbramientos y quedar dentro del campo de visión desde el resto de la cocina.");
+  if (problem === "onlyLighting") mistakes.push("No conviene elegir soluciones que requieran romper alicatado o encimera, ya que encarecen mucho una intervención pensada sin obra.");
+  if (adjoiningStyle) mistakes.push("Evita una temperatura de luz muy distinta entre la cocina y el salón, ya que en un espacio abierto el contraste se percibe con mucha más fuerza que entre habitaciones separadas.");
 
   return { tempK, lumens, downlightsLow, downlightsHigh, area, lux, distribution, narrative: sentences.join(" "), mistakes: [...new Set(mistakes)] };
 }
@@ -1068,31 +1082,34 @@ const ROOM_TECH_CONFIG = {
 
 const ROOM_TECH_MISTAKES = {
   bedroom: [
-    "No ilumines la zona de la cama con un único punto de techo: combina apliques, una lámpara de sobremesa, una suspensión o tiras de led escondidas, cuidando siempre que ninguna deslumbre estando tumbado.",
-    "No mezcles tonos de luz muy distintos entre la zona de la cama y la zona de vestir.",
+    "Evita iluminar la zona de la cama con un único punto de techo, ya que deslumbra estando tumbado; es preferible combinar apliques, una lámpara de sobremesa, una suspensión o tiras de led ocultas.",
+    "Evita tonos de luz muy distintos entre la zona de la cama y la de vestir, ya que el salto de temperatura rompe la sensación de descanso.",
   ],
   bathroom: [
-    "No coloques un único punto de luz cenital sobre el espejo: usa apliques de luz directa a ambos lados para evitar sombras bajo los ojos y la nariz.",
-    "No mezcles temperaturas de color muy distintas entre la zona del espejo y el resto del baño.",
-    "No dejes el lavabo sin un punto de luz propio: un downlight de haz algo cerrado sobre esa zona la enmarca y aporta luz general al baño.",
-    "No empotres luminarias directamente en el techo de la ducha: mejor luz indirecta con tiras led estancas (IP67) ocultas en un foseado de techo o una hornacina.",
+    "Evita un único punto de luz cenital sobre el espejo, ya que genera sombras bajo los ojos y la nariz; es preferible usar apliques de luz directa a ambos lados.",
+    "Evita diferencias marcadas de temperatura de color entre la zona del espejo y el resto del baño, ya que el contraste altera la percepción del tono de piel.",
+    "Evita dejar el lavabo sin un punto de luz propio, ya que es la zona de mayor uso; un downlight de haz algo cerrado la enmarca y aporta luz general al baño.",
+    "Evita empotrar luminarias directamente en el techo de la ducha, ya que quedan expuestas al vapor; suele funcionar mejor una luz indirecta con tiras led estancas (IP67) ocultas en un foseado o una hornacina.",
   ],
   dining: [
-    "No cuelgues la lámpara demasiado alta sobre la mesa: pierde función si queda muy por encima de la superficie.",
-    "No ilumines solo el centro si la mesa es grande: deja los extremos en sombra.",
-    "No dependas solo de luz general difusa: sin un punto centrado sobre la mesa, el comedor se ve plano y la mesa mal iluminada.",
+    "Evita colgar la lámpara a más de 90 cm sobre la mesa, ya que la luz se dispersa y deja de cumplir su función sobre la superficie.",
+    "Evita iluminar únicamente el centro de una mesa grande, ya que los extremos quedan en sombra.",
+    "No conviene depender solo de la luz general difusa, ya que sin un punto centrado sobre la mesa el comedor se percibe plano.",
   ],
   closet: [
-    "No uses luz muy cálida como única fuente: distorsiona el color real de la ropa.",
-    "No dejes los armarios cerrados sin luz interior si son profundos: la luz general no llega bien al fondo.",
+    "Evita la luz muy cálida como única fuente, ya que distorsiona el color real de la ropa al vestirte.",
+    "Evita dejar sin luz interior los armarios cerrados y profundos, ya que la luz general no alcanza el fondo.",
   ],
   terrace: [
-    "No uses luminarias sin certificación para exterior si la terraza está descubierta.",
-    "No dependas de un único foco potente: reparte varios puntos de menor intensidad.",
+    "Evita luminarias sin certificación para exterior en una terraza descubierta, ya que la lluvia y la humedad acortan mucho su vida útil.",
+    "Evita concentrar la luz en un único foco potente, ya que crea contrastes duros; suele funcionar mejor repartir varios puntos de menor intensidad.",
   ],
   office: [
-    "No coloques una lámpara de escritorio que proyecte la sombra de tu propia mano al escribir: debe venir del lado contrario a tu mano dominante.",
-    "No dependas solo del brillo de la pantalla como fuente de luz: fuerza mucho la vista en sesiones largas.",
+    "Evita situar la lámpara de escritorio del mismo lado que tu mano dominante, ya que proyectará la sombra de tu propia mano al escribir.",
+    "No es recomendable depender solo del brillo de la pantalla como fuente de luz, ya que el contraste con un entorno oscuro fatiga la vista en sesiones largas.",
+  ],
+  hallway: [
+    "Evita iluminar el pasillo únicamente con un punto de luz central. La iluminación debe acompañar el recorrido y facilitar la orientación.",
   ],
 };
 
@@ -1273,6 +1290,9 @@ function getFlowForRoom(roomId, answers) {
 function getReport(roomId, answers = {}) {
   const parts = [];
   if (roomId === "hallway") {
+    // Abre el informe del pasillo: es la idea que cambia el planteamiento
+    // antes de entrar en longitudes y sensores.
+    parts.push("En un pasillo no siempre es necesario instalar iluminación en el techo. Un foseado lineal, balizas, apliques de pared o tiras LED en el rodapié pueden guiar el recorrido con una luz uniforme, evitando deslumbramientos y creando un ambiente más agradable.");
     if (HALLWAY_LENGTH_INSIGHT[answers.length]) parts.push(HALLWAY_LENGTH_INSIGHT[answers.length]);
     if (LIGHT_INSIGHT[answers.light]) parts.push(LIGHT_INSIGHT[answers.light]);
     if (HALLWAY_SENSOR_INSIGHT[answers.sensor]) parts.push(HALLWAY_SENSOR_INSIGHT[answers.sensor]);
@@ -1740,9 +1760,11 @@ function StatRow({ label, value }) {
   );
 }
 
+// data-pdf-keep: al generar el PDF, este bloque no se parte entre dos
+// páginas. Si no cabe en lo que queda de hoja, pasa entero a la siguiente.
 function MistakesList({ mistakes }) {
   return (
-    <div>
+    <div data-pdf-keep>
       <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.warning }}>Errores que debes evitar</p>
       <div className="flex flex-col gap-2">
         {mistakes.map((m, i) => (
@@ -1935,6 +1957,9 @@ function KitchenReportCard({ room, answers, expanded, onToggle }) {
 
 function RoomReportCard({ room, answers, expanded, onToggle }) {
   const insights = getReport(room.id, answers);
+  // Este informe era el único sin "Errores que debes evitar", así que salía
+  // más pobre que el resto al ponerlos uno al lado de otro.
+  const mistakes = ROOM_TECH_MISTAKES[room.id] || [];
   const { Icon } = room;
   return (
     <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
@@ -1947,13 +1972,16 @@ function RoomReportCard({ room, answers, expanded, onToggle }) {
         <ChevronDown size={16} color={COLORS.subtext} style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
       </button>
       {expanded && (
-        <div className="px-5 pb-5 flex flex-col gap-3">
-          {insights.map((text, i) => (
-            <div key={i} className="flex items-start gap-3 rounded-xl p-3.5" style={{ backgroundColor: COLORS.bg }}>
-              <div className="w-1.5 h-1.5 rounded-full mt-2 shrink-0" style={{ backgroundColor: COLORS.accent }} />
-              <p className="font-body t-body" style={{ color: COLORS.text }}>{text}</p>
-            </div>
-          ))}
+        <div className="px-5 pb-5 flex flex-col gap-5">
+          <div className="flex flex-col gap-3">
+            {insights.map((text, i) => (
+              <div key={i} className="flex items-start gap-3 rounded-xl p-3.5" style={{ backgroundColor: COLORS.bg }}>
+                <div className="w-1.5 h-1.5 rounded-full mt-2 shrink-0" style={{ backgroundColor: COLORS.accent }} />
+                <p className="font-body t-body" style={{ color: COLORS.text }}>{text}</p>
+              </div>
+            ))}
+          </div>
+          {mistakes.length > 0 && <MistakesList mistakes={mistakes} />}
         </div>
       )}
     </div>
@@ -2087,15 +2115,20 @@ function PrintableReport({ rooms, answersByRoom }) {
           <ReportCard key={room.id} room={room} answers={answersByRoom[room.id]} expanded={true} onToggle={() => {}} />
         ))}
       </div>
-      <p className="font-body t-caption text-center mt-8" style={{ color: COLORS.subtext }}>
-        Estas recomendaciones son orientativas. Para la instalación eléctrica, consulta siempre a un profesional certificado.
-      </p>
-      <div className="flex items-center justify-center gap-2.5 mt-5 pt-5" style={{ borderTop: `1px solid ${COLORS.border}` }}>
-        <span className="rounded-full" style={{ width: 6, height: 6, backgroundColor: COLORS.bulb }} />
-        <span className="font-display" style={{ fontSize: 18, color: COLORS.text }}>Nemul</span>
-        <span className="font-body t-small" style={{ color: COLORS.subtext }}>
-          Diseña la iluminación de tu hogar en nemul.app
-        </span>
+      {/* El aviso legal y la firma viajan juntos y sin partirse: en la última
+          página salía media línea de "Nemul" abajo y la otra media arriba de
+          una hoja que, por lo demás, quedaba en blanco. */}
+      <div data-pdf-keep>
+        <p className="font-body t-caption text-center mt-8" style={{ color: COLORS.subtext }}>
+          Estas recomendaciones son orientativas. Para la instalación eléctrica, consulta siempre a un profesional certificado.
+        </p>
+        <div className="flex items-center justify-center gap-2.5 mt-5 pt-5" style={{ borderTop: `1px solid ${COLORS.border}` }}>
+          <span className="rounded-full" style={{ width: 6, height: 6, backgroundColor: COLORS.bulb }} />
+          <span className="font-display" style={{ fontSize: 18, color: COLORS.text }}>Nemul</span>
+          <span className="font-body t-small" style={{ color: COLORS.subtext }}>
+            Diseña la iluminación de tu hogar en nemul.app
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -2119,6 +2152,15 @@ async function downloadReportAsPdf(node, filename) {
   const alto = node.scrollHeight || 1;
   const ancho = node.scrollWidth || 1;
   const scale = Math.max(1, Math.min(2, MAX_LADO / alto, MAX_LADO / ancho));
+
+  // Dónde empieza y acaba cada bloque que no se puede partir (los errores a
+  // evitar, la firma del pie). Se mide sobre el informe real, antes de la
+  // foto, y se traduce a píxeles del lienzo multiplicando por la escala.
+  const origen = node.getBoundingClientRect().top;
+  const bloquesEnteros = Array.from(node.querySelectorAll("[data-pdf-keep]")).map((el) => {
+    const r = el.getBoundingClientRect();
+    return { top: (r.top - origen) * scale, bottom: (r.bottom - origen) * scale };
+  });
 
   const canvas = await html2canvas(node, {
     scale,
@@ -2161,6 +2203,9 @@ async function downloadReportAsPdf(node, filename) {
   const MARGEN_BUSQUEDA = Math.floor(pxPorPagina * 0.14);
   const FILAS_LISAS = 3;
   const TOLERANCIA = 10;
+  // Unos píxeles de aire por encima de un bloque que baja de página, para no
+  // rozar su borde superior al cortar.
+  const AIRE_ANTES_DE_BLOQUE = Math.max(2, Math.round(scale * 4));
 
   const filaLisa = (datos, fila) => {
     const base = fila * canvas.width * 4;
@@ -2219,10 +2264,17 @@ async function downloadReportAsPdf(node, filename) {
     let altoTrozo = Math.min(pxPorPagina, canvas.height - y);
     const esUltima = y + altoTrozo >= canvas.height;
     if (!esUltima) {
-      const corte = buscarCorte(y + altoTrozo);
-      // Nunca dejamos una página a menos de media: si no hay hueco limpio
-      // más arriba, mejor el corte fijo que una página medio vacía.
-      if (corte - y > pxPorPagina * 0.5) altoTrozo = corte - y;
+      const ideal = y + altoTrozo;
+      // Primero manda el bloque entero: si el corte cae dentro de uno que
+      // empieza en esta página y termina en la siguiente, cerramos la página
+      // justo antes y el bloque pasa completo a la hoja siguiente.
+      const parte = bloquesEnteros.find((b) => b.top > y && b.top < ideal && b.bottom > ideal);
+      const corte = parte && parte.top - y > pxPorPagina * 0.3
+        ? Math.round(parte.top) - AIRE_ANTES_DE_BLOQUE
+        : buscarCorte(ideal);
+      // Nunca dejamos una página a menos de un tercio: si no hay forma
+      // limpia, mejor el corte fijo que una hoja casi vacía.
+      if (corte - y > pxPorPagina * 0.3) altoTrozo = corte - y;
     } else if (!primera && bandaVacia(y, altoTrozo)) {
       break;
     }
