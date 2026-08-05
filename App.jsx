@@ -239,14 +239,19 @@ function downlightRange(lumens, minCount) {
 
 // Traducción a lenguaje humano: el número técnico no desaparece, pero nunca
 // se queda solo. Así lo explicaría una diseñadora en persona.
+// Estas descripciones acompañan al número en todas las estancias, así que
+// hablan solo de la luz. Antes comparaban con una habitación concreta ("como
+// la de una cocina moderna") y ese mismo texto salía en el dormitorio o en el
+// baño. El porqué de esa temperatura en esta estancia se explica después, en
+// la recomendación de diseño, que sí conoce las respuestas del cuestionario.
 const TEMP_HUMAN = {
-  2700: "Luz cálida, similar a la de un salón acogedor al atardecer.",
-  3000: "Luz cálida neutra, ideal para crear un ambiente confortable y natural.",
-  3500: "Luz neutra cálida, similar a la de un hogar moderno y bien iluminado.",
-  4000: "Luz blanca neutra, similar a la de una cocina moderna bien iluminada.",
+  2700: "Luz cálida, ideal para crear un ambiente acogedor y relajante.",
+  3000: "Luz cálida con un equilibrio entre confort y funcionalidad.",
+  3500: "Luz blanco cálido-neutro, adecuada para espacios versátiles y de uso diario.",
+  4000: "Luz blanca neutra, que mejora la visibilidad y la percepción de los detalles.",
 };
 function describeTempK(tempK) {
-  return TEMP_HUMAN[tempK] || "un tono de luz equilibrado";
+  return TEMP_HUMAN[tempK] || "Un tono de luz equilibrado para el uso diario.";
 }
 function describeLux(lux) {
   if (lux < 130) return "un ambiente suave, pensado para relajarse";
@@ -320,7 +325,7 @@ function inferLivingStyle(activities = [], goals = [], problem) {
 }
 
 function generateLivingReport(answers = {}) {
-  const { activities = [], size, light, ceiling, goals = [], problem, renovationStatus, diningShape, diningSeats, diningPendant } = answers;
+  const { activities = [], size, light, ceiling, goals = [], problem, renovationStatus, diningShape } = answers;
 
   const area = SALON_AREA_BY_SIZE[size] || 20;
   const style = inferLivingStyle(activities, goals, problem);
@@ -346,9 +351,14 @@ function generateLivingReport(answers = {}) {
 
   // Comedor integrado (Salón-Comedor abierto): reutiliza el mismo criterio que en un comedor independiente.
   if (EXTRA_INSIGHT.dining?.shape?.[diningShape]) tips.push(EXTRA_INSIGHT.dining.shape[diningShape]);
-  if (EXTRA_INSIGHT.dining?.seats?.[diningSeats]) tips.push(EXTRA_INSIGHT.dining.seats[diningSeats]);
-  if (EXTRA_INSIGHT.dining?.pendant?.[diningPendant]) tips.push(EXTRA_INSIGHT.dining.pendant[diningPendant]);
-  if (diningShape || diningSeats || diningPendant) tips.push("Como el salón y el comedor comparten el mismo espacio, mantén una temperatura de luz similar en ambas zonas: usa la mesa para marcar la diferencia con un punto de luz propio, no con un tono distinto.");
+  if (diningShape) {
+    // El número de comensales y el "¿quieres colgante?" eran dos preguntas
+    // para dos consejos sueltos. El primero ya se deduce del tamaño y la
+    // forma de la mesa; el segundo se recomienda de oficio, porque en un
+    // salón-comedor es lo que separa las dos zonas sin cambiar el tono.
+    tips.push("Sobre la mesa, una lámpara colgante a 70–90 cm de la superficie ilumina bien sin bloquear la vista entre comensales, y marca la zona de comedor dentro del salón.");
+    tips.push("Como el salón y el comedor comparten el mismo espacio, mantén una temperatura de luz similar en ambas zonas: usa la mesa para marcar la diferencia con un punto de luz propio, no con un tono distinto.");
+  }
 
   if (ceiling === "vigas") tips.push("Con vigas vistas, evita empotrar downlights en la madera: opta por focos de superficie o carriles que se adapten a la estructura.");
   if (ceiling === "pladur") tips.push("Un falso techo de pladur es ideal para empotrar downlights e integrar tiras LED perimetrales sin obra adicional. Elige uno con acabado negro y la fuente de luz más hundida: da más confort visual que uno blanco y superficial.");
@@ -406,13 +416,6 @@ const KITCHEN_UPPER_CABINETS_OPTIONS = [
   { id: "no", label: "No" },
 ];
 
-const KITCHEN_WORK_ZONE_OPTIONS = [
-  { id: "encimera", label: "Encimera principal" },
-  { id: "isla", label: "Isla" },
-  { id: "peninsula", label: "Península" },
-  { id: "varias", label: "En varias zonas" },
-];
-
 const KITCHEN_PROBLEM_OPTIONS = [
   { id: "shadows", label: "La encimera tiene sombras" },
   { id: "visibility", label: "No veo bien cuando cocino" },
@@ -437,13 +440,23 @@ const KITCHEN_SIZE_OPTIONS = [
 ];
 const KITCHEN_AREA_BY_SIZE = Object.fromEntries(KITCHEN_SIZE_OPTIONS.map((o) => [o.id, o.area]));
 
-const KITCHEN_CEILING_HEIGHT_OPTIONS = [
-  { id: "h240", label: "2,40 m" },
-  { id: "h250", label: "2,50 m" },
-  { id: "h270", label: "2,70 m" },
-  { id: "h300", label: "Más de 3 m" },
-];
-const KITCHEN_HEIGHT_FACTOR = { h240: 1, h250: 1, h270: 1.1, h300: 1.2 };
+// Antes esto eran dos pantallas propias. La altura del techo se preguntaba
+// con cuatro opciones de las que dos (2,40 y 2,50) multiplicaban por 1, y la
+// zona de trabajo repetía lo que la distribución ya decía: "Con isla" y "Con
+// península" son opciones de esa primera pregunta. Ahora las dos viajan como
+// casilla dentro de una pregunta que ya existía: el cálculo conserva la
+// variable y el cuestionario baja de diez pasos a ocho.
+const TALL_CEILING_FACTOR = 1.15;
+const TALL_CEILING_EXTRA = {
+  key: "tallCeiling",
+  label: "Mi techo mide más de 2,70 m",
+  hint: "Solo si es más alto de lo habitual.",
+};
+const KITCHEN_MULTI_ZONE_EXTRA = {
+  key: "multiZone",
+  label: "Preparo la comida en varias zonas",
+  hint: "Por ejemplo, encimera e isla a la vez.",
+};
 
 const KITCHEN_LAYOUT_PHRASE = {
   lineal: "es lineal",
@@ -477,7 +490,7 @@ function joinNatural(items) {
 }
 
 function generateKitchenReport(answers = {}) {
-  const { layout, priorities = [], upperCabinets, workZone, size, ceilingHeight, light, problem, renovationStatus, adjoiningStyle } = answers;
+  const { layout, priorities = [], upperCabinets, multiZone, size, tallCeiling, light, problem, renovationStatus, adjoiningStyle } = answers;
 
   let tempK = 3000;
   if (priorities.includes("practical") || priorities.includes("comfortable")) tempK = 4000;
@@ -487,7 +500,7 @@ function generateKitchenReport(answers = {}) {
   const lux = getLux("kitchen", light);
 
   const area = KITCHEN_AREA_BY_SIZE[size] || 11;
-  const heightFactor = KITCHEN_HEIGHT_FACTOR[ceilingHeight] || 1;
+  const heightFactor = tallCeiling ? TALL_CEILING_FACTOR : 1;
   const lumens = Math.round((lux * area * heightFactor) / 100) * 100;
   const { low: downlightsLow, high: downlightsHigh } = downlightRange(lumens, 4);
 
@@ -495,12 +508,14 @@ function generateKitchenReport(answers = {}) {
   distribution.push(`${downlightsLow}–${downlightsHigh} downlights recomendados.`);
   distribution.push("Separación aproximada entre focos: 1,20–1,50 m, adaptada al tamaño de la cocina.");
   if (upperCabinets && upperCabinets !== "no") {
-    distribution.push("Coloca la línea de focos entre 20 y 30 cm por delante de los muebles altos, para iluminar bien el centro de la encimera y evitar sombras al cocinar.");
+    distribution.push("Coloca la línea de focos entre 30 y 40 cm por delante de los muebles altos, para iluminar bien el centro de la encimera y evitar sombras al cocinar.");
     distribution.push("Añade iluminación LED bajo los muebles altos.");
   } else {
     distribution.push("Centra la línea de focos sobre la zona de trabajo principal para evitar sombras al cocinar.");
   }
-  if (ceilingHeight === "h300") distribution.push("Con un techo tan alto, valora downlights de mayor potencia o un ángulo de haz más cerrado para que la luz llegue bien hasta la encimera.");
+  // Este consejo antes solo lo veía quien elegía exactamente 3,00 m. Ahora
+  // llega a cualquier techo por encima de 2,70, que es cuando empieza a notarse.
+  if (tallCeiling) distribution.push("Con un techo alto, valora downlights de mayor potencia o un ángulo de haz más cerrado para que la luz llegue bien hasta la encimera.");
   distribution.push(`Temperatura recomendada: ${tempK} K.`);
   distribution.push("Índice de reproducción cromática: CRI ≥ 90, para ver bien el color real de los alimentos.");
 
@@ -512,16 +527,23 @@ function generateKitchenReport(answers = {}) {
     : "crear un ambiente agradable para desayunar o reunirte con la familia";
 
   const sentences = [];
-  sentences.push(`Como para ti lo más importante es ${priorityIntro}, y tu cocina ${layoutPhrase}, te recomendamos una iluminación principal de ${tempK}K para ${goalPhrase}.`);
+  // "Se recomienda" en vez de "te recomendamos": el informe es orientativo y
+  // cada cocina real tiene condiciones que el cuestionario no ve. Suena a
+  // criterio profesional, no a norma cerrada.
+  sentences.push(`Como para ti lo más importante es ${priorityIntro}, y tu cocina ${layoutPhrase}, se recomienda una iluminación general en torno a ${tempK}K para ${goalPhrase}.`);
 
-  if (workZone === "isla" || (layout === "isla" && workZone !== "encimera")) {
+  // La zona de trabajo se deduce de la distribución, que ya distingue isla y
+  // península. La casilla de "varias zonas" añade su consejo encima, porque
+  // se puede tener isla y cocinar además en la encimera.
+  if (layout === "isla") {
     sentences.push("Sobre la isla, dos o tres lámparas colgantes crearán un punto focal y una luz más agradable para desayunar o reunirte con la familia.");
-  } else if (workZone === "peninsula" || layout === "peninsula") {
+  } else if (layout === "peninsula") {
     sentences.push("Sobre la península, un par de colgantes lineales marcan la zona de trabajo sin cerrar la vista hacia el resto de la cocina.");
-  } else if (workZone === "varias") {
-    sentences.push("Como trabajas en varias zonas, reparte la luz en puntos independientes en lugar de concentrarla en un único lugar.");
-  } else {
+  } else if (!multiZone) {
     sentences.push("Sobre la encimera principal, una regleta de luz continua bajo los muebles altos elimina las sombras que tus propias manos proyectan al cocinar.");
+  }
+  if (multiZone) {
+    sentences.push("Como trabajas en varias zonas, reparte la luz en puntos independientes en lugar de concentrarla en un único lugar.");
   }
 
   if (upperCabinets === "unaPared") {
@@ -545,11 +567,11 @@ function generateKitchenReport(answers = {}) {
 
   const mistakes = [
     "No coloques un único punto de luz general en el centro: dejarás la encimera en sombra.",
-    "No mezcles temperaturas de color muy distintas entre la zona de trabajo y la de comer.",
+    "Evita diferencias muy marcadas de temperatura de color entre las distintas zonas de la cocina.",
     "No ilumines la zona de trabajo únicamente con luz cálida: dificulta ver bien el punto de cocción.",
   ];
   if (upperCabinets && upperCabinets !== "no") mistakes.push("No dejes los muebles altos sin luz debajo: proyectan sombra justo sobre donde más la necesitas.");
-  if (workZone === "isla" || layout === "isla") mistakes.push("No cuelgues las lámparas demasiado bajas sobre la isla: interfieren con la vista entre comensales.");
+  if (layout === "isla") mistakes.push("No cuelgues las lámparas demasiado bajas sobre la isla: interfieren con la vista entre comensales.");
   if (problem === "onlyLighting") mistakes.push("No elijas soluciones que requieran romper alicatado o encimera si no vas a hacer obra.");
   if (adjoiningStyle) mistakes.push("No dejes la cocina con una temperatura de luz totalmente distinta a la del salón: en un espacio abierto, el contraste se nota mucho más que en una habitación cerrada.");
 
@@ -1108,8 +1130,6 @@ const ROOM_FLOWS = {
       rectangular: "Con mesa rectangular, dos o tres puntos en línea reparten mejor la luz.",
       cuadrada: "Con mesa cuadrada, un colgante centrado o de varias luces cubre bien toda la superficie.",
     } },
-    { key: "diningSeats", title: "¿Cuántas personas suelen comer?", subtitle: "Un cálculo aproximado está bien.", type: "single", layout: "list", options: DINING_SEATS_OPTIONS },
-    { key: "diningPendant", title: "¿Quieres una lámpara decorativa sobre la mesa?", subtitle: "Como una lámpara colgante.", type: "single", layout: "list", options: YES_NO_OPTIONS },
     { key: "size", title: "¿Cuántos metros cuadrados tiene el salón-comedor en total?", subtitle: "Un cálculo aproximado está bien.", info: "Al ser un espacio abierto, se calcula como una sola superficie. Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: SALON_SIZE_OPTIONS },
     { key: "light", title: "¿Cuánta luz natural recibe?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
     { key: "ceiling", title: "¿Qué tipo de techo tienes?", subtitle: "Esto determina qué soluciones de instalación son posibles.", type: "single", layout: "list", options: CEILING_OPTIONS },
@@ -1121,8 +1141,9 @@ const ROOM_FLOWS = {
     {
       key: "layout", title: "¿Qué distribución tiene tu cocina?", subtitle: "Elige la forma que más se parece a la tuya.", type: "single", layout: "grid", options: KITCHEN_LAYOUT_OPTIONS,
       reactions: KITCHEN_LAYOUT_REACTIONS,
+      extra: KITCHEN_MULTI_ZONE_EXTRA,
     },
-    { key: "size", title: "¿Cuántos metros cuadrados tiene la cocina?", subtitle: "Un cálculo aproximado está bien.", info: "Para una cocina suelen recomendarse entre 300 y 400 lm/m². Nemul hará el cálculo automáticamente según el tamaño y la luz natural.", type: "single", layout: "grid", options: KITCHEN_SIZE_OPTIONS },
+    { key: "size", title: "¿Cuántos metros cuadrados tiene la cocina?", subtitle: "Un cálculo aproximado está bien.", info: "Para una cocina suelen recomendarse entre 300 y 400 lm/m². Nemul hará el cálculo automáticamente según el tamaño y la luz natural.", type: "single", layout: "grid", options: KITCHEN_SIZE_OPTIONS, extra: TALL_CEILING_EXTRA },
     { key: "priorities", title: "¿Qué es lo más importante para ti en la cocina?", subtitle: "Puedes elegir varias opciones.", type: "multi", layout: "list", options: KITCHEN_PRIORITY_OPTIONS },
     {
       key: "upperCabinets", title: "¿Tienes muebles altos?", subtitle: "Esto nos dice dónde puede faltar luz sobre la encimera.", type: "single", layout: "list", options: KITCHEN_UPPER_CABINETS_OPTIONS,
@@ -1132,8 +1153,6 @@ const ROOM_FLOWS = {
         no: "Sin muebles altos, la luz general va a tener que hacer casi todo el trabajo.",
       },
     },
-    { key: "workZone", title: "¿Dónde preparas normalmente los alimentos?", subtitle: "Así sabremos dónde reforzar la iluminación.", type: "single", layout: "list", options: KITCHEN_WORK_ZONE_OPTIONS },
-    { key: "ceilingHeight", title: "¿Cuál es la altura aproximada del techo?", subtitle: "Un cálculo aproximado está bien.", type: "single", layout: "grid", options: KITCHEN_CEILING_HEIGHT_OPTIONS },
     { key: "light", title: "¿Cuánta luz natural recibe la cocina durante el día?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
     {
       key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: KITCHEN_PROBLEM_OPTIONS,
@@ -1142,12 +1161,10 @@ const ROOM_FLOWS = {
     renovationStep,
   ],
   kitchenOpen: [
-    { key: "layout", title: "¿Qué distribución tiene tu cocina?", subtitle: "Elige la forma que más se parece a la tuya.", type: "single", layout: "grid", options: KITCHEN_LAYOUT_OPTIONS, reactions: KITCHEN_LAYOUT_REACTIONS },
-    { key: "size", title: "¿Cuántos metros cuadrados tiene la zona de cocina?", subtitle: "Un cálculo aproximado está bien.", info: "Para una cocina suelen recomendarse entre 300 y 400 lm/m². Nemul hará el cálculo automáticamente según el tamaño y la luz natural.", type: "single", layout: "grid", options: KITCHEN_SIZE_OPTIONS },
+    { key: "layout", title: "¿Qué distribución tiene tu cocina?", subtitle: "Elige la forma que más se parece a la tuya.", type: "single", layout: "grid", options: KITCHEN_LAYOUT_OPTIONS, reactions: KITCHEN_LAYOUT_REACTIONS, extra: KITCHEN_MULTI_ZONE_EXTRA },
+    { key: "size", title: "¿Cuántos metros cuadrados tiene la zona de cocina?", subtitle: "Un cálculo aproximado está bien.", info: "Para una cocina suelen recomendarse entre 300 y 400 lm/m². Nemul hará el cálculo automáticamente según el tamaño y la luz natural.", type: "single", layout: "grid", options: KITCHEN_SIZE_OPTIONS, extra: TALL_CEILING_EXTRA },
     { key: "priorities", title: "¿Qué es lo más importante para ti en la cocina?", subtitle: "Puedes elegir varias opciones.", type: "multi", layout: "list", options: KITCHEN_PRIORITY_OPTIONS },
     { key: "upperCabinets", title: "¿Tienes muebles altos?", subtitle: "Esto nos dice dónde puede faltar luz sobre la encimera.", type: "single", layout: "list", options: KITCHEN_UPPER_CABINETS_OPTIONS },
-    { key: "workZone", title: "¿Dónde preparas normalmente los alimentos?", subtitle: "Así sabremos dónde reforzar la iluminación.", type: "single", layout: "list", options: KITCHEN_WORK_ZONE_OPTIONS },
-    { key: "ceilingHeight", title: "¿Cuál es la altura aproximada del techo?", subtitle: "Un cálculo aproximado está bien.", type: "single", layout: "grid", options: KITCHEN_CEILING_HEIGHT_OPTIONS },
     { key: "light", title: "¿Cuánta luz natural recibe la cocina durante el día?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
     { key: "adjoiningStyle", title: "¿Qué ambiente tiene el salón con el que se conecta?", subtitle: "Así coordinamos la luz entre ambas zonas.", type: "single", layout: "grid", options: STYLE_OPTIONS },
     { key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: KITCHEN_PROBLEM_OPTIONS, reactions: KITCHEN_PROBLEM_REACTIONS },
@@ -1528,7 +1545,7 @@ function RoomsScreen({ selected, toggle, onContinue, onBack, freeRoomId }) {
   );
 }
 
-function QuestionScreen({ step, value, onSelect, onContinue, onBack, stepIndex, total, eyebrow }) {
+function QuestionScreen({ step, value, onSelect, onContinue, onBack, stepIndex, total, eyebrow, extraValue, onToggleExtra }) {
   const isMulti = step.type === "multi";
   const isAnswered = isMulti ? (value || []).length > 0 : !!value;
   const [showInfo, setShowInfo] = useState(false);
@@ -1587,6 +1604,37 @@ function QuestionScreen({ step, value, onSelect, onContinue, onBack, stepIndex, 
             })}
           </div>
         )}
+        {/* Matiz opcional que viaja dentro de una pregunta que ya existe, en
+            vez de gastar una pantalla propia. Sin marcar no hace nada; al
+            marcarlo entra en el cálculo. Así el cuestionario se queda en ocho
+            pasos sin perder la variable. */}
+        {step.extra && (
+          <button
+            onClick={onToggleExtra}
+            aria-pressed={!!extraValue}
+            className="tap-scale w-full flex items-center gap-4 rounded-xl px-5 py-4 mt-3 text-left"
+            style={{
+              backgroundColor: extraValue ? COLORS.bgAlt : "transparent",
+              border: `1px dashed ${extraValue ? COLORS.text : COLORS.border}`,
+            }}
+          >
+            <div
+              className="w-5 h-5 rounded-[4px] flex items-center justify-center shrink-0"
+              style={{
+                backgroundColor: extraValue ? COLORS.text : "transparent",
+                border: `1px solid ${extraValue ? COLORS.text : COLORS.border}`,
+              }}
+            >
+              {extraValue && <Check size={12} color="#FFFFFF" strokeWidth={3} className="check-pop" />}
+            </div>
+            <div className="flex-1">
+              <p className="font-body t-body" style={{ color: COLORS.text }}>{step.extra.label}</p>
+              {step.extra.hint && (
+                <p className="font-body t-small mt-0.5" style={{ color: COLORS.subtext }}>{step.extra.hint}</p>
+              )}
+            </div>
+          </button>
+        )}
       </div>
       {!isMulti && step.reactions && value && step.reactions[value] && (
         <div className="px-6 pb-2 rise-in">
@@ -1641,6 +1689,7 @@ function summarizeAnswers(flow, answers) {
       const opt = step.options.find((o) => o.id === raw);
       text = opt ? opt.label : "Sin respuesta";
     }
+    if (step.extra && answers[step.extra.key]) text += ` · ${step.extra.label}`;
     return { index, title: step.title, text };
   });
 }
@@ -2020,8 +2069,15 @@ function PrintableReport({ rooms, answersByRoom }) {
   return (
     <div style={{ width: 700 }} className="bg-white p-10">
       <div className="text-center mb-8">
-        <p className="font-body t-eyebrow mb-2" style={{ color: COLORS.accent }}>Nemul</p>
-        <p className="font-display t-display font-medium" style={{ color: COLORS.text }}>Estudio de iluminación</p>
+        {/* La marca abre el informe con el mismo peso que tiene en pantalla.
+            Antes era un "NEMUL" en versalitas de 12px que en una captura de
+            móvil no se leía, y la firma solo quedaba al pie. */}
+        <div className="flex items-center justify-center gap-2.5 mb-3">
+          <span className="rounded-full" style={{ width: 7, height: 7, backgroundColor: COLORS.bulb }} />
+          <span className="font-display" style={{ fontSize: 26, lineHeight: 1, color: COLORS.text }}>Nemul</span>
+          <span className="font-body t-small" style={{ color: COLORS.subtext }}>nemul.app</span>
+        </div>
+        <p className="font-display t-title font-medium" style={{ color: COLORS.text }}>Estudio de iluminación</p>
         <p className="font-body t-small mt-1.5" style={{ color: COLORS.subtext }}>
           {new Date().toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}
         </p>
@@ -2096,6 +2152,60 @@ async function downloadReportAsPdf(node, filename) {
   // Cuántos píxeles de alto del lienzo entran en una página A4.
   const pxPorPagina = Math.max(1, Math.floor((canvas.width * pageHeight) / pageWidth));
 
+  // Cortar siempre a la misma altura exacta parte el texto por la mitad: el
+  // final de una página se queda con la parte de arriba de una línea y la
+  // siguiente con la de abajo. Antes de cortar buscamos un poco más arriba
+  // una franja de píxeles de color liso (un hueco entre bloques) y cortamos
+  // ahí, que es lo que hace que ninguna letra quede partida.
+  const fuente = canvas.getContext("2d");
+  const MARGEN_BUSQUEDA = Math.floor(pxPorPagina * 0.14);
+  const FILAS_LISAS = 3;
+  const TOLERANCIA = 10;
+
+  const filaLisa = (datos, fila) => {
+    const base = fila * canvas.width * 4;
+    const r = datos[base], g = datos[base + 1], b = datos[base + 2];
+    for (let x = 1; x < canvas.width; x++) {
+      const i = base + x * 4;
+      if (
+        Math.abs(datos[i] - r) > TOLERANCIA ||
+        Math.abs(datos[i + 1] - g) > TOLERANCIA ||
+        Math.abs(datos[i + 2] - b) > TOLERANCIA
+      ) return false;
+    }
+    return true;
+  };
+
+  const buscarCorte = (ideal) => {
+    const inicio = Math.max(0, ideal - MARGEN_BUSQUEDA);
+    const alto = ideal - inicio;
+    if (alto <= FILAS_LISAS) return ideal;
+    try {
+      const banda = fuente.getImageData(0, inicio, canvas.width, alto).data;
+      for (let fila = alto - 1; fila >= FILAS_LISAS - 1; fila--) {
+        let lisas = 0;
+        while (lisas < FILAS_LISAS && filaLisa(banda, fila - lisas)) lisas++;
+        if (lisas === FILAS_LISAS) return inicio + fila - 1;
+      }
+    } catch {
+      // Si el lienzo no deja leer sus píxeles, cortamos a la altura fija.
+    }
+    return ideal;
+  };
+
+  // Una última página con solo el margen sobrante sale completamente vacía.
+  const bandaVacia = (y, alto) => {
+    try {
+      const datos = fuente.getImageData(0, y, canvas.width, alto).data;
+      for (let fila = 0; fila < alto; fila += 2) {
+        if (!filaLisa(datos, fila)) return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   // Recortamos el lienzo página a página. Antes se incrustaba la imagen
   // entera en cada página, desplazada hacia arriba: el PDF pesaba tantas
   // veces el informe como páginas tuviera, y el último tramo podía perderse.
@@ -2106,7 +2216,16 @@ async function downloadReportAsPdf(node, filename) {
   let y = 0;
   let primera = true;
   while (y < canvas.height) {
-    const altoTrozo = Math.min(pxPorPagina, canvas.height - y);
+    let altoTrozo = Math.min(pxPorPagina, canvas.height - y);
+    const esUltima = y + altoTrozo >= canvas.height;
+    if (!esUltima) {
+      const corte = buscarCorte(y + altoTrozo);
+      // Nunca dejamos una página a menos de media: si no hay hueco limpio
+      // más arriba, mejor el corte fijo que una página medio vacía.
+      if (corte - y > pxPorPagina * 0.5) altoTrozo = corte - y;
+    } else if (!primera && bandaVacia(y, altoTrozo)) {
+      break;
+    }
     trozo.height = altoTrozo;
     ctx.fillStyle = "#FFFFFF";
     ctx.fillRect(0, 0, trozo.width, altoTrozo);
@@ -2129,9 +2248,10 @@ async function downloadReportAsPdf(node, filename) {
   pdf.save(filename);
 }
 
-// El PDF es lo que más se valora del informe, así que es lo que pide el correo
-// a cambio. En cuanto la persona lo deja, la descarga arranca sola: no se le
-// promete nada que no reciba en el momento, y Dayami se queda con el contacto.
+// La descarga no pide nada a cambio. El informe lleva dentro el nombre y el
+// dominio de Nemul, así que cada PDF que alguien reenvía es publicidad: poner
+// una puerta delante reduce esa difusión, que es justo lo que hace falta ahora.
+// El correo se pide después, cuando ya tienen lo suyo, y sin bloquear nada.
 const EMAIL_GUARDADO = "nemul_email";
 
 function leerEmailGuardado() {
@@ -2143,15 +2263,15 @@ function leerEmailGuardado() {
 }
 
 function DescargaConEmail({ printRef, roomLabels }) {
-  const [pidiendoEmail, setPidiendoEmail] = useState(false);
-  const [email, setEmail] = useState("");
-  const [estado, setEstado] = useState("inicial"); // inicial | enviando | error
   const [descargando, setDescargando] = useState(false);
+  const [pedirEmail, setPedirEmail] = useState(false);
+  const [email, setEmail] = useState("");
+  const [estado, setEstado] = useState("inicial"); // inicial | enviando | hecho | error
   const cajaRef = useRef(null);
 
   useEffect(() => {
-    if (pidiendoEmail) cajaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [pidiendoEmail]);
+    if (pedirEmail) cajaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [pedirEmail]);
 
   const descargar = async () => {
     if (descargando) return;
@@ -2161,6 +2281,12 @@ function DescargaConEmail({ printRef, roomLabels }) {
       await downloadReportAsPdf(printRef.current, `nemul-informe-${fecha}.pdf`);
       track("downloaded_pdf");
       gaEvent("downloaded_pdf");
+      // A quien ya nos dejó el correo no le volvemos a preguntar.
+      if (!leerEmailGuardado()) {
+        setPedirEmail(true);
+        track("email_optin_shown");
+        gaEvent("email_optin_shown");
+      }
     } catch (e) {
       // Si algo falla generando el PDF, no rompemos el resto de la app.
     } finally {
@@ -2168,18 +2294,7 @@ function DescargaConEmail({ printRef, roomLabels }) {
     }
   };
 
-  const alPulsar = () => {
-    // Quien ya nos dejó el correo no tiene que volver a escribirlo.
-    if (leerEmailGuardado()) {
-      descargar();
-      return;
-    }
-    setPidiendoEmail(true);
-    track("email_gate_shown");
-    gaEvent("email_gate_shown");
-  };
-
-  const enviarYDescargar = async () => {
+  const enviar = async () => {
     const limpio = email.trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(limpio) || estado === "enviando") {
       setEstado("error");
@@ -2190,7 +2305,7 @@ function DescargaConEmail({ printRef, roomLabels }) {
       const res = await fetch(PREMIUM_INTEREST_FORM_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ email: limpio, interes: "Descarga del informe", estancias: roomLabels }),
+        body: JSON.stringify({ email: limpio, interes: "Avisos de Nemul", estancias: roomLabels }),
       });
       if (!res.ok) throw new Error("request failed");
       try {
@@ -2198,71 +2313,72 @@ function DescargaConEmail({ printRef, roomLabels }) {
       } catch {
         // Si el navegador bloquea el almacenamiento, volveremos a preguntar. No pasa nada.
       }
-      track("email_capture_submitted");
-      gaEvent("email_capture_submitted");
-      setPidiendoEmail(false);
-      setEstado("inicial");
-      await descargar();
+      setEstado("hecho");
+      track("email_optin_submitted");
+      gaEvent("email_optin_submitted");
     } catch (e) {
       setEstado("error");
     }
   };
 
-  if (!pidiendoEmail) {
-    return (
-      <SecondaryButton onClick={alPulsar} disabled={descargando} Icon={Download}>
+  return (
+    <div className="flex flex-col gap-3">
+      <SecondaryButton onClick={descargar} disabled={descargando} Icon={Download}>
         {descargando ? "Generando PDF..." : "Descargar informe en PDF"}
       </SecondaryButton>
-    );
-  }
 
-  return (
-    <div ref={cajaRef} className="rounded-xl p-5 rise-in" style={{ backgroundColor: COLORS.bgAlt }}>
-      <p className="font-body t-body font-medium mb-1" style={{ color: COLORS.text }}>
-        ¿A qué correo te lo enviamos?
-      </p>
-      <p className="font-body t-small mb-4" style={{ color: COLORS.subtext }}>
-        Te guardamos una copia del informe, para que no dependa de este navegador.
-        La descarga empieza en cuanto lo dejes.
-      </p>
-      <label htmlFor="email-informe" className="sr-only">Tu correo electrónico</label>
-      <input
-        id="email-informe"
-        type="email"
-        inputMode="email"
-        autoComplete="email"
-        autoFocus
-        value={email}
-        onChange={(e) => { setEmail(e.target.value); if (estado === "error") setEstado("inicial"); }}
-        onKeyDown={(e) => { if (e.key === "Enter") enviarYDescargar(); }}
-        placeholder="tu@email.com"
-        className="w-full rounded-xl px-4 py-3 mb-3 font-body t-body"
-        style={{ backgroundColor: COLORS.card, border: `1px solid ${estado === "error" ? COLORS.warning : COLORS.border}`, color: COLORS.text }}
-      />
-      <PrimaryButton onClick={enviarYDescargar} disabled={estado === "enviando" || descargando}>
-        {estado === "enviando" || descargando ? "Preparando tu informe..." : "Enviar y descargar"}
-      </PrimaryButton>
-      {estado === "error" && (
-        <div className="mt-2 text-center">
-          <p className="font-body t-small" style={{ color: COLORS.warning }}>
-            Revisa la dirección o vuelve a intentarlo.
+      {pedirEmail && estado === "hecho" && (
+        <div ref={cajaRef} className="rounded-xl p-5 text-center rise-in" style={{ backgroundColor: COLORS.bgAlt }}>
+          <Check size={20} color={COLORS.success} strokeWidth={2.5} className="mx-auto mb-2" />
+          <p className="font-body t-body font-medium" style={{ color: COLORS.text }}>Anotado</p>
+          <p className="font-body t-small mt-1" style={{ color: COLORS.subtext }}>
+            Te escribiremos cuando haya novedades. Gracias por confiar en Nemul.
           </p>
-          {/* Si falla nuestro servidor, no dejamos a nadie atrapado sin su informe. */}
-          <button onClick={descargar} className="font-body t-small font-medium mt-1 underline" style={{ color: COLORS.subtext }}>
-            Descargar sin dejar el correo
-          </button>
         </div>
       )}
-      <button
-        onClick={() => { setPidiendoEmail(false); setEstado("inicial"); }}
-        className="w-full font-body t-small font-medium py-2 mt-1"
-        style={{ color: COLORS.subtext }}
-      >
-        Ahora no
-      </button>
-      <p className="font-body t-caption mt-1 text-center" style={{ color: COLORS.subtext }}>
-        Solo para enviarte tu informe y avisarte de novedades. Ni spam, ni cesión a terceros.
-      </p>
+
+      {pedirEmail && estado !== "hecho" && (
+        <div ref={cajaRef} className="rounded-xl p-5 rise-in" style={{ backgroundColor: COLORS.bgAlt }}>
+          <p className="font-body t-body font-medium mb-1" style={{ color: COLORS.text }}>
+            Ya tienes tu informe
+          </p>
+          <p className="font-body t-small mb-4" style={{ color: COLORS.subtext }}>
+            Si quieres, déjanos tu correo y te avisamos cuando ampliemos Nemul o publiquemos
+            consejos nuevos. No hace falta para nada más.
+          </p>
+          <label htmlFor="email-avisos" className="sr-only">Tu correo electrónico</label>
+          <input
+            id="email-avisos"
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => { setEmail(e.target.value); if (estado === "error") setEstado("inicial"); }}
+            onKeyDown={(e) => { if (e.key === "Enter") enviar(); }}
+            placeholder="tu@email.com"
+            className="w-full rounded-xl px-4 py-3 mb-3 font-body t-body"
+            style={{ backgroundColor: COLORS.card, border: `1px solid ${estado === "error" ? COLORS.warning : COLORS.border}`, color: COLORS.text }}
+          />
+          <PrimaryButton onClick={enviar} disabled={estado === "enviando"}>
+            {estado === "enviando" ? "Enviando..." : "Avisadme de novedades"}
+          </PrimaryButton>
+          {estado === "error" && (
+            <p className="font-body t-small mt-2 text-center" style={{ color: COLORS.warning }}>
+              Revisa la dirección o vuelve a intentarlo.
+            </p>
+          )}
+          <button
+            onClick={() => setPedirEmail(false)}
+            className="w-full font-body t-small font-medium py-2 mt-1"
+            style={{ color: COLORS.subtext }}
+          >
+            No, gracias
+          </button>
+          <p className="font-body t-caption mt-1 text-center" style={{ color: COLORS.subtext }}>
+            Ni spam, ni cesión a terceros. Puedes pedir la baja cuando quieras.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -2532,9 +2648,9 @@ const LANDING_COPY = {
     footerPrivacy: "Política de privacidad",
     privacy: {
       dataTitle: "Qué datos recopilamos",
-      dataText: "Nemul solo te pide tu email si tú decides dejarlo voluntariamente: al descargar tu informe, por si quieres que te enviemos una copia, o en la pantalla de acceso Premium, para avisarte cuando esa función esté disponible. En ambos casos es opcional. No pedimos contraseña, datos de pago, ni ningún otro dato personal para usar la habitación gratuita.",
+      dataText: "Nemul solo te pide tu email si tú decides dejarlo voluntariamente: después de descargar tu informe, por si quieres que te avisemos de novedades, o en la pantalla de acceso Premium. Descargar el informe no requiere dejar ningún dato. En ambos casos es opcional. No pedimos contraseña, datos de pago, ni ningún otro dato personal para usar la habitación gratuita.",
       useTitle: "Cómo lo usamos",
-      useText: "Únicamente para enviarte tu informe si lo has pedido y para avisarte de novedades de Nemul, como el acceso Premium. No lo usamos para ningún otro fin, y no lo compartimos, vendemos ni cedemos a terceros bajo ninguna circunstancia. Puedes pedirnos que te demos de baja en cualquier momento.",
+      useText: "Únicamente para avisarte de novedades de Nemul, como el acceso Premium. No lo usamos para ningún otro fin, y no lo compartimos, vendemos ni cedemos a terceros bajo ninguna circunstancia. Puedes pedirnos que te demos de baja en cualquier momento.",
       whereTitle: "Dónde se guarda",
       whereText: "Tu email se almacena de forma segura en Formspree, el servicio que usamos para gestionar este formulario de interés.",
       localTitle: "Almacenamiento en tu propio dispositivo",
@@ -2594,9 +2710,9 @@ const LANDING_COPY = {
     footerPrivacy: "Privacy policy",
     privacy: {
       dataTitle: "What data we collect",
-      dataText: "Nemul only asks for your email if you choose to leave it: when you download your report, in case you want us to send you a copy, or on the Premium access screen, so we can notify you when that feature is available. Both are optional. We don't ask for a password, payment details, or any other personal data to use the free room.",
+      dataText: "Nemul only asks for your email if you choose to leave it: after you download your report, in case you want to hear about updates, or on the Premium access screen. Downloading the report requires no details at all. Both are optional. We don't ask for a password, payment details, or any other personal data to use the free room.",
       useTitle: "How we use it",
-      useText: "Only to send you your report if you asked for it, and to let you know about Nemul updates such as Premium access. We never use it for any other purpose, and we never share, sell, or transfer it to third parties under any circumstances. You can ask to be removed at any time.",
+      useText: "Only to let you know about Nemul updates such as Premium access. We never use it for any other purpose, and we never share, sell, or transfer it to third parties under any circumstances. You can ask to be removed at any time.",
       whereTitle: "Where it's stored",
       whereText: "Your email is securely stored in Formspree, the service we use to manage this interest form.",
       localTitle: "Storage on your own device",
@@ -2978,6 +3094,16 @@ export default function NemulApp() {
     });
   };
 
+  // Casilla opcional de la pregunta actual (techo alto, varias zonas...).
+  const toggleExtraAnswer = () => {
+    if (!currentRoom || !currentStep?.extra) return;
+    setAnswersByRoom((prev) => {
+      const roomAnswers = prev[currentRoom.id] || {};
+      const key = currentStep.extra.key;
+      return { ...prev, [currentRoom.id]: { ...roomAnswers, [key]: !roomAnswers[key] } };
+    });
+  };
+
   const resetFlow = () => {
     setSelectedRoomIds([]);
     setRoomIndex(0);
@@ -3077,7 +3203,7 @@ export default function NemulApp() {
             />
           )}
           {screen === "question" && currentRoom && currentStep && (
-            <QuestionScreen step={currentStep} value={currentValue} onSelect={setAnswer} onBack={handleBack} onContinue={handleContinue} stepIndex={stepIndex} total={currentFlow.length} eyebrow={roomEyebrow} />
+            <QuestionScreen step={currentStep} value={currentValue} onSelect={setAnswer} onBack={handleBack} onContinue={handleContinue} stepIndex={stepIndex} total={currentFlow.length} eyebrow={roomEyebrow} extraValue={currentStep.extra ? currentAnswers[currentStep.extra.key] : undefined} onToggleExtra={toggleExtraAnswer} />
           )}
           {screen === "roomDone" && currentRoom && (
             <RoomDoneScreen roomLabel={currentRoom.label} RoomIcon={currentRoom.Icon} nextLabel={selectedRooms[roomIndex + 1]?.label} onContinue={advanceToNextRoom} />
