@@ -2194,18 +2194,38 @@ async function downloadReportAsPdf(node, filename) {
   // Cuántos píxeles de alto del lienzo entran en una página A4.
   const pxPorPagina = Math.max(1, Math.floor((canvas.width * pageHeight) / pageWidth));
 
-  // Cortar siempre a la misma altura exacta parte el texto por la mitad: el
-  // final de una página se queda con la parte de arriba de una línea y la
-  // siguiente con la de abajo. Antes de cortar buscamos un poco más arriba
-  // una franja de píxeles de color liso (un hueco entre bloques) y cortamos
-  // ahí, que es lo que hace que ninguna letra quede partida.
+  // Cortar siempre a la misma altura exacta parte el texto por la mitad. Antes
+  // de cortar buscamos un poco más arriba una franja donde no pase ninguna
+  // letra.
+  //
+  // El primer intento de esto exigía que toda la fila fuese de un mismo color,
+  // y por eso no funcionaba: las tarjetas del informe llevan un borde de 1 px
+  // que baja por los dos costados, así que TODAS las filas contenían dos
+  // píxeles distintos del fondo y ninguna pasaba el examen. El criterio bueno
+  // no es "de un solo color" sino "sin texto": los fondos, los bordes y los
+  // separadores son claros; el texto y los iconos, oscuros.
   const fuente = canvas.getContext("2d");
   const MARGEN_BUSQUEDA = Math.floor(pxPorPagina * 0.14);
-  const FILAS_LISAS = 3;
+  const FILAS_LIBRES = 3;
   const TOLERANCIA = 10;
+  const LUZ_MINIMA = 200; // por debajo de esto es tinta, no fondo
+  const LUZ_HUECO = 245; // casi blanco: el aire entre dos tarjetas
   // Unos píxeles de aire por encima de un bloque que baja de página, para no
   // rozar su borde superior al cortar.
   const AIRE_ANTES_DE_BLOQUE = Math.max(2, Math.round(scale * 4));
+
+  const luminancia = (datos, i) =>
+    (datos[i] * 299 + datos[i + 1] * 587 + datos[i + 2] * 114) / 1000;
+
+  // ¿Ninguna letra cruza esta fila? Con umbral alto encuentra además el hueco
+  // blanco que separa dos tarjetas, que es un sitio aún mejor para cortar.
+  const filaLibre = (datos, fila, umbral) => {
+    const base = fila * canvas.width * 4;
+    for (let x = 0; x < canvas.width; x++) {
+      if (luminancia(datos, base + x * 4) < umbral) return false;
+    }
+    return true;
+  };
 
   const filaLisa = (datos, fila) => {
     const base = fila * canvas.width * 4;
@@ -2224,13 +2244,16 @@ async function downloadReportAsPdf(node, filename) {
   const buscarCorte = (ideal) => {
     const inicio = Math.max(0, ideal - MARGEN_BUSQUEDA);
     const alto = ideal - inicio;
-    if (alto <= FILAS_LISAS) return ideal;
+    if (alto <= FILAS_LIBRES) return ideal;
     try {
       const banda = fuente.getImageData(0, inicio, canvas.width, alto).data;
-      for (let fila = alto - 1; fila >= FILAS_LISAS - 1; fila--) {
-        let lisas = 0;
-        while (lisas < FILAS_LISAS && filaLisa(banda, fila - lisas)) lisas++;
-        if (lisas === FILAS_LISAS) return inicio + fila - 1;
+      // Primero el hueco entre tarjetas; si no hay, cualquier franja sin texto.
+      for (const umbral of [LUZ_HUECO, LUZ_MINIMA]) {
+        for (let fila = alto - 1; fila >= FILAS_LIBRES - 1; fila--) {
+          let libres = 0;
+          while (libres < FILAS_LIBRES && filaLibre(banda, fila - libres, umbral)) libres++;
+          if (libres === FILAS_LIBRES) return inicio + fila - 1;
+        }
       }
     } catch {
       // Si el lienzo no deja leer sus píxeles, cortamos a la altura fija.
