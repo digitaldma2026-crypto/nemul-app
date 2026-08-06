@@ -2111,10 +2111,87 @@ function KelvinScale({ tempK, roomId }) {
   );
 }
 
+/* Glosario de palabras.
+ *
+ * Solo texto, a propósito: dos dibujos explicando dos términos ayudan, y doce
+ * dibujos explicando doce términos son un catálogo que nadie lee y que además
+ * dispara la altura del informe (y con ella la nitidez del PDF).
+ *
+ * No se listan las doce siempre: se mira qué palabras aparecen de verdad en
+ * los consejos de las estancias elegidas y se explican solo esas. Quien no
+ * tiene terraza no necesita saber qué es un IP44.
+ */
+function reportBundle(roomId, answers = {}) {
+  if (roomId === "living" || roomId === "livingDining") return generateLivingReport(answers);
+  if (roomId === "kitchen" || roomId === "kitchenOpen") return generateKitchenReport(answers);
+  if (GENERIC_TECH_ROOMS.includes(roomId)) return generateGenericTechnicalReport(roomId, answers);
+  return null;
+}
+
+function reportTextFor(roomId, answers = {}) {
+  const b = reportBundle(roomId, answers);
+  if (!b) return (getReport(roomId, answers) || []).join(" ");
+  return [...(b.tips || []), ...(b.mistakes || []), ...(b.distribution || []), b.narrative || ""].join(" ");
+}
+
+// Estas dos salen en el bloque de cálculo de todas las estancias técnicas, así
+// que no hace falta buscarlas en los consejos: si hay cálculo, están.
+const ALWAYS_TERMS = [
+  { key: "kelvin", term: "Kelvin (K)", line: "Miden si la luz tira a amarilla o a blanca. Cuantos menos kelvin, más cálida y acogedora; cuantos más, más blanca y despierta." },
+  { key: "lux", term: "lm/m²", line: "Los lúmenes que conviene repartir por cada metro cuadrado. Es la forma de decir cuánta luz pide una estancia según su tamaño." },
+];
+
+const DETECTED_TERMS = [
+  { key: "dimmer", re: /regulador|dimmer|regulable|atenuar/i, term: "Regulador (o dimmer)", line: "El mando que permite subir y bajar la intensidad de la luz, como el volumen de la música." },
+  { key: "ip44", re: /IP\s?44/i, term: "IP44", line: "Un sello que indica que la luminaria aguanta salpicaduras de agua. Es lo mínimo que se pide en un baño o en una terraza descubierta." },
+  { key: "acento", re: /de acento/i, term: "Luz de acento", line: "Un punto de luz dirigido a algo concreto —un cuadro, una estantería— para que destaque sobre el resto." },
+  { key: "orientable", re: /orientable/i, term: "Foco orientable", line: "Un foco que se puede girar para dirigir la luz hacia donde interese, en vez de apuntar siempre recto hacia abajo." },
+  { key: "carril", re: /carril/i, term: "Carril", line: "Una guía fija al techo por la que se mueven varios focos, que además se orientan hacia donde quieras." },
+  { key: "circuito", re: /circuito/i, term: "Circuitos independientes", line: "Que cada grupo de luces se encienda con su propio interruptor, en vez de encenderse todo a la vez." },
+  { key: "honeycomb", re: /honeycomb/i, term: "Honeycomb", line: "Una rejilla con forma de panal que se pone delante del foco para que no deslumbre al mirarlo de lado." },
+];
+
+function glossaryFor(rooms, answersByRoom) {
+  const text = rooms.map((r) => reportTextFor(r.id, answersByRoom[r.id])).join(" ");
+  const hasCalc = rooms.some((r) => reportBundle(r.id, answersByRoom[r.id]) !== null);
+  return [...(hasCalc ? ALWAYS_TERMS : []), ...DETECTED_TERMS.filter((t) => t.re.test(text))];
+}
+
+/* Dos estancias pueden compartir dibujo Y temperatura: pasa siempre con Salón
+ * y Salón-Comedor abierto, y con Cocina y Cocina abierta al salón. La segunda
+ * enseñaría exactamente la misma barra y las mismas tres escenas que la
+ * primera, una debajo de otra, sin aportar nada y alargando el informe.
+ *
+ * Devuelve, por estancia, el nombre de la anterior con la que coincide (o
+ * null). Solo se compara el tono: el cálculo y el plano SÍ se repiten en cada
+ * estancia, porque los metros y el número de focos sí cambian.
+ */
+function toneDuplicates(rooms, answersByRoom) {
+  const seen = new Map();
+  const out = {};
+  for (const room of rooms) {
+    const bundle = reportBundle(room.id, answersByRoom[room.id]);
+    const kind = SCENE_KIND_BY_ROOM[room.id];
+    if (!bundle || !kind) {
+      out[room.id] = null;
+      continue;
+    }
+    const key = `${kind}-${bundle.tempK}`;
+    out[room.id] = seen.get(key) || null;
+    if (!seen.has(key)) seen.set(key, room.label);
+  }
+  return out;
+}
+
 // Pieza E: va UNA sola vez al abrir el informe, no en cada estancia. Son los
 // dos términos que aparecen en todas las páginas y que nadie tiene por qué
 // conocer: qué es un downlight y qué es un lumen.
-function LightingBasics() {
+function LightingBasics({ rooms = [], answersByRoom = {} }) {
+  const terms = glossaryFor(rooms, answersByRoom);
+  return <LightingBasicsView terms={terms} />;
+}
+
+function LightingBasicsView({ terms }) {
   return (
     <div data-pdf-keep className="rounded-xl p-5" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
       <p className="font-body t-eyebrow mb-3" style={{ color: COLORS.accent }}>Antes de empezar</p>
@@ -2185,6 +2262,20 @@ function LightingBasics() {
           </p>
         </div>
       </div>
+
+      {terms.length > 0 && (
+        <div className="mt-4">
+          <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Otras palabras que verás</p>
+          <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
+            {terms.map((t, i) => (
+              <p key={t.key} className="font-body t-small" style={{ color: COLORS.subtext, marginTop: i === 0 ? 0 : 8 }}>
+                <span className="font-medium" style={{ color: COLORS.text }}>{t.term}. </span>
+                {t.line}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2383,7 +2474,7 @@ function TipsList({ tips }) {
 
 // La "Recomendación general" de las tres tarjetas técnicas: el número, la
 // frase que lo traduce, la barra y las escenas. Antes era solo el número.
-function ColorTempBlock({ roomId, tempK, extra }) {
+function ColorTempBlock({ roomId, tempK, extra, sameToneAs }) {
   return (
     <>
       <div data-pdf-keep>
@@ -2392,15 +2483,21 @@ function ColorTempBlock({ roomId, tempK, extra }) {
           <StatRow label="Temperatura de color" value={`${tempK} K`} />
           <p className="font-body t-small italic mt-1" style={{ color: COLORS.subtext }}>{describeTempK(tempK)}</p>
           {extra}
-          <KelvinScale tempK={tempK} roomId={roomId} />
+          {sameToneAs ? (
+            <p className="font-body t-small italic" style={{ color: COLORS.subtext }}>
+              Es el mismo tono de luz que en {sameToneAs.toLowerCase()}, así que no repetimos aquí la escala ni los ejemplos.
+            </p>
+          ) : (
+            <KelvinScale tempK={tempK} roomId={roomId} />
+          )}
         </div>
       </div>
-      <LightScenes roomId={roomId} tempK={tempK} />
+      {!sameToneAs && <LightScenes roomId={roomId} tempK={tempK} />}
     </>
   );
 }
 
-function TechnicalReportCard({ room, answers, expanded, onToggle }) {
+function TechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
   const { tempK, lumens, downlightsLow, downlightsHigh, area, lux, tips, mistakes } = generateLivingReport(answers);
   const { Icon } = room;
   return (
@@ -2415,7 +2512,7 @@ function TechnicalReportCard({ room, answers, expanded, onToggle }) {
       </button>
       {expanded && (
         <div className="px-5 pb-5 flex flex-col gap-5">
-          <ColorTempBlock roomId={room.id} tempK={tempK} />
+          <ColorTempBlock roomId={room.id} tempK={tempK} sameToneAs={sameToneAs} />
 
           <CalculationBlock area={area} lux={lux} lumens={lumens} downlightsLow={downlightsLow} downlightsHigh={downlightsHigh} />
 
@@ -2430,7 +2527,7 @@ function TechnicalReportCard({ room, answers, expanded, onToggle }) {
   );
 }
 
-function KitchenReportCard({ room, answers, expanded, onToggle }) {
+function KitchenReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
   const { tempK, lumens, downlightsLow, downlightsHigh, area, lux, distribution, narrative, mistakes } = generateKitchenReport(answers);
   const { Icon } = room;
   return (
@@ -2448,6 +2545,7 @@ function KitchenReportCard({ room, answers, expanded, onToggle }) {
           <ColorTempBlock
             roomId={room.id}
             tempK={tempK}
+            sameToneAs={sameToneAs}
             extra={<StatRow label="Separación entre downlights" value="1,20–1,50 m" />}
           />
 
@@ -2481,7 +2579,7 @@ function KitchenReportCard({ room, answers, expanded, onToggle }) {
   );
 }
 
-function RoomReportCard({ room, answers, expanded, onToggle }) {
+function RoomReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
   const insights = getReport(room.id, answers);
   // Este informe era el único sin "Errores que debes evitar", así que salía
   // más pobre que el resto al ponerlos uno al lado de otro.
@@ -2514,7 +2612,7 @@ function RoomReportCard({ room, answers, expanded, onToggle }) {
   );
 }
 
-function GenericTechnicalReportCard({ room, answers, expanded, onToggle }) {
+function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
   const { tempK, lumens, downlightsLow, downlightsHigh, area, lux, tips, mistakes } = generateGenericTechnicalReport(room.id, answers);
   const { Icon } = room;
   return (
@@ -2529,7 +2627,7 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle }) {
       </button>
       {expanded && (
         <div className="px-5 pb-5 flex flex-col gap-5">
-          <ColorTempBlock roomId={room.id} tempK={tempK} />
+          <ColorTempBlock roomId={room.id} tempK={tempK} sameToneAs={sameToneAs} />
 
           <CalculationBlock area={area} lux={lux} lumens={lumens} downlightsLow={downlightsLow} downlightsHigh={downlightsHigh} />
 
@@ -2557,11 +2655,11 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle }) {
 
 const GENERIC_TECH_ROOMS = ["bedroom", "bathroom", "dining", "closet", "terrace", "office"];
 
-function ReportCard({ room, answers, expanded, onToggle }) {
-  if (room.id === "living" || room.id === "livingDining") return <TechnicalReportCard room={room} answers={answers} expanded={expanded} onToggle={onToggle} />;
-  if (room.id === "kitchen" || room.id === "kitchenOpen") return <KitchenReportCard room={room} answers={answers} expanded={expanded} onToggle={onToggle} />;
-  if (GENERIC_TECH_ROOMS.includes(room.id)) return <GenericTechnicalReportCard room={room} answers={answers} expanded={expanded} onToggle={onToggle} />;
-  return <RoomReportCard room={room} answers={answers} expanded={expanded} onToggle={onToggle} />;
+function ReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
+  if (room.id === "living" || room.id === "livingDining") return <TechnicalReportCard room={room} answers={answers} expanded={expanded} onToggle={onToggle} sameToneAs={sameToneAs} />;
+  if (room.id === "kitchen" || room.id === "kitchenOpen") return <KitchenReportCard room={room} answers={answers} expanded={expanded} onToggle={onToggle} sameToneAs={sameToneAs} />;
+  if (GENERIC_TECH_ROOMS.includes(room.id)) return <GenericTechnicalReportCard room={room} answers={answers} expanded={expanded} onToggle={onToggle} sameToneAs={sameToneAs} />;
+  return <RoomReportCard room={room} answers={answers} expanded={expanded} onToggle={onToggle} sameToneAs={sameToneAs} />;
 }
 
 // Antes era una tarjeta con recuadro, icono, titular, descripción y botón: ocupaba
@@ -2608,6 +2706,7 @@ function MarcaNemul() {
 // Versión "para imprimir": las mismas tarjetas de informe, siempre abiertas
 // del todo, renderizadas fuera de pantalla para capturarlas como imagen.
 function PrintableReport({ rooms, answersByRoom }) {
+  const dupTone = toneDuplicates(rooms, answersByRoom);
   return (
     <div style={{ width: 700 }} className="bg-white p-10">
       <div className="text-center mb-8">
@@ -2625,11 +2724,11 @@ function PrintableReport({ rooms, answersByRoom }) {
         </p>
       </div>
       <div className="mb-6">
-        <LightingBasics />
+        <LightingBasics rooms={rooms} answersByRoom={answersByRoom} />
       </div>
       <div className="flex flex-col gap-6">
         {rooms.map((room) => (
-          <ReportCard key={room.id} room={room} answers={answersByRoom[room.id]} expanded={true} onToggle={() => {}} />
+          <ReportCard key={room.id} room={room} answers={answersByRoom[room.id]} expanded={true} onToggle={() => {}} sameToneAs={dupTone[room.id]} />
         ))}
       </div>
       {/* El aviso legal y la firma viajan juntos y sin partirse: en la última
@@ -2952,6 +3051,7 @@ function DescargaConEmail({ printRef, roomLabels }) {
 function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
   const [expandedId, setExpandedId] = useState(rooms[0]?.id);
   const printRef = useRef(null);
+  const dupTone = toneDuplicates(rooms, answersByRoom);
 
   useEffect(() => {
     track("viewed_report", { rooms: rooms.map((r) => r.id).join(",") });
@@ -2980,12 +3080,12 @@ function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
         </div>
 
         <div className="pb-4">
-          <LightingBasics />
+          <LightingBasics rooms={rooms} answersByRoom={answersByRoom} />
         </div>
 
         <div className="flex flex-col gap-3 pb-4">
           {rooms.map((room) => (
-            <ReportCard key={room.id} room={room} answers={answersByRoom[room.id]} expanded={expandedId === room.id} onToggle={() => setExpandedId(expandedId === room.id ? null : room.id)} />
+            <ReportCard key={room.id} room={room} answers={answersByRoom[room.id]} expanded={expandedId === room.id} onToggle={() => setExpandedId(expandedId === room.id ? null : room.id)} sameToneAs={dupTone[room.id]} />
           ))}
         </div>
 
@@ -3076,6 +3176,7 @@ function HomeScreen({ plans, onOpenPlan, onDeletePlan, onNewPlan }) {
 function PlanDetailScreen({ plan, onBack }) {
   const [expandedId, setExpandedId] = useState(plan.rooms[0]?.id);
   const printRef = useRef(null);
+  const dupTone = toneDuplicates(plan.rooms, plan.answersByRoom);
 
   return (
     <div className="flex flex-col h-full rise-in">
@@ -3089,11 +3190,11 @@ function PlanDetailScreen({ plan, onBack }) {
       </div>
       <div className="flex-1 overflow-y-auto px-6">
         <div className="pb-4">
-          <LightingBasics />
+          <LightingBasics rooms={plan.rooms} answersByRoom={plan.answersByRoom} />
         </div>
         <div className="flex flex-col gap-3 pb-4">
           {plan.rooms.map((room) => (
-            <ReportCard key={room.id} room={room} answers={plan.answersByRoom[room.id]} expanded={expandedId === room.id} onToggle={() => setExpandedId(expandedId === room.id ? null : room.id)} />
+            <ReportCard key={room.id} room={room} answers={plan.answersByRoom[room.id]} expanded={expandedId === room.id} onToggle={() => setExpandedId(expandedId === room.id ? null : room.id)} sameToneAs={dupTone[room.id]} />
           ))}
         </div>
         <div className="pb-3">
