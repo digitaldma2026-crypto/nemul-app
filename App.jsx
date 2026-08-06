@@ -1805,6 +1805,509 @@ function CalculationBlock({ area, lux, lumens, downlightsLow, downlightsHigh }) 
   );
 }
 
+/* ---------------------------------------------------------------------------
+ * PIEZAS VISUALES DEL INFORME
+ *
+ * Todo lo que sigue es SVG y CSS: ni una sola imagen, y es deliberado. El PDF
+ * se genera rasterizando el informe entero (ver downloadReportAsPdf) y la
+ * escala de captura BAJA a medida que el documento crece; meter fotos haría
+ * que todo el texto saliera más borroso, además de pesar en la primera visita
+ * y de arrastrar CORS y licencias. Un dibujo vectorial no cuesta nada y sale
+ * nítido a cualquier escala.
+ *
+ * Los ids de los degradados son deterministas a propósito (nada de useId):
+ * html2canvas clona el informe en otro documento y las referencias url(#...)
+ * tienen que seguir resolviendo. El informe se pinta dos veces a la vez —en
+ * pantalla y en la copia de impresión—, así que un mismo id existe duplicado;
+ * las dos definiciones son idénticas, de modo que resolver a la primera es
+ * exactamente lo que queremos.
+ * ------------------------------------------------------------------------- */
+
+// El tono de una escena depende SOLO de los kelvin, nunca de si es la opción
+// recomendada. Si 4000 K se dibujara frío cuando lo descartamos y cálido
+// cuando lo recomendamos, el dibujo dejaría de ser un dato y sería un adorno
+// que además engaña.
+const SCENE_LIGHT = {
+  2700: { wash: "#E89A16", top: 0.58, bottom: 0.1, paper: "#FFFCF6", ink: 0.78 },
+  3000: { wash: "#F2B84B", top: 0.46, bottom: 0.07, paper: "#FFFDFA", ink: 0.82 },
+  3500: { wash: "#F7DCA8", top: 0.62, bottom: 0.14, paper: "#FFFEFB", ink: 0.84 },
+  4000: { wash: "#E6EDF3", top: 0.72, bottom: 0.22, paper: "#FDFEFF", ink: 0.86 },
+};
+
+// Un dibujo por tipo de estancia, no uno por habitación: el salón y el
+// salón-comedor comparten sofá, y la cocina y la cocina abierta, encimera.
+const SCENE_KIND_BY_ROOM = {
+  living: "lounge", livingDining: "lounge",
+  kitchen: "kitchen", kitchenOpen: "kitchen",
+  bedroom: "bedroom", bathroom: "bathroom", dining: "dining",
+  closet: "closet", office: "office", terrace: "terrace",
+};
+
+// Trazos sueltos: el color, el grosor y el fondo los pone SceneArt, para que
+// una escena solo se diferencie de otra en la luz.
+const SCENE_ART = {
+  lounge: (
+    <>
+      <line x1="0" y1="84" x2="150" y2="84" />
+      <rect x="46" y="24" width="30" height="22" rx="2" />
+      <path d="M24 84V66a4 4 0 0 1 4-4h50a4 4 0 0 1 4 4v18" />
+      <path d="M24 70h58" />
+      <path d="M32 62V54a3 3 0 0 1 3-3h36a3 3 0 0 1 3 3v8" />
+      <line x1="120" y1="84" x2="120" y2="50" />
+      <path d="M111 50l4-11h10l4 11z" />
+      <ellipse cx="66" cy="94" rx="46" ry="5" />
+    </>
+  ),
+  kitchen: (
+    <>
+      <line x1="0" y1="88" x2="150" y2="88" />
+      <rect x="18" y="30" width="46" height="20" rx="2" />
+      <rect x="76" y="30" width="46" height="20" rx="2" />
+      <path d="M14 88V62h122v26" />
+      <line x1="14" y1="68" x2="136" y2="68" />
+      <path d="M92 62v-6a6 6 0 0 1 6-6" />
+      <line x1="30" y1="75" x2="30" y2="81" />
+      <line x1="60" y1="75" x2="60" y2="81" />
+      <line x1="105" y1="75" x2="105" y2="81" />
+    </>
+  ),
+  bedroom: (
+    <>
+      <line x1="0" y1="84" x2="150" y2="84" />
+      <rect x="36" y="38" width="78" height="15" rx="2" />
+      <path d="M30 84V66h90v18" />
+      <line x1="30" y1="72" x2="120" y2="72" />
+      <rect x="44" y="57" width="26" height="9" rx="3" />
+      <rect x="80" y="57" width="26" height="9" rx="3" />
+      <rect x="12" y="70" width="16" height="14" rx="1.5" />
+      <rect x="122" y="70" width="16" height="14" rx="1.5" />
+      <path d="M20 70v-8" />
+      <path d="M15 62l3-7h4l3 7z" />
+    </>
+  ),
+  bathroom: (
+    <>
+      <line x1="0" y1="86" x2="150" y2="86" />
+      <rect x="50" y="20" width="50" height="28" rx="3" />
+      <path d="M54 62h42a3 3 0 0 1 3 3v6H51v-6a3 3 0 0 1 3-3z" />
+      <path d="M75 62v-7a4 4 0 0 1 4-4h6" />
+      <line x1="60" y1="71" x2="60" y2="86" />
+      <line x1="90" y1="71" x2="90" y2="86" />
+      <line x1="26" y1="32" x2="26" y2="54" />
+      <path d="M19 32h14" />
+    </>
+  ),
+  dining: (
+    <>
+      <line x1="0" y1="86" x2="150" y2="86" />
+      <rect x="30" y="60" width="90" height="5" rx="2" />
+      <line x1="40" y1="65" x2="40" y2="86" />
+      <line x1="110" y1="65" x2="110" y2="86" />
+      <line x1="75" y1="8" x2="75" y2="30" />
+      <path d="M62 44l13-14 13 14z" />
+      <path d="M24 86V64" />
+      <path d="M18 64h12" />
+      <path d="M24 52v12" />
+      <path d="M126 86V64" />
+      <path d="M120 64h12" />
+      <path d="M126 52v12" />
+    </>
+  ),
+  closet: (
+    <>
+      <line x1="0" y1="86" x2="150" y2="86" />
+      <rect x="16" y="20" width="118" height="66" rx="3" />
+      <line x1="75" y1="20" x2="75" y2="86" />
+      <line x1="22" y1="36" x2="68" y2="36" />
+      <path d="M32 36v6" />
+      <rect x="26" y="42" width="12" height="18" rx="1.5" />
+      <path d="M48 36v6" />
+      <rect x="42" y="42" width="12" height="18" rx="1.5" />
+      <line x1="82" y1="44" x2="128" y2="44" />
+      <line x1="82" y1="64" x2="128" y2="64" />
+    </>
+  ),
+  office: (
+    <>
+      <line x1="0" y1="86" x2="150" y2="86" />
+      <rect x="26" y="62" width="98" height="5" rx="2" />
+      <line x1="34" y1="67" x2="34" y2="86" />
+      <line x1="116" y1="67" x2="116" y2="86" />
+      <rect x="52" y="32" width="42" height="26" rx="2" />
+      <line x1="73" y1="58" x2="73" y2="62" />
+      <path d="M112 62v-8l12-10" />
+      <path d="M119 40l10 3-3 8z" />
+    </>
+  ),
+  terrace: (
+    <>
+      <line x1="0" y1="86" x2="150" y2="86" />
+      <rect x="40" y="60" width="60" height="4" rx="2" />
+      <line x1="70" y1="64" x2="70" y2="86" />
+      <path d="M58 86h24" />
+      <path d="M28 86V66" />
+      <path d="M22 66h12" />
+      <path d="M28 56v10" />
+      <path d="M112 86V66" />
+      <path d="M106 66h12" />
+      <path d="M112 56v10" />
+      <path d="M126 86V74" />
+      <path d="M126 74c-8 0-11-6-11-11 7 0 11 5 11 11z" />
+      <path d="M126 74c8 0 11-6 11-11-7 0-11 5-11 11z" />
+      <path d="M6 16q36 16 72 0t66 8" />
+      <circle cx="30" cy="21" r="2" />
+      <circle cx="60" cy="22" r="2" />
+      <circle cx="92" cy="16" r="2" />
+      <circle cx="120" cy="19" r="2" />
+    </>
+  ),
+};
+
+function SceneArt({ kind, tempK, alt }) {
+  const l = SCENE_LIGHT[tempK] || SCENE_LIGHT[3000];
+  const art = SCENE_ART[kind] || SCENE_ART.lounge;
+  const gid = `nemul-wash-${tempK}`;
+  return (
+    <svg viewBox="0 0 150 112" xmlns="http://www.w3.org/2000/svg" role="img" aria-label={alt} style={{ display: "block", width: "100%", height: "auto" }}>
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={l.wash} stopOpacity={l.top} />
+          <stop offset="1" stopColor={l.wash} stopOpacity={l.bottom} />
+        </linearGradient>
+      </defs>
+      <rect width="150" height="112" fill={l.paper} />
+      <rect width="150" height="112" fill={`url(#${gid})`} />
+      <g fill="none" stroke={COLORS.text} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" opacity={l.ink}>
+        {art}
+      </g>
+    </svg>
+  );
+}
+
+// Los dos extremos siempre presentes (2700 y 4000) y la recomendación en su
+// sitio. Si la recomendación ES un extremo, se marca ese y no se inventa una
+// cuarta columna: en el móvil, tres escenas ya van justas de ancho.
+function sceneTrio(tempK) {
+  if (tempK <= 2700 || tempK >= 4000) return [2700, 3000, 4000];
+  return [2700, tempK, 4000];
+}
+
+const SCENE_ROOM_NAME = {
+  living: "Tu salón", livingDining: "Tu salón", kitchen: "Tu cocina",
+  kitchenOpen: "Tu cocina", bedroom: "Tu dormitorio", bathroom: "Tu baño",
+  dining: "Tu comedor", closet: "Tu vestidor", office: "Tu despacho",
+  terrace: "Tu terraza",
+};
+
+// Con dos escenas descartadas al mismo lado ("2700 y 3000 para una cocina de
+// 4000"), poner "Demasiado cálida" dos veces no dice nada. La más cercana se
+// queda en "Un punto cálida" y solo la lejana es "demasiado".
+function sceneVerdict(stop, tempK, stops) {
+  if (stop === tempK) return null;
+  const sameSide = stops.filter((s) => s !== tempK && (s < tempK) === (stop < tempK));
+  const nearest = sameSide.length > 1 && Math.abs(stop - tempK) === Math.min(...sameSide.map((s) => Math.abs(s - tempK)));
+  if (stop < tempK) return nearest ? "Un punto cálida" : "Demasiado cálida";
+  return nearest ? "Un punto fría" : "Demasiado fría";
+}
+
+const SCENE_FOOT = {
+  lounge: "En un salón buscamos una luz cálida: acogedora por la noche, sin llegar al tono anaranjado.",
+  kitchen: "En la cocina interesa ver bien lo que cortas: una luz más blanca marca mejor los detalles y el color real de los alimentos.",
+  bedroom: "En el dormitorio la luz debe invitar a parar: cuanto más cálida, más fácil es desconectar antes de dormir.",
+  bathroom: "En el baño hace falta ver con precisión para afeitarse o maquillarse, pero sin que parezca un quirófano.",
+  dining: "Sobre la mesa, una luz cálida hace que la comida se vea apetecible y que la sobremesa se alargue.",
+  closet: "En el vestidor conviene una luz bastante neutra: es la única forma de ver el color real de la ropa antes de salir.",
+  office: "Para trabajar, una luz más blanca mantiene despierto; la cálida de más da sensación de sobremesa.",
+  terrace: "Fuera, la luz cálida es la que hace que apetezca quedarse cuando ya ha anochecido.",
+};
+
+// Pieza D del prototipo: la misma estancia con tres tonos. Es lo que hace
+// que alguien que no sabe qué es un kelvin entienda la recomendación sin
+// leer una sola palabra.
+function LightScenes({ roomId, tempK }) {
+  const kind = SCENE_KIND_BY_ROOM[roomId] || "lounge";
+  const stops = sceneTrio(tempK);
+  const mine = SCENE_ROOM_NAME[roomId] || "Lo recomendado";
+  return (
+    <div data-pdf-keep>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Así se verá</p>
+      <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
+        <div className="flex gap-2">
+          {stops.map((stop) => {
+            const isMine = stop === tempK;
+            const verdict = sceneVerdict(stop, tempK, stops);
+            return (
+              <div key={stop} className="flex-1 text-center">
+                <div
+                  className="rounded-lg overflow-hidden"
+                  style={{
+                    border: isMine ? `2px solid ${COLORS.text}` : `1px solid ${COLORS.border}`,
+                    opacity: isMine ? 1 : 0.62,
+                  }}
+                >
+                  <SceneArt kind={kind} tempK={stop} alt={`${mine.replace("Tu ", "")} con luz de ${stop} K`} />
+                </div>
+                <p
+                  className="font-body t-caption mt-1.5"
+                  style={{ color: isMine ? COLORS.text : COLORS.subtext, fontWeight: isMine ? 600 : 400 }}
+                >
+                  {isMine ? mine : verdict}
+                </p>
+                <p className="font-body" style={{ fontSize: 10, lineHeight: 1.4, color: COLORS.subtext }}>{stop} K</p>
+              </div>
+            );
+          })}
+        </div>
+        <p className="font-body t-small italic mt-3" style={{ color: COLORS.subtext }}>{SCENE_FOOT[kind]}</p>
+      </div>
+    </div>
+  );
+}
+
+// Pieza A: sitúa el número dentro del recorrido de cálido a neutro. Va junto
+// a las escenas porque responde a otra pregunta: no "cómo se ve" sino "cuánto
+// margen hay a cada lado" si en la tienda solo tienen otro valor.
+const KELVIN_MIN = 2700;
+const KELVIN_MAX = 4000;
+function KelvinScale({ tempK, roomId }) {
+  const pct = ((Math.min(KELVIN_MAX, Math.max(KELVIN_MIN, tempK)) - KELVIN_MIN) / (KELVIN_MAX - KELVIN_MIN)) * 100;
+  // En los extremos, una etiqueta centrada se sale del bloque. En vez de
+  // recortarla, se ancla al borde que le toca.
+  const anchor = pct <= 12 ? "translateX(0)" : pct >= 88 ? "translateX(-100%)" : "translateX(-50%)";
+  const name = (SCENE_ROOM_NAME[roomId] || "Lo recomendado").replace("Tu ", "Tu ");
+  return (
+    <div className="mt-4">
+      <div style={{ position: "relative", height: 26 }}>
+        <span
+          className="font-body"
+          style={{
+            position: "absolute", left: `${pct}%`, transform: anchor,
+            backgroundColor: COLORS.text, color: "#FFF7E8",
+            fontSize: 11, lineHeight: 1, fontWeight: 600,
+            padding: "5px 9px", borderRadius: 100, whiteSpace: "nowrap",
+          }}
+        >
+          {name} · {tempK} K
+        </span>
+        <span style={{ position: "absolute", top: 22, left: `${pct}%`, transform: "translateX(-50%)", width: 2, height: 8, backgroundColor: COLORS.text, borderRadius: 1 }} />
+      </div>
+      <div
+        style={{
+          height: 12, borderRadius: 6, marginTop: 4,
+          background: "linear-gradient(90deg,#EFA92A 0%,#F4C670 32%,#F8DDAF 62%,#FBF0DC 100%)",
+          boxShadow: "inset 0 0 0 1px rgba(58,46,34,.12)",
+        }}
+      />
+      <div className="flex justify-between mt-2">
+        {[2700, 3000, 3500, 4000].map((k) => (
+          <span key={k} className="font-body" style={{ fontSize: 11, color: COLORS.subtext }}>{k} K</span>
+        ))}
+      </div>
+      <div className="flex justify-between" style={{ marginTop: 2 }}>
+        <span className="font-body t-eyebrow" style={{ fontSize: 10, color: COLORS.subtext }}>Más cálida</span>
+        <span className="font-body t-eyebrow" style={{ fontSize: 10, color: COLORS.subtext }}>Más neutra</span>
+      </div>
+    </div>
+  );
+}
+
+// Pieza E: va UNA sola vez al abrir el informe, no en cada estancia. Son los
+// dos términos que aparecen en todas las páginas y que nadie tiene por qué
+// conocer: qué es un downlight y qué es un lumen.
+function LightingBasics() {
+  return (
+    <div data-pdf-keep className="rounded-xl p-5" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
+      <p className="font-body t-eyebrow mb-3" style={{ color: COLORS.accent }}>Antes de empezar</p>
+
+      <div className="flex items-start gap-4 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
+        <div style={{ width: 116, flexShrink: 0 }}>
+          <svg viewBox="0 0 132 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sección de un techo con dos focos empotrados y sus conos de luz" style={{ display: "block", width: "100%", height: "auto" }}>
+            <defs>
+              <linearGradient id="nemul-cone" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor={COLORS.bulb} stopOpacity="0.5" />
+                <stop offset="1" stopColor={COLORS.bulb} stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path d="M40 18 L18 84 L62 84 Z" fill="url(#nemul-cone)" />
+            <path d="M92 18 L70 84 L114 84 Z" fill="url(#nemul-cone)" />
+            <rect x="0" y="4" width="132" height="13" fill={COLORS.bgAlt} />
+            <g stroke={COLORS.text} strokeWidth="1.5" strokeLinecap="round" fill="none">
+              <line x1="0" y1="17" x2="132" y2="17" />
+              <line x1="0" y1="4" x2="132" y2="4" />
+              <line x1="0" y1="84" x2="132" y2="84" />
+            </g>
+            <g fill={COLORS.text}>
+              <rect x="32" y="10" width="16" height="7" rx="1.5" />
+              <rect x="84" y="10" width="16" height="7" rx="1.5" />
+            </g>
+            <g stroke={COLORS.subtext} strokeWidth="1" fill="none">
+              <line x1="40" y1="26" x2="92" y2="26" strokeDasharray="2 2" />
+              <line x1="40" y1="23" x2="40" y2="29" />
+              <line x1="92" y1="23" x2="92" y2="29" />
+            </g>
+          </svg>
+        </div>
+        <div>
+          <p className="font-body t-small font-medium" style={{ color: COLORS.text }}>Un downlight es un foco empotrado en el techo</p>
+          <p className="font-body t-small mt-1" style={{ color: COLORS.subtext }}>
+            Queda a ras, sin sobresalir, y lanza la luz hacia abajo. Es lo que en casa se llama «los focos del techo». Se reparten separados entre sí para que la luz llegue por igual a toda la estancia.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-start gap-4 rounded-xl p-4 mt-2.5" style={{ backgroundColor: COLORS.bg }}>
+        <div style={{ width: 116, flexShrink: 0 }}>
+          <svg viewBox="0 0 132 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Una bombilla iluminada con la equivalencia de 800 lúmenes a 60 vatios" style={{ display: "block", width: "100%", height: "auto" }}>
+            <defs>
+              <radialGradient id="nemul-glow">
+                <stop offset="0" stopColor={COLORS.bulb} stopOpacity="0.55" />
+                <stop offset="1" stopColor={COLORS.bulb} stopOpacity="0" />
+              </radialGradient>
+            </defs>
+            <circle cx="66" cy="42" r="40" fill="url(#nemul-glow)" />
+            <g fill="none" stroke={COLORS.text} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M66 16a17 17 0 0 1 10 30c-2 1.6-3 3.4-3 5.6h-14c0-2.2-1-4-3-5.6A17 17 0 0 1 66 16z" />
+              <line x1="59" y1="58" x2="73" y2="58" />
+              <line x1="61" y1="64" x2="71" y2="64" />
+              <line x1="66" y1="4" x2="66" y2="9" />
+              <line x1="41" y1="14" x2="45" y2="18" />
+              <line x1="91" y1="14" x2="87" y2="18" />
+              <line x1="32" y1="40" x2="38" y2="40" />
+              <line x1="100" y1="40" x2="94" y2="40" />
+            </g>
+            <text x="66" y="88" textAnchor="middle" fontFamily="Montserrat, sans-serif" fontSize="10" fontWeight="600" fill={COLORS.text}>800 lm ≈ 60 W</text>
+          </svg>
+        </div>
+        <div>
+          <p className="font-body t-small font-medium" style={{ color: COLORS.text }}>Los lúmenes son la cantidad de luz</p>
+          <p className="font-body t-small mt-1" style={{ color: COLORS.subtext }}>
+            Antes mirábamos los vatios; con el LED se miran los lúmenes. Como referencia: {LUMENS_PER_DOWNLIGHT} lúmenes es la luz de una bombilla de toda la vida de 60 W, y hoy se consigue con un LED de unos {WATTS_PER_DOWNLIGHT} W.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Pieza F: el plano visto desde arriba.
+ *
+ * La forma de la estancia no se pregunta en ningún sitio, así que se dibuja
+ * un rectángulo de proporción corriente a partir de los m². Eso se dice en el
+ * pie, porque un plano que no avisa de que la forma es inventada se lee como
+ * si fuera la casa de quien lo mira.
+ *
+ * El número de focos SÍ es real: se elige, de entre los dos del rango
+ * calculado, el que se reparte en una retícula más pareja. Y la separación
+ * que se acota es la que sale de esa retícula, no una cifra de manual: si el
+ * cálculo da pocos focos para muchos metros, el plano lo enseña en vez de
+ * taparlo.
+ */
+const PLAN_ASPECT = 1.4;
+function planLayout(area, low, high) {
+  const w = Math.sqrt(area * PLAN_ASPECT);
+  const d = area / w;
+  let best = null;
+  for (const n of [low, high]) {
+    for (let cols = 1; cols <= n; cols++) {
+      if (n % cols !== 0) continue;
+      const rows = n / cols;
+      const score = Math.abs(w / cols - d / rows);
+      if (!best || score < best.score) best = { n, cols, rows, sx: w / cols, sy: d / rows, score };
+    }
+  }
+  return { w, d, ...best };
+}
+
+const fmtM = (n) => n.toFixed(1).replace(".", ",");
+
+function CeilingPlan({ area, low, high }) {
+  const { w, d, n, cols, rows, sx, sy } = planLayout(area, low, high);
+  const PAD = 20;
+  const BOX_W = 300;
+  const BOX_H = Math.max(120, Math.min(240, Math.round((BOX_W * d) / w)));
+  const vbW = BOX_W + PAD * 2;
+  const vbH = BOX_H + PAD * 2 + 26;
+
+  const cx = (c) => PAD + (BOX_W * (c + 0.5)) / cols;
+  const cy = (r) => PAD + (BOX_H * (r + 0.5)) / rows;
+  const pool = Math.min(BOX_W / cols, BOX_H / rows) * 0.62;
+
+  const lights = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) lights.push({ c, r });
+
+  return (
+    <div data-pdf-keep>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Dónde colocar los focos</p>
+      <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
+        <svg viewBox={`0 0 ${vbW} ${vbH}`} xmlns="http://www.w3.org/2000/svg" role="img"
+          aria-label={`Plano orientativo visto desde arriba: ${n} focos repartidos en ${cols} columnas y ${rows} filas`}
+          style={{ display: "block", width: "100%", height: "auto" }}>
+          <defs>
+            <radialGradient id="nemul-pool">
+              <stop offset="0" stopColor={COLORS.bulb} stopOpacity="0.42" />
+              <stop offset="1" stopColor={COLORS.bulb} stopOpacity="0" />
+            </radialGradient>
+          </defs>
+
+          <rect x={PAD} y={PAD} width={BOX_W} height={BOX_H} rx="4" fill="#FFFDF8" stroke={COLORS.text} strokeWidth="2" />
+          {lights.map(({ c, r }, i) => <circle key={`p${i}`} cx={cx(c)} cy={cy(r)} r={pool} fill="url(#nemul-pool)" />)}
+          {lights.map(({ c, r }, i) => (
+            <circle key={`l${i}`} cx={cx(c)} cy={cy(r)} r="7" fill={COLORS.bulb} stroke={COLORS.text} strokeWidth="1.6" />
+          ))}
+
+          {cols >= 2 && (
+            <>
+              <g stroke={COLORS.text} strokeWidth="1.1" fill="none">
+                <line x1={cx(0)} y1={PAD - 8} x2={cx(1)} y2={PAD - 8} strokeDasharray="3 2" />
+                <line x1={cx(0)} y1={PAD - 12} x2={cx(0)} y2={PAD - 4} />
+                <line x1={cx(1)} y1={PAD - 12} x2={cx(1)} y2={PAD - 4} />
+              </g>
+              <rect x={(cx(0) + cx(1)) / 2 - 27} y={PAD - 19} width="54" height="15" rx="7" fill={COLORS.text} />
+              <text x={(cx(0) + cx(1)) / 2} y={PAD - 8} textAnchor="middle" fontFamily="Montserrat, sans-serif" fontSize="9.5" fontWeight="600" fill="#FFF7E8">
+                {fmtM(sx)} m
+              </text>
+            </>
+          )}
+
+          <g stroke={COLORS.subtext} strokeWidth="1" fill="none">
+            <line x1={PAD} y1={vbH - 18} x2={PAD + BOX_W} y2={vbH - 18} strokeDasharray="3 2" />
+            <line x1={PAD} y1={vbH - 22} x2={PAD} y2={vbH - 14} />
+            <line x1={PAD + BOX_W} y1={vbH - 22} x2={PAD + BOX_W} y2={vbH - 14} />
+          </g>
+          <text x={vbW / 2} y={vbH - 4} textAnchor="middle" fontFamily="Montserrat, sans-serif" fontSize="9.5" fill={COLORS.subtext}>
+            {area} m² · unos {fmtM(w)} × {fmtM(d)} m
+          </text>
+        </svg>
+
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
+          <div className="flex items-center gap-2">
+            <span className="rounded-full" style={{ width: 11, height: 11, backgroundColor: COLORS.bulb, boxShadow: `inset 0 0 0 1.4px ${COLORS.text}` }} />
+            <span className="font-body t-caption" style={{ color: COLORS.subtext }}>{n} focos de {LUMENS_PER_DOWNLIGHT} lm</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full" style={{ width: 11, height: 11, backgroundColor: "#F6DFAE" }} />
+            <span className="font-body t-caption" style={{ color: COLORS.subtext }}>zona que cubre cada uno</span>
+          </div>
+        </div>
+
+        <p className="font-body t-small italic mt-2.5" style={{ color: COLORS.subtext }}>
+          Colocación orientativa en {cols} × {rows}, con unos {fmtM(sx)} m entre focos y {fmtM(sy)} m entre filas. La forma de la estancia se ha dibujado como un rectángulo corriente a partir de los m²: ajusta la retícula a tu planta real.
+        </p>
+        {/* Sin esta frase, el plano y el consejo de "sepáralos 1,2–1,5 m" se
+            contradicen a la vista: el número de focos se calcula contando con
+            que habrá lámparas de pie, de mesa o apliques, así que reparte
+            menos focos y más lejos de lo que pide un techo que ilumina solo.
+            La contradicción ya existía en el informe; el dibujo solo la
+            enseña, y aquí se explica en vez de taparla. */}
+        {Math.max(sx, sy) > 1.6 && (
+          <p className="font-body t-small italic mt-1.5" style={{ color: COLORS.subtext }}>
+            Van así de separados porque estos focos no son la única luz de la estancia: el cálculo cuenta con que habrá además lámparas de pie, de mesa o apliques. Si quieres que el techo ilumine por sí solo, necesitarás más focos y más juntos.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // La terraza no tiene una forma predecible (L, rincón, alargada...), así que en
 // vez de fingir un plano, mostramos las zonas a iluminar sueltas, sin contorno.
@@ -1859,6 +2362,44 @@ function TerraceZoneScheme({ activities = [], covered, night }) {
   );
 }
 
+// Este bloque estaba copiado literal en las tres tarjetas técnicas. Al
+// añadirle escenas, plano y glosario, mantener tres copias garantizaba que
+// acabaran diciendo cosas distintas.
+function TipsList({ tips }) {
+  return (
+    <div>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Recomendaciones personalizadas</p>
+      <div className="flex flex-col gap-2">
+        {tips.map((tip, i) => (
+          <div key={i} className="flex items-start gap-3 rounded-xl p-3.5" style={{ backgroundColor: COLORS.bg }}>
+            <Lightbulb size={15} color={COLORS.accent} strokeWidth={1.8} className="mt-0.5 shrink-0" />
+            <p className="font-body t-body" style={{ color: COLORS.text }}>{tip}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// La "Recomendación general" de las tres tarjetas técnicas: el número, la
+// frase que lo traduce, la barra y las escenas. Antes era solo el número.
+function ColorTempBlock({ roomId, tempK, extra }) {
+  return (
+    <>
+      <div data-pdf-keep>
+        <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Recomendación general</p>
+        <div className="flex flex-col gap-2 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
+          <StatRow label="Temperatura de color" value={`${tempK} K`} />
+          <p className="font-body t-small italic mt-1" style={{ color: COLORS.subtext }}>{describeTempK(tempK)}</p>
+          {extra}
+          <KelvinScale tempK={tempK} roomId={roomId} />
+        </div>
+      </div>
+      <LightScenes roomId={roomId} tempK={tempK} />
+    </>
+  );
+}
+
 function TechnicalReportCard({ room, answers, expanded, onToggle }) {
   const { tempK, lumens, downlightsLow, downlightsHigh, area, lux, tips, mistakes } = generateLivingReport(answers);
   const { Icon } = room;
@@ -1874,27 +2415,13 @@ function TechnicalReportCard({ room, answers, expanded, onToggle }) {
       </button>
       {expanded && (
         <div className="px-5 pb-5 flex flex-col gap-5">
-          <div>
-            <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Recomendación general</p>
-            <div className="flex flex-col gap-2 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
-              <StatRow label="Temperatura de color" value={`${tempK} K`} />
-              <p className="font-body t-small italic mt-1" style={{ color: COLORS.subtext }}>{describeTempK(tempK)}</p>
-            </div>
-          </div>
+          <ColorTempBlock roomId={room.id} tempK={tempK} />
 
           <CalculationBlock area={area} lux={lux} lumens={lumens} downlightsLow={downlightsLow} downlightsHigh={downlightsHigh} />
 
-          <div>
-            <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Recomendaciones personalizadas</p>
-            <div className="flex flex-col gap-2">
-              {tips.map((tip, i) => (
-                <div key={i} className="flex items-start gap-3 rounded-xl p-3.5" style={{ backgroundColor: COLORS.bg }}>
-                  <Lightbulb size={15} color={COLORS.accent} strokeWidth={1.8} className="mt-0.5 shrink-0" />
-                  <p className="font-body t-body" style={{ color: COLORS.text }}>{tip}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+          <CeilingPlan area={area} low={downlightsLow} high={downlightsHigh} />
+
+          <TipsList tips={tips} />
 
           <MistakesList mistakes={mistakes} />
         </div>
@@ -1918,16 +2445,15 @@ function KitchenReportCard({ room, answers, expanded, onToggle }) {
       </button>
       {expanded && (
         <div className="px-5 pb-5 flex flex-col gap-5">
-          <div>
-            <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Recomendación general</p>
-            <div className="flex flex-col gap-2 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
-              <StatRow label="Temperatura de color" value={`${tempK} K`} />
-              <p className="font-body t-small italic mt-1" style={{ color: COLORS.subtext }}>{describeTempK(tempK)}</p>
-              <StatRow label="Separación entre downlights" value="1,20–1,50 m" />
-            </div>
-          </div>
+          <ColorTempBlock
+            roomId={room.id}
+            tempK={tempK}
+            extra={<StatRow label="Separación entre downlights" value="1,20–1,50 m" />}
+          />
 
           <CalculationBlock area={area} lux={lux} lumens={lumens} downlightsLow={downlightsLow} downlightsHigh={downlightsHigh} />
+
+          <CeilingPlan area={area} low={downlightsLow} high={downlightsHigh} />
 
           <div>
             <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Distribución recomendada de los focos</p>
@@ -2003,36 +2529,24 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle }) {
       </button>
       {expanded && (
         <div className="px-5 pb-5 flex flex-col gap-5">
-          <div>
-            <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Recomendación general</p>
-            <div className="flex flex-col gap-2 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
-              <StatRow label="Temperatura de color" value={`${tempK} K`} />
-              <p className="font-body t-small italic mt-1" style={{ color: COLORS.subtext }}>{describeTempK(tempK)}</p>
-            </div>
-          </div>
+          <ColorTempBlock roomId={room.id} tempK={tempK} />
 
           <CalculationBlock area={area} lux={lux} lumens={lumens} downlightsLow={downlightsLow} downlightsHigh={downlightsHigh} />
 
-          {room.id === "terrace" && (
-            <div>
+          {/* La terraza no lleva plano de techo: no hay techo donde empotrar
+              nada, y su esquema de zonas ya hace ese trabajo. */}
+          {room.id === "terrace" ? (
+            <div data-pdf-keep>
               <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Zonas a iluminar</p>
               <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
                 <TerraceZoneScheme activities={answers.activities} covered={answers.covered} night={answers.night} />
               </div>
             </div>
+          ) : (
+            <CeilingPlan area={area} low={downlightsLow} high={downlightsHigh} />
           )}
 
-          <div>
-            <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Recomendaciones personalizadas</p>
-            <div className="flex flex-col gap-2">
-              {tips.map((tip, i) => (
-                <div key={i} className="flex items-start gap-3 rounded-xl p-3.5" style={{ backgroundColor: COLORS.bg }}>
-                  <Lightbulb size={15} color={COLORS.accent} strokeWidth={1.8} className="mt-0.5 shrink-0" />
-                  <p className="font-body t-body" style={{ color: COLORS.text }}>{tip}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+          <TipsList tips={tips} />
 
           <MistakesList mistakes={mistakes} />
         </div>
@@ -2109,6 +2623,9 @@ function PrintableReport({ rooms, answersByRoom }) {
         <p className="font-body t-small mt-1.5" style={{ color: COLORS.subtext }}>
           {new Date().toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}
         </p>
+      </div>
+      <div className="mb-6">
+        <LightingBasics />
       </div>
       <div className="flex flex-col gap-6">
         {rooms.map((room) => (
@@ -2462,6 +2979,10 @@ function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
           </h2>
         </div>
 
+        <div className="pb-4">
+          <LightingBasics />
+        </div>
+
         <div className="flex flex-col gap-3 pb-4">
           {rooms.map((room) => (
             <ReportCard key={room.id} room={room} answers={answersByRoom[room.id]} expanded={expandedId === room.id} onToggle={() => setExpandedId(expandedId === room.id ? null : room.id)} />
@@ -2567,6 +3088,9 @@ function PlanDetailScreen({ plan, onBack }) {
         </h2>
       </div>
       <div className="flex-1 overflow-y-auto px-6">
+        <div className="pb-4">
+          <LightingBasics />
+        </div>
         <div className="flex flex-col gap-3 pb-4">
           {plan.rooms.map((room) => (
             <ReportCard key={room.id} room={room} answers={plan.answersByRoom[room.id]} expanded={expandedId === room.id} onToggle={() => setExpandedId(expandedId === room.id ? null : room.id)} />
