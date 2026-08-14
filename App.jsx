@@ -2065,13 +2065,21 @@ const SCENE_ROOM_NAME = {
 
 // Con dos escenas descartadas al mismo lado ("2700 y 3000 para una cocina de
 // 4000"), poner "Demasiado cálida" dos veces no dice nada. La más cercana se
-// queda en "Un punto cálida" y solo la lejana es "demasiado".
+// queda en "Un punto más cálida" y solo la lejana es "demasiado".
+//
+// El lado alto no se llama "frío". 4000 K es blanco neutro, no luz fría, y
+// llamarlo frío contradecía al resto de la app: la barra de kelvin ya acota
+// "Más cálida — Más neutra", y TEMP_HUMAN describe los 4000 K como "luz blanca
+// neutra". Sobre todo, contradecía al propio Nemul, que recomienda 4000 K para
+// trabajar: no puede ser la luz correcta del despacho y "demasiado fría" dos
+// pantallas más allá. Descartarla en un salón es decir que es demasiado
+// neutra para lo acogedor que se busca, no que esté fría.
 function sceneVerdict(stop, tempK, stops) {
   if (stop === tempK) return null;
   const sameSide = stops.filter((s) => s !== tempK && (s < tempK) === (stop < tempK));
   const nearest = sameSide.length > 1 && Math.abs(stop - tempK) === Math.min(...sameSide.map((s) => Math.abs(s - tempK)));
   if (stop < tempK) return nearest ? "Un punto más cálida" : "Demasiado cálida";
-  return nearest ? "Un punto más fría" : "Demasiado fría";
+  return nearest ? "Un punto más neutra" : "Muy neutra";
 }
 
 const SCENE_FOOT = {
@@ -3526,6 +3534,8 @@ const LANDING_COPY = {
     heroCta: "Diseña tu iluminación",
     heroTrust: "Gratis · Sin registro · En pocos minutos",
     sampleLink: "Ver un informe de ejemplo",
+    bannerAlt: "Despacho iluminado de noche: focos empotrados en el techo, tira LED bajo las estanterías y flexo sobre la mesa",
+    bannerCaption: "Tres capas de luz en la misma estancia: general en el techo, ambiente bajo las estanterías y tarea sobre la mesa.",
     langNotice: "",
     howTitle: "¿Cómo funciona?",
     howSubtitle: "Responde unas preguntas y recibe un estudio personalizado para tu estancia.",
@@ -3590,6 +3600,8 @@ const LANDING_COPY = {
     heroSubtitle: "Get professional recommendations in minutes. No technical knowledge required.",
     heroCta: "Start for free",
     sampleLink: "See a sample report",
+    bannerAlt: "Home office lit at night: recessed ceiling downlights, LED strip under the shelves and a task lamp on the desk",
+    bannerCaption: "Three layers of light in one room: general on the ceiling, ambient under the shelves and task light on the desk.",
     heroTrust: "No sign-up. No commitment. Free report in minutes.",
     langNotice: "Note: the interactive questionnaire is currently only available in Spanish. Full English support is coming soon.",
     howTitle: "How does it work?",
@@ -3694,6 +3706,36 @@ function LandingNav({ onStart, lang, setLang, t }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/* Banda de imagen bajo el hero.
+ *
+ * Una portada que vende diseño de iluminación y no enseña ni una luz le pide
+ * a la persona un acto de fe. Esta foto hace el argumento sola: se ven las
+ * tres capas de las que habla el informe —empotrados en el techo, tira LED
+ * bajo las estanterías, flexo sobre la mesa— y el pie las nombra, para que
+ * quien no sepa mirar una foto de iluminación aprenda algo en tres segundos.
+ *
+ * Si el archivo no está, la banda entera se oculta en vez de dejar el icono
+ * de imagen rota: el código puede viajar antes que la foto.
+ */
+function LandingBanner({ t }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    <section className="w-full">
+      <img
+        src="/despacho.jpg"
+        alt={t.bannerAlt}
+        onError={() => setFailed(true)}
+        className="w-full object-cover"
+        style={{ maxHeight: 420, backgroundColor: COLORS.bgAlt }}
+      />
+      <p className="max-w-3xl mx-auto px-6 pt-3 font-body t-caption text-center" style={{ color: COLORS.subtext }}>
+        {t.bannerCaption}
+      </p>
+    </section>
   );
 }
 
@@ -3979,6 +4021,7 @@ function LandingPage({ onStart, onSeeSample }) {
       <style>{FONT_STYLE}</style>
       <LandingNav onStart={onStart} lang={lang} setLang={setLang} t={t} />
       <LandingHero onStart={onStart} onSeeSample={onSeeSample} t={t} />
+      <LandingBanner t={t} />
       <HowItWorksSection t={t} />
       <ProductShowcaseSection t={t} />
       <CredentialSection t={t} />
