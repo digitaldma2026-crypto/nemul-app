@@ -22,7 +22,6 @@ import {
   ArrowLeft, Check, ChevronRight, ChevronDown, Sun, Moon, CloudSun, Lightbulb,
   Sparkles, BookOpen, Users, Coffee, Plus, Trash2, Home as HomeIcon,
   Package, Palette, Wind, Tv, Briefcase, Droplets, Zap, Laptop, Lamp, X, Hammer, Info, Pencil, Lock, Download,
-  Instagram,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------------
@@ -215,7 +214,12 @@ const renovationStep = {
 };
 const RENOVATION_INSIGHT = {
   renovation: "Como vas a hacer una reforma, aprovecha para mover o añadir puntos de luz donde realmente se necesiten, sin depender de la instalación actual.",
-  onlyLights: "Como solo vas a cambiar las luminarias, la propuesta se adapta a los puntos de luz que ya existen en tu instalación.",
+  // Decía "la propuesta se adapta a los puntos de luz que ya existen", y no es
+  // verdad: el cálculo y el plano dibujan la distribución ideal para los m² de
+  // la estancia, sin saber dónde están los puntos actuales. Prometer que se
+  // adapta y enseñar debajo una retícula de seis focos deja a quien lo lee
+  // pensando que tiene que abrir seis agujeros. Ahora se dice lo que es.
+  onlyLights: "Como solo vas a cambiar las luminarias, toma el cálculo y el plano como el objetivo a alcanzar, no como una obra a ejecutar: indican cuánta luz necesita la estancia y cómo debería repartirse. Con los puntos de luz que ya tienes, acércate a ese reparto sin tocar la instalación — un plafón sustituido por un foco orientable, un carril o una suspensión múltiple en el punto existente, y lámparas de pie o de mesa en las zonas donde el plano pide luz y no llega ningún punto.",
 };
 
 const STYLE_OPTIONS = [
@@ -321,7 +325,14 @@ function inferLivingStyle(activities = [], goals = [], problem) {
   else if (activities.includes("relax")) style = "acogedor";
   if (goals.includes("cozy")) style = "acogedor";
   if (problem === "cozy") style = "acogedor";
-  else if (problem === "dark") style = "luminoso";
+  // "El salón se ve oscuro" ya no enfría la luz. Es una queja de cantidad de
+  // luz, no de color: se responde con lúmenes, no con kelvin. Antes esta línea
+  // pisaba el objetivo de quien había pedido un ambiente acogedor y le
+  // devolvía 4000 K, mientras el propio informe decía debajo que en un salón
+  // se busca luz cálida. El dormitorio ya lo trataba así (PROBLEM_INSIGHT.
+  // bedroom.dark: refuerza la luz "sin perder la calidez"); el salón era la
+  // excepción. La respuesta a "está oscuro" sigue estando, en el consejo de
+  // subir los lúmenes generales y reforzar las esquinas.
   return style;
 }
 
@@ -336,7 +347,7 @@ function generateLivingReport(answers = {}) {
   const { low: downlightsLow, high: downlightsHigh } = downlightRange(lumens, 4);
 
   const tips = [];
-  tips.push("Coloca los downlights separados aproximadamente entre 1,2 y 1,5 m.");
+  tips.push(`Coloca los downlights siguiendo la retícula del plano: unos ${spacingText(area, downlightsLow, downlightsHigh)}.`);
   tips.push("Evita colocar focos justo encima del sofá para reducir deslumbramientos.");
   tips.push("Al ser una zona de relax, prioriza lámparas de pared, de pie o de sobremesa sobre la luz general de techo; mejor varios puntos suaves repartidos que pocos focos potentes.");
 
@@ -367,7 +378,7 @@ function generateLivingReport(answers = {}) {
   if (ceiling === "noSe") tips.push("Antes de instalar downlights empotrados, confirma con un instalador qué tipo de techo tienes.");
 
   if (light === "bright") tips.push("Como el salón recibe mucha luz natural de día, reserva la calidez de la luz artificial sobre todo para la noche.");
-  if (light === "moderate") tips.push("Con una luz natural media, la zona del salón más alejada de la ventana se queda corta buena parte del día: refuerza ahí la luz artificial en lugar de subir la intensidad general de toda la estancia.");
+  if (light === "moderate") tips.push("Con una entrada de luz natural media, la zona del salón más alejada de la ventana puede recibir menos iluminación durante buena parte del día. Refuerza esa zona con luz artificial en lugar de aumentar la intensidad general de toda la estancia.");
   if (light === "low" || problem === "dark") tips.push("Como el salón necesita más luz, sube ligeramente los lúmenes generales calculados y refuerza también las esquinas.");
 
   if (renovationStatus === "renovation" || problem === "renovating") tips.push("Como vas a reformar desde cero, aprovecha para dejar previstos varios circuitos independientes y reguladores de intensidad.");
@@ -509,8 +520,9 @@ function generateKitchenReport(answers = {}) {
   const { low: downlightsLow, high: downlightsHigh } = downlightRange(lumens, 4);
 
   const distribution = [];
-  distribution.push(`${downlightsLow}–${downlightsHigh} downlights recomendados.`);
-  distribution.push("Separación aproximada entre focos: 1,20–1,50 m, adaptada al tamaño de la cocina.");
+  // Misma decisión que en el bloque de cálculo: un número, no un rango.
+  distribution.push(`${planLayout(area, downlightsLow, downlightsHigh).n} downlights recomendados, de ${LUMENS_PER_DOWNLIGHT} lm cada uno.`);
+  distribution.push(`Sepáralos siguiendo la retícula del plano: unos ${spacingText(area, downlightsLow, downlightsHigh)}.`);
   if (upperCabinets && upperCabinets !== "no") {
     distribution.push("Coloca la línea de focos entre 30 y 40 cm por delante de los muebles altos, para iluminar bien el centro de la encimera y evitar sombras al cocinar.");
     distribution.push("Añade iluminación LED bajo los muebles altos.");
@@ -982,7 +994,7 @@ const HALLWAY_SENSOR_INSIGHT = {
 
 const LIGHT_INSIGHT = {
   bright: "Como el espacio recibe mucha luz natural, reserva los tonos cálidos para la noche y evita saturar de luz durante el día.",
-  moderate: "Con una luz natural media, la zona más alejada de por donde entra la luz se queda corta buena parte del día: refuerza ahí la luz artificial en lugar de subir la intensidad general de todo el espacio.",
+  moderate: "Con una entrada de luz natural media, la zona más alejada de la ventana puede recibir menos iluminación durante buena parte del día. Refuerza esa zona con luz artificial en lugar de aumentar la intensidad general de todo el espacio.",
   low: "Al recibir poca luz natural, compensa con un tono blanco cálido algo más intenso de lo habitual durante el día.",
 };
 
@@ -1033,7 +1045,10 @@ const PROBLEM_INSIGHT = {
   office: {
     glare: "Para evitar reflejos en la pantalla, evita colocar luces justo detrás de ti o frente al monitor; opta por luz indirecta o lateral.",
     tired: "El cansancio visual suele deberse a contrastes fuertes entre la pantalla y el entorno: iguala la luz ambiente con el brillo de la pantalla.",
-    videocall: "Además de la luz, revisa la posición de la cámara: colócala a la altura de los ojos, no por debajo, para evitar un ángulo poco favorecedor.",
+    // El consejo de "coloca la cámara a la altura de los ojos" se quitó: es
+    // un consejo de videollamadas, no de iluminación, y Nemul solo habla de
+    // luz. Lo que sí toca decir sobre verse bien en cámara ya está en
+    // EXTRA_INSIGHT.office.videoCalls.si, y es puramente lumínico.
     cold: "Si la luz se siente demasiado fría o clínica, baja la temperatura de color hacia un blanco más neutro.",
     renovating: "Con una reforma completa, aprovecha para dejar circuitos independientes para la luz general y la de tarea del escritorio.",
   },
@@ -1416,7 +1431,7 @@ function OptionRow({ selected, onClick, Icon, label, hint, multi, delay = 0 }) {
   );
 }
 
-function WelcomeScreen({ onStart }) {
+function WelcomeScreen({ onStart, onSeeSample }) {
   return (
     <div className="flex flex-col h-full screen-actions px-6 pt-10 rise-in">
       <div className="flex-1 flex flex-col items-center justify-center text-center">
@@ -1427,7 +1442,19 @@ function WelcomeScreen({ onStart }) {
           Cuéntanos cómo vives cada espacio. Nosotros nos encargamos de la parte técnica.
         </p>
       </div>
-      <PrimaryButton onClick={onStart}>Comenzar</PrimaryButton>
+      <div className="flex flex-col gap-2">
+        <PrimaryButton onClick={onStart}>Comenzar</PrimaryButton>
+        {/* Enlace, no botón: quien ya está decidido no debe tener que elegir
+            entre dos cosas que parecen igual de importantes. Pero quien duda
+            necesita poder ver el informe antes de contestar siete preguntas. */}
+        <button
+          onClick={onSeeSample}
+          className="w-full font-body t-small font-medium py-2 flex items-center justify-center gap-1"
+          style={{ color: COLORS.subtext }}
+        >
+          Ver un informe de ejemplo <ChevronRight size={14} />
+        </button>
+      </div>
     </div>
   );
 }
@@ -1781,7 +1808,17 @@ function MistakesList({ mistakes }) {
 
 // Transparencia sin tecnicismo: el usuario ve de dónde sale el número,
 // sin que nadie le explique una fórmula.
+//
+// Aquí se daba un rango ("6–7 × 800 lm") y el plano de abajo dibujaba 6, así
+// que quien lo leía se quedaba sin saber cuál poner. El informe ya tomaba la
+// decisión —planLayout elige, de los dos valores, el que se reparte en una
+// retícula más pareja— pero no la decía. Ahora la dice: una propuesta con un
+// número, su flujo total, y el margen explicado en palabras debajo. Un rango
+// es honesto en la cabeza de quien calcula; en la de quien compra bombillas
+// es una pregunta sin responder.
 function CalculationBlock({ area, lux, lumens, downlightsLow, downlightsHigh }) {
+  const { n } = planLayout(area, downlightsLow, downlightsHigh);
+  const totalLm = n * LUMENS_PER_DOWNLIGHT;
   return (
     <div>
       <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Cálculo realizado</p>
@@ -1792,15 +1829,16 @@ function CalculationBlock({ area, lux, lumens, downlightsLow, downlightsHigh }) 
           <p className="font-body t-small italic mt-1 ml-9" style={{ color: COLORS.subtext }}>{describeLux(lux)}</p>
         </div>
         <StatRow label="Iluminación total necesaria" value={`${lumens.toLocaleString("es-ES")} lúmenes`} />
+        <StatRow label="Propuesta" value={`${n} downlights de ${LUMENS_PER_DOWNLIGHT} lm`} />
         <div>
-          <StatRow label="Downlights recomendados" value={`${downlightsLow}–${downlightsHigh} × ${LUMENS_PER_DOWNLIGHT} lm`} />
+          <StatRow label="Flujo total aproximado" value={`${totalLm.toLocaleString("es-ES")} lm`} />
           <p className="font-body t-small italic mt-1 ml-9" style={{ color: COLORS.subtext }}>
             Equivale a downlights LED de unos {WATTS_PER_DOWNLIGHT}W cada uno, el estándar más habitual en casa.
           </p>
         </div>
       </div>
       <p className="font-body t-caption mt-2.5" style={{ color: COLORS.subtext }}>
-        La cantidad de luminarias se calcula según los m² de la estancia, el nivel de iluminación recomendado y el flujo luminoso de cada downlight. La recomendación es orientativa y puede ajustarse al diseño final.
+        La cantidad de luminarias se calcula según los m² de la estancia, el nivel de iluminación recomendado y el flujo luminoso de cada downlight. Si el modelo que eliges da más o menos lúmenes por foco, ajusta la cantidad para acercarte a ese flujo total: es el número que importa, no la cifra de focos.
       </p>
     </div>
   );
@@ -1829,7 +1867,11 @@ function CalculationBlock({ area, lux, lumens, downlightsLow, downlightsHigh }) 
 // cuando lo recomendamos, el dibujo dejaría de ser un dato y sería un adorno
 // que además engaña.
 const SCENE_LIGHT = {
-  2700: { wash: "#E89A16", top: 0.58, bottom: 0.1, paper: "#FFFCF6", ink: 0.78 },
+  // 2700 y 3000 comparten tono (38,6°) y solo se distinguen en claridad: por
+  // eso el 2700 se veía anaranjado, no por ser más cálido sino por ser más
+  // oscuro y saturado. Subido de L50 a L56 se lee como luz de salón y sigue
+  // siendo claramente más cálido que el 3000 (L62), ayudado por su top mayor.
+  2700: { wash: "#EDA934", top: 0.54, bottom: 0.1, paper: "#FFFCF6", ink: 0.78 },
   3000: { wash: "#F2B84B", top: 0.46, bottom: 0.07, paper: "#FFFDFA", ink: 0.82 },
   3500: { wash: "#F7DCA8", top: 0.62, bottom: 0.14, paper: "#FFFEFB", ink: 0.84 },
   4000: { wash: "#E6EDF3", top: 0.72, bottom: 0.22, paper: "#FDFEFF", ink: 0.86 },
@@ -2007,8 +2049,8 @@ function sceneVerdict(stop, tempK, stops) {
   if (stop === tempK) return null;
   const sameSide = stops.filter((s) => s !== tempK && (s < tempK) === (stop < tempK));
   const nearest = sameSide.length > 1 && Math.abs(stop - tempK) === Math.min(...sameSide.map((s) => Math.abs(s - tempK)));
-  if (stop < tempK) return nearest ? "Un punto cálida" : "Demasiado cálida";
-  return nearest ? "Un punto fría" : "Demasiado fría";
+  if (stop < tempK) return nearest ? "Un punto más cálida" : "Demasiado cálida";
+  return nearest ? "Un punto más fría" : "Demasiado fría";
 }
 
 const SCENE_FOOT = {
@@ -2095,7 +2137,11 @@ function KelvinScale({ tempK, roomId }) {
       <div
         style={{
           height: 12, borderRadius: 6, marginTop: 4,
-          background: "linear-gradient(90deg,#EFA92A 0%,#F4C670 32%,#F8DDAF 62%,#FBF0DC 100%)",
+          // El extremo cálido arrancaba en #EFA92A, un naranja más saturado que
+          // ningún color de la marca: 2700 K parecía la luz de un túnel, no la
+          // de un salón. Ahora empieza en el amarillo bombilla (COLORS.bulb) y
+          // el resto de paradas se aclaran desde ahí.
+          background: "linear-gradient(90deg,#F2B84B 0%,#F6CE84 32%,#F9E3BB 62%,#FBF2E2 100%)",
           boxShadow: "inset 0 0 0 1px rgba(58,46,34,.12)",
         }}
       />
@@ -2312,7 +2358,31 @@ function planLayout(area, low, high) {
 
 const fmtM = (n) => n.toFixed(1).replace(".", ",");
 
-function CeilingPlan({ area, low, high }) {
+// La separación entre focos se daba como "1,20–1,50 m" en tres sitios del
+// informe mientras el plano, justo al lado, acotaba la real —2,6 m en un salón
+// mediano—. Era el número de manual contra el número calculado, y el informe
+// se contradecía consigo mismo a la vista. Ahora los tres piden la separación
+// a la misma retícula que dibuja el plano.
+//
+// Cuando la retícula sale cuadrada, las dos medidas coinciden y decir dos
+// veces el mismo número sobra: se dice una.
+function spacingText(area, low, high) {
+  const { sx, sy } = planLayout(area, low, high);
+  const x = fmtM(sx);
+  const y = fmtM(sy);
+  return x === y ? `${x} m` : `${x} m entre focos y ${y} m entre filas`;
+}
+
+// La misma medida, para una fila de datos: ahí "1,4 m entre focos y 1,0 m
+// entre filas" repite lo que ya dice la etiqueta de al lado.
+function spacingShort(area, low, high) {
+  const { sx, sy } = planLayout(area, low, high);
+  const x = fmtM(sx);
+  const y = fmtM(sy);
+  return x === y ? `${x} m` : `${x} × ${y} m`;
+}
+
+function CeilingPlan({ area, low, high, onlyLights = false }) {
   const { w, d, n, cols, rows, sx, sy } = planLayout(area, low, high);
   const PAD = 20;
   const BOX_W = 300;
@@ -2329,7 +2399,12 @@ function CeilingPlan({ area, low, high }) {
 
   return (
     <div data-pdf-keep>
-      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Dónde colocar los focos</p>
+      {/* Quien solo va a cambiar luminarias no está mirando dónde colocar
+          focos: está mirando dónde debería llegar la luz. El mismo dibujo
+          responde a las dos preguntas, pero no con el mismo título. */}
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>
+        {onlyLights ? "Distribución ideal de la luz" : "Dónde colocar los focos"}
+      </p>
       <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
         <svg viewBox={`0 0 ${vbW} ${vbH}`} xmlns="http://www.w3.org/2000/svg" role="img"
           aria-label={`Plano orientativo visto desde arriba: ${n} focos repartidos en ${cols} columnas y ${rows} filas`}
@@ -2394,6 +2469,17 @@ function CeilingPlan({ area, low, high }) {
         {Math.max(sx, sy) > 1.6 && (
           <p className="font-body t-small italic mt-1.5" style={{ color: COLORS.subtext }}>
             Van así de separados porque estos focos no son la única luz de la estancia: el cálculo cuenta con que habrá además lámparas de pie, de mesa o apliques. Si quieres que el techo ilumine por sí solo, necesitarás más focos y más juntos.
+          </p>
+        )}
+
+        {/* Este plano dibuja la distribución ideal para los m² de la estancia:
+            no sabe dónde están los puntos de luz actuales, porque no se
+            preguntan. A quien va a reformar eso le vale como plano. A quien
+            solo cambia luminarias hay que decírselo, o se irá pensando que
+            necesita abrir seis puntos nuevos. */}
+        {onlyLights && (
+          <p className="font-body t-small mt-2.5 rounded-lg p-3" style={{ color: COLORS.text, backgroundColor: COLORS.bgAlt }}>
+            <span className="font-medium">No hace falta que crees estos puntos.</span> Dijiste que solo vas a cambiar las luminarias, así que esto no es un plano de instalación: es dónde debería llegar la luz. Con {n === 1 ? "el punto que ya tienes" : "los puntos que ya tienes"}, acércate a este reparto usando luminarias que abran el haz en varias direcciones —un carril, una suspensión de varios brazos, un foco orientable— y cubre con lámparas de pie o de mesa las zonas que el plano marca y tu instalación no alcanza.
           </p>
         )}
       </div>
@@ -2517,7 +2603,7 @@ function TechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) 
 
           <CalculationBlock area={area} lux={lux} lumens={lumens} downlightsLow={downlightsLow} downlightsHigh={downlightsHigh} />
 
-          <CeilingPlan area={area} low={downlightsLow} high={downlightsHigh} />
+          <CeilingPlan area={area} low={downlightsLow} high={downlightsHigh} onlyLights={answers.renovationStatus === "onlyLights"} />
 
           <TipsList tips={tips} />
 
@@ -2547,12 +2633,12 @@ function KitchenReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
             roomId={room.id}
             tempK={tempK}
             sameToneAs={sameToneAs}
-            extra={<StatRow label="Separación entre downlights" value="1,20–1,50 m" />}
+            extra={<StatRow label="Separación entre downlights" value={spacingShort(area, downlightsLow, downlightsHigh)} />}
           />
 
           <CalculationBlock area={area} lux={lux} lumens={lumens} downlightsLow={downlightsLow} downlightsHigh={downlightsHigh} />
 
-          <CeilingPlan area={area} low={downlightsLow} high={downlightsHigh} />
+          <CeilingPlan area={area} low={downlightsLow} high={downlightsHigh} onlyLights={answers.renovationStatus === "onlyLights"} />
 
           <div>
             <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Distribución recomendada de los focos</p>
@@ -2642,7 +2728,7 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameTon
               </div>
             </div>
           ) : (
-            <CeilingPlan area={area} low={downlightsLow} high={downlightsHigh} />
+            <CeilingPlan area={area} low={downlightsLow} high={downlightsHigh} onlyLights={answers.renovationStatus === "onlyLights"} />
           )}
 
           <TipsList tips={tips} />
@@ -2663,23 +2749,56 @@ function ReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
   return <RoomReportCard room={room} answers={answers} expanded={expanded} onToggle={onToggle} sameToneAs={sameToneAs} />;
 }
 
-// Antes era una tarjeta con recuadro, icono, titular, descripción y botón: ocupaba
-// más que algunas recomendaciones del informe. Reducida a una línea, deja de
-// competir con el contenido por el que la persona ha venido.
-function GuidePromoCard() {
+// El logotipo real de Instagram, en un solo trazo y del color del texto: se
+// reconoce al instante y no mete un cuarto color en una paleta de tres. El de
+// lucide es una aproximación y aquí se nota, porque compite con un icono de
+// libro que sí es genérico.
+const INSTAGRAM_GLYPH = "M12 0C8.74 0 8.333.015 7.053.072 5.775.132 4.905.333 4.14.63c-.789.306-1.459.717-2.126 1.384S.935 3.35.63 4.14C.333 4.905.131 5.775.072 7.053.012 8.333 0 8.74 0 12s.015 3.667.072 4.947c.06 1.277.261 2.148.558 2.913.306.788.717 1.459 1.384 2.126.667.666 1.336 1.079 2.126 1.384.766.296 1.636.499 2.913.558C8.333 23.988 8.74 24 12 24s3.667-.015 4.947-.072c1.277-.06 2.148-.262 2.913-.558.788-.306 1.459-.718 2.126-1.384.666-.667 1.079-1.335 1.384-2.126.296-.765.499-1.636.558-2.913.06-1.28.072-1.687.072-4.947s-.015-3.667-.072-4.947c-.06-1.277-.262-2.149-.558-2.913-.306-.789-.718-1.459-1.384-2.126C21.319 1.347 20.651.935 19.86.63c-.765-.297-1.636-.499-2.913-.558C15.667.012 15.26 0 12 0zm0 2.16c3.203 0 3.585.016 4.85.071 1.17.055 1.805.249 2.227.415.562.217.96.477 1.382.896.419.42.679.819.896 1.381.164.422.36 1.057.413 2.227.057 1.266.07 1.646.07 4.85s-.015 3.585-.074 4.85c-.061 1.17-.256 1.805-.421 2.227-.224.562-.479.96-.899 1.382-.419.419-.824.679-1.38.896-.42.164-1.065.36-2.235.413-1.274.057-1.649.07-4.859.07-3.211 0-3.586-.015-4.859-.074-1.171-.061-1.816-.256-2.236-.421-.569-.224-.96-.479-1.379-.899-.421-.419-.69-.824-.9-1.38-.165-.42-.359-1.065-.42-2.235-.045-1.26-.061-1.649-.061-4.844 0-3.196.016-3.586.061-4.861.061-1.17.255-1.814.42-2.234.21-.57.479-.96.9-1.381.419-.419.81-.689 1.379-.898.42-.166 1.051-.361 2.221-.421 1.275-.045 1.65-.06 4.859-.06l.045.03zm0 3.678c-3.405 0-6.162 2.76-6.162 6.162 0 3.405 2.76 6.162 6.162 6.162 3.405 0 6.162-2.76 6.162-6.162 0-3.405-2.76-6.162-6.162-6.162zM12 16c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm7.846-10.405c0 .795-.646 1.44-1.44 1.44-.795 0-1.44-.646-1.44-1.44 0-.794.646-1.439 1.44-1.439.793-.001 1.439.645 1.439 1.439z";
+
+function InstagramGlyph({ size = 16, color = COLORS.text }) {
   return (
-    <a
-      href="https://www.etsy.com/es/listing/4427720777/guia-de-iluminacion-del-hogar-consejos?ref=share_ios_native_control"
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={() => { track("etsy_click", { desde: "informe" }); gaEvent("etsy_click", { desde: "informe" }); }}
-      className="tap-scale w-full flex items-center justify-center gap-2 py-4 font-body t-small font-medium"
-      style={{ color: COLORS.text, borderTop: `1px solid ${COLORS.text}`, borderBottom: `1px solid ${COLORS.text}` }}
-    >
-      <BookOpen size={16} color={COLORS.text} strokeWidth={1.7} />
-      Visita mi tienda de Etsy para más consejos de diseño
-      <ChevronRight size={14} color={COLORS.text} />
-    </a>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path d={INSTAGRAM_GLYPH} />
+    </svg>
+  );
+}
+
+// Antes era una tarjeta de Etsy con recuadro, icono, titular, descripción y
+// botón: ocupaba más que algunas recomendaciones del informe. Reducida a dos
+// líneas, deja de competir con el contenido por el que la persona ha venido.
+//
+// Instagram va primero: seguir es gratis y no interrumpe a quien todavía está
+// leyendo sus recomendaciones. La tienda queda debajo, para quien acaba de ver
+// que esto le sirve y quiere más.
+function GuidePromoCard({ desde = "informe" }) {
+  return (
+    <div style={{ borderTop: `1px solid ${COLORS.text}`, borderBottom: `1px solid ${COLORS.text}` }}>
+      <a
+        href="https://www.instagram.com/nemul.app/"
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={() => { track("instagram_click", { desde }); gaEvent("instagram_click", { desde }); }}
+        className="tap-scale w-full flex items-center justify-center gap-2 py-4 font-body t-small font-medium flex-wrap"
+        style={{ color: COLORS.text }}
+      >
+        <InstagramGlyph />
+        Consejos sencillos para iluminar mejor tu casa
+        <span style={{ color: COLORS.subtext }}>@nemul.app</span>
+        <ChevronRight size={14} color={COLORS.text} />
+      </a>
+      <a
+        href="https://www.etsy.com/es/listing/4427720777/guia-de-iluminacion-del-hogar-consejos?ref=share_ios_native_control"
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={() => { track("etsy_click", { desde }); gaEvent("etsy_click", { desde }); }}
+        className="tap-scale w-full flex items-center justify-center gap-2 py-4 font-body t-small font-medium"
+        style={{ color: COLORS.text, borderTop: `1px solid ${COLORS.border}` }}
+      >
+        <BookOpen size={16} color={COLORS.text} strokeWidth={1.7} />
+        Visita mi tienda de Etsy para más consejos de diseño
+        <ChevronRight size={14} color={COLORS.text} />
+      </a>
+    </div>
   );
 }
 
@@ -3114,6 +3233,102 @@ function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
         <div ref={printRef}>
           <PrintableReport rooms={rooms} answersByRoom={answersByRoom} />
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* Informe de ejemplo: lo que vas a recibir, antes de contestar nada.
+ *
+ * La duda que frena a cualquiera ante un cuestionario de siete preguntas no
+ * es "¿me costará mucho?", es "¿qué me van a dar a cambio?". Aquí se enseña.
+ *
+ * No es una captura ni un PDF: son los mismos componentes del informe real,
+ * alimentados con unas respuestas fijas. Por eso no puede quedarse antiguo —
+ * cada mejora del informe aparece aquí sola, sin que nadie se acuerde de
+ * actualizar el ejemplo.
+ *
+ * El caso elegido es el más común y el más difícil de explicar: un salón
+ * mediano, con luz natural media, de alguien que solo va a cambiar las
+ * luminarias. Si el informe convence en ese caso, convence.
+ */
+const SAMPLE_ROOM = ROOMS.find((r) => r.id === "living");
+const SAMPLE_ANSWERS = {
+  activities: ["tv", "read", "guests"],
+  size: "medium",
+  light: "moderate",
+  ceiling: "pladur",
+  goals: ["cozy", "reading"],
+  problem: "dark",
+  renovationStatus: "onlyLights",
+};
+const SAMPLE_ANSWER_SUMMARY = [
+  "Salón de unos 20 m²",
+  "Se usa para ver la tele, leer y recibir visitas",
+  "Luz natural media",
+  "Falso techo de pladur",
+  "Se ve oscuro",
+  "Solo se van a cambiar las luminarias",
+];
+
+function SampleReportScreen({ onBack, onStart }) {
+  const rooms = [SAMPLE_ROOM];
+  const answersByRoom = { living: SAMPLE_ANSWERS };
+  // Abierto de entrada: quien entra a ver un ejemplo no viene a pulsar nada,
+  // viene a leerlo. Pero se puede plegar, como en el informe de verdad.
+  const [expanded, setExpanded] = useState(true);
+
+  useEffect(() => {
+    track("viewed_sample_report");
+    gaEvent("viewed_sample_report");
+  }, []);
+
+  return (
+    <div className="flex flex-col h-full rise-in">
+      <TopNav onBack={onBack} eyebrow="Informe de ejemplo" />
+      <div className="flex-1 overflow-y-auto px-6">
+        <div className="text-center mb-5">
+          <MarcaNemul />
+          <h2 className="font-display t-display font-medium mb-2" style={{ color: COLORS.text }}>
+            Esto es lo que vas a recibir
+          </h2>
+          <p className="font-body t-body" style={{ color: COLORS.subtext }}>
+            Un informe real, con un salón de ejemplo. El tuyo se calcula con tus respuestas.
+          </p>
+        </div>
+
+        {/* Sin esto, el informe se lee como un folleto. Enseñar de qué
+            respuestas sale cada número es lo que hace entender que el suyo
+            será distinto. */}
+        <div className="rounded-xl p-4 mb-4" style={{ backgroundColor: COLORS.bgAlt, border: `1px solid ${COLORS.border}` }}>
+          <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Respuestas de este ejemplo</p>
+          <div className="flex flex-col gap-1.5">
+            {SAMPLE_ANSWER_SUMMARY.map((line) => (
+              <div key={line} className="flex items-start gap-2.5">
+                <Check size={14} color={COLORS.accent} strokeWidth={2.4} className="mt-1 shrink-0" />
+                <span className="font-body t-small" style={{ color: COLORS.text }}>{line}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="pb-4">
+          <LightingBasics rooms={rooms} answersByRoom={answersByRoom} />
+        </div>
+
+        <div className="pb-4">
+          <ReportCard room={SAMPLE_ROOM} answers={SAMPLE_ANSWERS} expanded={expanded} onToggle={() => setExpanded((e) => !e)} />
+        </div>
+
+        <div className="pb-4">
+          <LegalNote />
+        </div>
+      </div>
+      <div className="screen-actions px-6 pt-4 flex flex-col gap-3">
+        <PrimaryButton onClick={onStart}>Crear el mío gratis</PrimaryButton>
+        <button onClick={onBack} className="w-full font-body t-small font-medium py-2" style={{ color: COLORS.subtext }}>
+          Volver
+        </button>
       </div>
     </div>
   );
@@ -3601,7 +3816,7 @@ function LandingInstagramSection({ t }) {
           className="tap-scale w-full flex items-center justify-center gap-2 py-4 font-body t-small font-medium flex-wrap"
           style={{ color: COLORS.text, borderTop: `1px solid ${COLORS.text}`, borderBottom: `1px solid ${COLORS.text}` }}
         >
-          <Instagram size={16} color={COLORS.text} strokeWidth={1.7} />
+          <InstagramGlyph />
           {t.instagramLine}
           <span style={{ color: COLORS.subtext }}>{t.instagramHandle}</span>
           <ChevronRight size={14} color={COLORS.text} />
@@ -3880,7 +4095,15 @@ export default function NemulApp() {
       <style>{FONT_STYLE}</style>
       <div className="relative w-full max-w-[560px] h-full" style={{ backgroundColor: COLORS.bg }}>
         <div className="h-full">
-          {screen === "welcome" && <WelcomeScreen onStart={() => setScreen("rooms")} />}
+          {screen === "welcome" && (
+            <WelcomeScreen
+              onStart={() => setScreen("rooms")}
+              onSeeSample={() => { track("sample_report_click"); gaEvent("sample_report_click"); setScreen("sample"); }}
+            />
+          )}
+          {screen === "sample" && (
+            <SampleReportScreen onBack={() => setScreen("welcome")} onStart={() => setScreen("rooms")} />
+          )}
           {screen === "home" && <HomeScreen plans={savedPlans} onOpenPlan={openPlan} onDeletePlan={deletePlan} onNewPlan={startNewPlanFromHome} />}
           {screen === "rooms" && (
             <RoomsScreen selected={selectedRoomIds} toggle={toggleRoom} onBack={() => setScreen(savedPlans.length > 0 ? "home" : "welcome")} onContinue={handleRoomsContinue} freeRoomId={freeRoomId} />
