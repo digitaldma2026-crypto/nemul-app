@@ -3535,7 +3535,6 @@ const LANDING_COPY = {
     heroTrust: "Gratis · Sin registro · En pocos minutos",
     sampleLink: "Ver un informe de ejemplo",
     bannerAlt: "Despacho iluminado de noche: focos empotrados en el techo, tira LED bajo las estanterías y flexo sobre la mesa",
-    bannerCaption: "Tres capas de luz en la misma estancia: general en el techo, ambiente bajo las estanterías y tarea sobre la mesa.",
     langNotice: "",
     howTitle: "¿Cómo funciona?",
     howSubtitle: "Responde unas preguntas y recibe un estudio personalizado para tu estancia.",
@@ -3601,7 +3600,6 @@ const LANDING_COPY = {
     heroCta: "Start for free",
     sampleLink: "See a sample report",
     bannerAlt: "Home office lit at night: recessed ceiling downlights, LED strip under the shelves and a task lamp on the desk",
-    bannerCaption: "Three layers of light in one room: general on the ceiling, ambient under the shelves and task light on the desk.",
     heroTrust: "No sign-up. No commitment. Free report in minutes.",
     langNotice: "Note: the interactive questionnaire is currently only available in Spanish. Full English support is coming soon.",
     howTitle: "How does it work?",
@@ -3725,16 +3723,17 @@ function LandingBanner({ t }) {
   if (failed) return null;
   return (
     <section className="w-full">
+      {/* Banda, no bloque: a 16:9 completo la foto empujaba el titular y el
+          botón fuera de la primera pantalla del móvil. Recortada en alto, la
+          composición se mantiene —la mesa está centrada— y encima queda más
+          cinematográfica. */}
       <img
         src="/despacho.jpg"
         alt={t.bannerAlt}
         onError={() => setFailed(true)}
-        className="w-full object-cover"
-        style={{ maxHeight: 420, backgroundColor: COLORS.bgAlt }}
+        className="w-full object-cover h-[190px] md:h-[320px]"
+        style={{ backgroundColor: COLORS.bgAlt }}
       />
-      <p className="max-w-3xl mx-auto px-6 pt-3 font-body t-caption text-center" style={{ color: COLORS.subtext }}>
-        {t.bannerCaption}
-      </p>
     </section>
   );
 }
@@ -4020,8 +4019,8 @@ function LandingPage({ onStart, onSeeSample }) {
     <div className="min-h-screen w-full" style={{ backgroundColor: COLORS.bg }}>
       <style>{FONT_STYLE}</style>
       <LandingNav onStart={onStart} lang={lang} setLang={setLang} t={t} />
-      <LandingHero onStart={onStart} onSeeSample={onSeeSample} t={t} />
       <LandingBanner t={t} />
+      <LandingHero onStart={onStart} onSeeSample={onSeeSample} t={t} />
       <HowItWorksSection t={t} />
       <ProductShowcaseSection t={t} />
       <CredentialSection t={t} />
