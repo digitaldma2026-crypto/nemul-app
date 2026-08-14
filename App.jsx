@@ -1,5 +1,20 @@
 import { useState, useEffect, useRef } from "react";
-import { track } from "@vercel/analytics/react";
+import { track as vercelTrack } from "@vercel/analytics/react";
+
+// gaEvent ya estaba protegido con try/catch —"la analítica nunca debe romper la
+// experiencia"— pero track() de Vercel se llamaba a pelo. Y varios botones
+// hacen track(...) y justo después cambian de pantalla: si track() falla (un
+// bloqueador de anuncios, la protección antiseguimiento del móvil, la red),
+// la excepción corta el manejador y el cambio de pantalla nunca ocurre. El
+// botón parece muerto: lo pulsas y no pasa nada. Envolverlo aquí arregla de
+// una vez todas las llamadas del archivo.
+function track(name, params) {
+  try {
+    vercelTrack(name, params);
+  } catch (e) {
+    // silencioso, a propósito
+  }
+}
 
 // Envía un evento a Google Analytics (gratis, sin límite en el volumen de
 // tráfico actual). Si gtag todavía no ha cargado, simplemente no hace nada
@@ -3503,6 +3518,8 @@ const LANDING_COPY = {
     heroSubtitle: "Recibe una propuesta de iluminación personalizada en pocos minutos. No necesitas conocimientos técnicos.",
     heroCta: "Diseña tu iluminación",
     heroTrust: "Gratis · Sin registro · En pocos minutos",
+    sampleLink: "Ver un informe de ejemplo",
+    showcaseSampleLink: "Ver un informe de ejemplo completo",
     langNotice: "",
     howTitle: "¿Cómo funciona?",
     howSubtitle: "Responde unas preguntas y recibe un estudio personalizado para tu estancia.",
@@ -3566,6 +3583,8 @@ const LANDING_COPY = {
     heroTitle: "The simplest way to design your home's lighting.",
     heroSubtitle: "Get professional recommendations in minutes. No technical knowledge required.",
     heroCta: "Start for free",
+    sampleLink: "See a sample report",
+    showcaseSampleLink: "See a full sample report",
     heroTrust: "No sign-up. No commitment. Free report in minutes.",
     langNotice: "Note: the interactive questionnaire is currently only available in Spanish. Full English support is coming soon.",
     howTitle: "How does it work?",
@@ -3673,7 +3692,7 @@ function LandingNav({ onStart, lang, setLang, t }) {
   );
 }
 
-function LandingHero({ onStart, t }) {
+function LandingHero({ onStart, onSeeSample, t }) {
   return (
     // El logo ya está en la barra fija justo encima; repetirlo aquí a 144 px
     // de alto empujaba el titular fuera de la primera pantalla en móvil.
@@ -3694,6 +3713,17 @@ function LandingHero({ onStart, t }) {
       <p className="font-body t-caption mt-4" style={{ color: COLORS.subtext }}>
         {t.heroTrust}
       </p>
+      {/* Aquí es donde alguien decide si le dedica cinco minutos o se va, y la
+          pregunta que tiene en la cabeza es "¿qué me vais a dar?". Estaba
+          contestada una pantalla más adentro, que es como no contestarla. */}
+      <button
+        onClick={onSeeSample}
+        className="tap-scale mt-7 inline-flex items-center gap-2 rounded-xl px-5 py-3 font-body t-small font-medium transition-all duration-200"
+        style={{ color: COLORS.text, backgroundColor: COLORS.bgAlt, border: `1px solid ${COLORS.border}` }}
+      >
+        {t.sampleLink}
+        <ChevronRight size={14} color={COLORS.text} />
+      </button>
       {t.langNotice && (
         <p className="font-body t-caption mt-5 max-w-sm mx-auto rounded-lg px-4 py-3" style={{ color: COLORS.text, backgroundColor: COLORS.bgAlt }}>
           {t.langNotice}
@@ -3737,7 +3767,7 @@ function PreviewRow({ label }) {
   );
 }
 
-function ProductShowcaseSection({ t }) {
+function ProductShowcaseSection({ t, onSeeSample }) {
   return (
     <section className="max-w-3xl mx-auto px-6 py-20">
       <Reveal>
@@ -3763,6 +3793,19 @@ function ProductShowcaseSection({ t }) {
       <p className="font-body t-caption text-center mt-5" style={{ color: COLORS.subtext }}>
         {t.showcaseFooter}
       </p>
+      {/* Esta sección enseña seis titulares de lo que lleva el informe y luego
+          dice "el informe completo incluye...". Es el sitio exacto donde a uno
+          le apetece verlo entero, y hasta ahora no había por dónde. */}
+      <div className="text-center">
+        <button
+          onClick={onSeeSample}
+          className="tap-scale mt-5 inline-flex items-center gap-2 rounded-xl px-5 py-3 font-body t-small font-medium transition-all duration-200"
+          style={{ color: COLORS.text, backgroundColor: COLORS.bgAlt, border: `1px solid ${COLORS.border}` }}
+        >
+          {t.showcaseSampleLink}
+          <ChevronRight size={14} color={COLORS.text} />
+        </button>
+      </div>
     </section>
   );
 }
@@ -3928,7 +3971,7 @@ function LandingFooter({ t }) {
   );
 }
 
-function LandingPage({ onStart }) {
+function LandingPage({ onStart, onSeeSample }) {
   const [lang, setLang] = useState("es");
   const t = LANDING_COPY[lang];
 
@@ -3941,9 +3984,9 @@ function LandingPage({ onStart }) {
     <div className="min-h-screen w-full" style={{ backgroundColor: COLORS.bg }}>
       <style>{FONT_STYLE}</style>
       <LandingNav onStart={onStart} lang={lang} setLang={setLang} t={t} />
-      <LandingHero onStart={onStart} t={t} />
+      <LandingHero onStart={onStart} onSeeSample={onSeeSample} t={t} />
       <HowItWorksSection t={t} />
-      <ProductShowcaseSection t={t} />
+      <ProductShowcaseSection t={t} onSeeSample={onSeeSample} />
       <CredentialSection t={t} />
       <AccessSection onStart={onStart} t={t} />
       <LandingInstagramSection t={t} />
@@ -3955,7 +3998,29 @@ function LandingPage({ onStart }) {
 
 
 export default function NemulApp() {
-  const [screen, setScreen] = useState("landing");
+  // nemul.app/?ejemplo abre el informe de ejemplo directamente, sin pasar por
+  // la portada. Sirve para enlazarlo desde fuera —la bio de Instagram, un
+  // mensaje— y para comprobar que la pantalla funciona sin depender de que el
+  // botón responda.
+  const [screen, setScreen] = useState(() => {
+    try {
+      if (new URLSearchParams(window.location.search).has("ejemplo")) return "sample";
+    } catch (e) {
+      // si no hay window (o la URL es rara), se entra por la portada
+    }
+    return "landing";
+  });
+
+  // Desde dónde se abrió el ejemplo, para que "Volver" devuelva ahí y no a una
+  // pantalla por la que esa persona no ha pasado. Por defecto la portada: es
+  // donde cae quien entra directo por nemul.app/?ejemplo.
+  const [sampleFrom, setSampleFrom] = useState("landing");
+  const openSample = (desde) => {
+    track("sample_report_click", { desde });
+    gaEvent("sample_report_click", { desde });
+    setSampleFrom(desde);
+    setScreen("sample");
+  };
   const [selectedRoomIds, setSelectedRoomIds] = useState([]);
   const [roomIndex, setRoomIndex] = useState(0);
   const [stepIndex, setStepIndex] = useState(0);
@@ -4089,7 +4154,12 @@ export default function NemulApp() {
   const viewingPlan = savedPlans.find((p) => p.id === viewingPlanId);
 
   if (screen === "landing") {
-    return <LandingPage onStart={() => { track("landing_cta_click"); gaEvent("landing_cta_click"); setScreen("welcome"); }} />;
+    return (
+      <LandingPage
+        onStart={() => { track("landing_cta_click"); gaEvent("landing_cta_click"); setScreen("welcome"); }}
+        onSeeSample={() => { openSample("landing"); }}
+      />
+    );
   }
 
   return (
@@ -4104,11 +4174,11 @@ export default function NemulApp() {
           {screen === "welcome" && (
             <WelcomeScreen
               onStart={() => setScreen("rooms")}
-              onSeeSample={() => { track("sample_report_click"); gaEvent("sample_report_click"); setScreen("sample"); }}
+              onSeeSample={() => { openSample("welcome"); }}
             />
           )}
           {screen === "sample" && (
-            <SampleReportScreen onBack={() => setScreen("welcome")} onStart={() => setScreen("rooms")} />
+            <SampleReportScreen onBack={() => setScreen(sampleFrom)} onStart={() => setScreen("rooms")} />
           )}
           {screen === "home" && <HomeScreen plans={savedPlans} onOpenPlan={openPlan} onDeletePlan={deletePlan} onNewPlan={startNewPlanFromHome} />}
           {screen === "rooms" && (
