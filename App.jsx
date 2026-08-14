@@ -1365,7 +1365,11 @@ function TopNav({ onBack, step, total, eyebrow }) {
         ) : <div className="flex-1" />}
         <div className="w-10" />
       </div>
-      {eyebrow && <p className="font-body t-eyebrow text-center" style={{ color: COLORS.subtext }}>{eyebrow}</p>}
+      {/* Este rótulo dice en qué pantalla estás ("INFORME DE EJEMPLO",
+          "DESPACHO"), y en marrón claro a 12px con mucho espaciado apenas se
+          leía. Cumplía el contraste mínimo, pero cumplir no es lo mismo que
+          verse. En marrón oscuro y algo más grueso se lee de un vistazo. */}
+      {eyebrow && <p className="font-body t-eyebrow text-center" style={{ color: COLORS.text, fontWeight: 600 }}>{eyebrow}</p>}
     </div>
   );
 }
@@ -1441,20 +1445,22 @@ function WelcomeScreen({ onStart, onSeeSample }) {
         <p className="font-body t-body max-w-[300px]" style={{ color: COLORS.subtext }}>
           Cuéntanos cómo vives cada espacio. Nosotros nos encargamos de la parte técnica.
         </p>
-      </div>
-      <div className="flex flex-col gap-2">
-        <PrimaryButton onClick={onStart}>Comenzar</PrimaryButton>
-        {/* Enlace, no botón: quien ya está decidido no debe tener que elegir
-            entre dos cosas que parecen igual de importantes. Pero quien duda
-            necesita poder ver el informe antes de contestar siete preguntas. */}
+        {/* Esto estaba debajo de "Comenzar", en la barra de acciones. En un
+            navegador de escritorio se veía; en un móvil real quedaba a diez
+            píxeles del borde inferior y la barra de direcciones se lo comía.
+            Aquí, dentro del bloque centrado, no depende de dónde acabe la
+            pantalla. Sigue siendo secundario —"Comenzar" es el único botón
+            de la barra— pero se ve. */}
         <button
           onClick={onSeeSample}
-          className="w-full font-body t-small font-medium py-2 flex items-center justify-center gap-1"
-          style={{ color: COLORS.subtext }}
+          className="tap-scale mt-9 inline-flex items-center gap-2 rounded-xl px-5 py-3 font-body t-small font-medium transition-all duration-200"
+          style={{ color: COLORS.text, backgroundColor: COLORS.bgAlt, border: `1px solid ${COLORS.border}` }}
         >
-          Ver un informe de ejemplo <ChevronRight size={14} />
+          Ver un informe de ejemplo
+          <ChevronRight size={14} color={COLORS.text} />
         </button>
       </div>
+      <PrimaryButton onClick={onStart}>Comenzar</PrimaryButton>
     </div>
   );
 }
