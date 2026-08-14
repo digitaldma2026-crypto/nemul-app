@@ -22,6 +22,7 @@ import {
   ArrowLeft, Check, ChevronRight, ChevronDown, Sun, Moon, CloudSun, Lightbulb,
   Sparkles, BookOpen, Users, Coffee, Plus, Trash2, Home as HomeIcon,
   Package, Palette, Wind, Tv, Briefcase, Droplets, Zap, Laptop, Lamp, X, Hammer, Info, Pencil, Lock, Download,
+  Instagram,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------------
@@ -3308,7 +3309,8 @@ const LANDING_COPY = {
     accessTitle: "Empieza gratis con una habitación",
     accessText: "Prueba Nemul sin coste en el espacio que más te importe ahora. Muy pronto abriremos el acceso a toda la vivienda.",
     accessCta: "Empieza gratis",
-    guideLine: "Visita mi tienda de Etsy para más consejos de diseño",
+    instagramLine: "Consejos sencillos para iluminar mejor tu casa",
+    instagramHandle: "@nemul.app",
     faqTitle: "Preguntas frecuentes",
     faqs: [
       { q: "¿Necesito saber de iluminación para usar Nemul?", a: "No. Todas las preguntas están pensadas para cualquier persona, sin necesidad de conocer términos técnicos. Nemul traduce los aspectos técnicos a recomendaciones fáciles de entender." },
@@ -3318,6 +3320,7 @@ const LANDING_COPY = {
     ],
     footerLegal: "Estas recomendaciones son orientativas. Para la instalación eléctrica, consulta siempre a un profesional certificado.",
     footerFaqLink: "Preguntas frecuentes",
+    footerShop: "Guía de iluminación",
     footerContact: "Contacto",
     footerPrivacy: "Política de privacidad",
     privacy: {
@@ -3370,7 +3373,8 @@ const LANDING_COPY = {
     accessTitle: "Start free with one room",
     accessText: "Try Nemul at no cost in the space that matters most to you right now. We'll soon open access to your whole home.",
     accessCta: "Start for free",
-    guideLine: "Visit my Etsy shop for more design tips",
+    instagramLine: "Simple tips to light your home better",
+    instagramHandle: "@nemul.app",
     faqTitle: "Frequently asked questions",
     faqs: [
       { q: "Do I need to know about lighting to use Nemul?", a: "No. Every question is designed for anyone, no technical terms required. Nemul handles the professional part for you." },
@@ -3380,6 +3384,7 @@ const LANDING_COPY = {
     ],
     footerLegal: "These recommendations are for guidance only. Always consult a certified professional for electrical installation.",
     footerFaqLink: "FAQ",
+    footerShop: "Lighting guide",
     footerContact: "Contact",
     footerPrivacy: "Privacy policy",
     privacy: {
@@ -3578,23 +3583,27 @@ function AccessSection({ onStart, t }) {
   );
 }
 
-// Antes era una tarjeta con rótulo, recuadro, icono, titular, descripción y
-// botón, y ocupaba una sección entera de la portada. Misma línea que en el
-// informe: la tienda se menciona, no se anuncia.
-function LandingGuideSection({ t }) {
+// Antes era una tarjeta de Etsy con rótulo, recuadro, icono, titular,
+// descripción y botón, y ocupaba una sección entera de la portada.
+// Ahora esta línea es de Instagram: seguir es gratis y sin fricción, así que
+// es la salida que tiene sentido ofrecer a quien todavía no ha probado nada.
+// La tienda vive donde convierte — dentro del informe, cuando ya has recibido
+// algo — y en la portada baja al footer para no competir con esta línea.
+function LandingInstagramSection({ t }) {
   return (
     <section className="max-w-3xl mx-auto px-6 pb-6">
       <Reveal>
         <a
-          href="https://www.etsy.com/es/listing/4427720777/guia-de-iluminacion-del-hogar-consejos?ref=share_ios_native_control"
+          href="https://www.instagram.com/nemul.app/"
           target="_blank"
           rel="noopener noreferrer"
-          onClick={() => { track("etsy_click", { desde: "landing" }); gaEvent("etsy_click", { desde: "landing" }); }}
-          className="tap-scale w-full flex items-center justify-center gap-2 py-4 font-body t-small font-medium"
+          onClick={() => { track("instagram_click", { desde: "landing" }); gaEvent("instagram_click", { desde: "landing" }); }}
+          className="tap-scale w-full flex items-center justify-center gap-2 py-4 font-body t-small font-medium flex-wrap"
           style={{ color: COLORS.text, borderTop: `1px solid ${COLORS.text}`, borderBottom: `1px solid ${COLORS.text}` }}
         >
-          <BookOpen size={16} color={COLORS.text} strokeWidth={1.7} />
-          {t.guideLine}
+          <Instagram size={16} color={COLORS.text} strokeWidth={1.7} />
+          {t.instagramLine}
+          <span style={{ color: COLORS.subtext }}>{t.instagramHandle}</span>
           <ChevronRight size={14} color={COLORS.text} />
         </a>
       </Reveal>
@@ -3645,6 +3654,16 @@ function LandingFooter({ t }) {
         </p>
         <div className="flex items-center justify-center gap-5 mb-5 flex-wrap">
           <a href="#faq" className="font-body t-small font-medium" style={{ color: COLORS.text }}>{t.footerFaqLink}</a>
+          <a
+            href="https://www.etsy.com/es/listing/4427720777/guia-de-iluminacion-del-hogar-consejos?ref=share_ios_native_control"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => { track("etsy_click", { desde: "footer" }); gaEvent("etsy_click", { desde: "footer" }); }}
+            className="font-body t-small font-medium"
+            style={{ color: COLORS.text }}
+          >
+            {t.footerShop}
+          </a>
           <a href="mailto:digitaldma2026@gmail.com" className="font-body t-small font-medium" style={{ color: COLORS.text }}>{t.footerContact}</a>
           <button onClick={() => setShowPrivacy((s) => !s)} className="font-body t-small font-medium" style={{ color: COLORS.text }}>{t.footerPrivacy}</button>
         </div>
@@ -3706,7 +3725,7 @@ function LandingPage({ onStart }) {
       <ProductShowcaseSection t={t} />
       <CredentialSection t={t} />
       <AccessSection onStart={onStart} t={t} />
-      <LandingGuideSection t={t} />
+      <LandingInstagramSection t={t} />
       <FAQSection t={t} />
       <LandingFooter t={t} />
     </div>
