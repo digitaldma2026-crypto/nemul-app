@@ -1346,7 +1346,7 @@ function getReport(roomId, answers = {}) {
   const problemDict = PROBLEM_INSIGHT[roomId] || {};
   if (problemDict[answers.problem]) parts.push(problemDict[answers.problem]);
   if (RENOVATION_INSIGHT[answers.renovationStatus]) parts.push(RENOVATION_INSIGHT[answers.renovationStatus]);
-  if (parts.length === 0) parts.push("Con lo que nos cuentes de este espacio, Nemul preparará una propuesta de iluminación a medida.");
+  if (parts.length === 0) parts.push("Con lo que nos cuentes de este espacio, Nemul preparará un estudio de iluminación a medida.");
   return parts;
 }
 
@@ -3530,7 +3530,13 @@ const LANDING_COPY = {
   es: {
     navCta: "Empieza gratis",
     heroTitle: "Diseña la iluminación de tu hogar.",
-    heroSubtitle: "Recibe una propuesta de iluminación personalizada en pocos minutos. No necesitas conocimientos técnicos.",
+    // "Propuesta" era la única palabra de la web que rebajaba lo que Nemul
+    // entrega. El producto ya se llama a sí mismo estudio en todas partes —cada
+    // tarjeta del informe pone "Estudio de iluminación" y al terminar dice "Tu
+    // estudio de iluminación está listo"—, así que la portada prometía menos de
+    // lo que se cumple. Y es literal: se calculan lúmenes, temperatura de color
+    // y distribución, no se sugiere una idea.
+    heroSubtitle: "Recibe un estudio de iluminación personalizado en pocos minutos. No necesitas conocimientos técnicos.",
     heroCta: "Diseña tu iluminación",
     heroTrust: "Gratis · Sin registro · En pocos minutos",
     sampleLink: "Ver un informe de ejemplo",
@@ -3541,7 +3547,7 @@ const LANDING_COPY = {
     steps: [
       { n: "1", title: "Elige una estancia", text: "Salón, cocina, dormitorio... empieza por el espacio que más te importa ahora mismo." },
       { n: "2", title: "Responde unas preguntas sencillas", text: "Nada de términos técnicos: te preguntamos cómo vives ese espacio, no cómo diseñar luz." },
-      { n: "3", title: "Recibe tu estudio de iluminación", text: "Temperatura, lúmenes, distribución de focos y una propuesta adaptada a tu estancia." },
+      { n: "3", title: "Recibe tu estudio de iluminación", text: "Temperatura, lúmenes, distribución de focos y recomendaciones adaptadas a tu estancia." },
     ],
     showcaseTitle: "¿Qué vas a recibir con Nemul?",
     showcasePreviewLabel: "Vista previa del informe (resumen)",
@@ -3596,7 +3602,7 @@ const LANDING_COPY = {
   en: {
     navCta: "Start for free",
     heroTitle: "The simplest way to design your home's lighting.",
-    heroSubtitle: "Get professional recommendations in minutes. No technical knowledge required.",
+    heroSubtitle: "Get a personalized lighting study in minutes. No technical knowledge required.",
     heroCta: "Start for free",
     sampleLink: "See a sample report",
     bannerAlt: "Home office lit at night: recessed ceiling downlights, LED strip under the shelves and a task lamp on the desk",
