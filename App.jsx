@@ -3474,7 +3474,11 @@ function Reveal({ children, delay = 0, className = "" }) {
           observer.disconnect();
         }
       },
-      { threshold: 0.15 }
+      // Antes exigía que el 15 % del bloque estuviera ya en pantalla. En
+      // bloques altos eso llega tarde: mientras scrolleas ves un hueco crema
+      // donde el contenido todavía no ha aparecido, y la página parece mucho
+      // más vacía de lo que es. Ahora aparece en cuanto asoma.
+      { threshold: 0.01, rootMargin: "0px 0px -60px 0px" }
     );
     observer.observe(node);
     return () => observer.disconnect();
@@ -3487,7 +3491,10 @@ function Reveal({ children, delay = 0, className = "" }) {
       style={{
         opacity: visible ? 1 : 0,
         transform: visible ? "translateY(0)" : "translateY(24px)",
-        transition: `opacity 0.6s ease ${delay}ms, transform 0.6s cubic-bezier(0.22,1,0.36,1) ${delay}ms`,
+        // 0,6 s era largo para un fundido de entrada: sumado al escalonado de
+        // las listas, el último elemento tardaba casi un segundo en verse y
+        // mientras tanto su hueco estaba en blanco.
+        transition: `opacity 0.45s ease ${delay}ms, transform 0.45s cubic-bezier(0.22,1,0.36,1) ${delay}ms`,
       }}
     >
       {children}
@@ -3519,7 +3526,6 @@ const LANDING_COPY = {
     heroCta: "Diseña tu iluminación",
     heroTrust: "Gratis · Sin registro · En pocos minutos",
     sampleLink: "Ver un informe de ejemplo",
-    showcaseSampleLink: "Ver un informe de ejemplo completo",
     langNotice: "",
     howTitle: "¿Cómo funciona?",
     howSubtitle: "Responde unas preguntas y recibe un estudio personalizado para tu estancia.",
@@ -3584,7 +3590,6 @@ const LANDING_COPY = {
     heroSubtitle: "Get professional recommendations in minutes. No technical knowledge required.",
     heroCta: "Start for free",
     sampleLink: "See a sample report",
-    showcaseSampleLink: "See a full sample report",
     heroTrust: "No sign-up. No commitment. Free report in minutes.",
     langNotice: "Note: the interactive questionnaire is currently only available in Spanish. Full English support is coming soon.",
     howTitle: "How does it work?",
@@ -3696,11 +3701,13 @@ function LandingHero({ onStart, onSeeSample, t }) {
   return (
     // El logo ya está en la barra fija justo encima; repetirlo aquí a 144 px
     // de alto empujaba el titular fuera de la primera pantalla en móvil.
-    <section className="max-w-3xl mx-auto px-6 pt-24 pb-28 text-center">
-      <h1 className="font-display t-hero font-medium mb-6 max-w-2xl mx-auto" style={{ color: COLORS.text }}>
+    // Antes pt-24 pb-28: casi 100 px de aire por arriba y 112 por abajo, que
+    // en un móvil es media pantalla vacía antes de leer nada.
+    <section className="max-w-3xl mx-auto px-6 pt-10 pb-12 md:pt-14 md:pb-14 text-center">
+      <h1 className="font-display t-hero font-medium mb-5 max-w-2xl mx-auto" style={{ color: COLORS.text }}>
         {t.heroTitle}
       </h1>
-      <p className="font-body t-lead max-w-xl mx-auto mb-10" style={{ color: COLORS.subtext }}>
+      <p className="font-body t-lead max-w-xl mx-auto mb-7" style={{ color: COLORS.subtext }}>
         {t.heroSubtitle}
       </p>
       <button
@@ -3710,15 +3717,15 @@ function LandingHero({ onStart, onSeeSample, t }) {
       >
         {t.heroCta}
       </button>
-      <p className="font-body t-caption mt-4" style={{ color: COLORS.subtext }}>
+      <p className="font-body t-caption mt-3" style={{ color: COLORS.subtext }}>
         {t.heroTrust}
       </p>
-      {/* Aquí es donde alguien decide si le dedica cinco minutos o se va, y la
-          pregunta que tiene en la cabeza es "¿qué me vais a dar?". Estaba
-          contestada una pantalla más adentro, que es como no contestarla. */}
+      {/* El único sitio de la portada donde se enseña el informe. Aquí es donde
+          alguien decide si le dedica cinco minutos o se va, y la pregunta que
+          tiene en la cabeza es "¿qué me vais a dar?". */}
       <button
         onClick={onSeeSample}
-        className="tap-scale mt-7 inline-flex items-center gap-2 rounded-xl px-5 py-3 font-body t-small font-medium transition-all duration-200"
+        className="tap-scale mt-5 inline-flex items-center gap-2 rounded-xl px-5 py-3 font-body t-small font-medium transition-all duration-200"
         style={{ color: COLORS.text, backgroundColor: COLORS.bgAlt, border: `1px solid ${COLORS.border}` }}
       >
         {t.sampleLink}
@@ -3735,7 +3742,7 @@ function LandingHero({ onStart, onSeeSample, t }) {
 
 function HowItWorksSection({ t }) {
   return (
-    <section className="max-w-3xl mx-auto px-6 py-20">
+    <section className="max-w-3xl mx-auto px-6 py-10 md:py-14">
       <Reveal>
         <h2 className="font-display t-display font-medium text-center mb-3" style={{ color: COLORS.text }}>{t.howTitle}</h2>
         <p className="font-body t-body text-center mb-10 max-w-md mx-auto" style={{ color: COLORS.subtext }}>{t.howSubtitle}</p>
@@ -3767,9 +3774,9 @@ function PreviewRow({ label }) {
   );
 }
 
-function ProductShowcaseSection({ t, onSeeSample }) {
+function ProductShowcaseSection({ t }) {
   return (
-    <section className="max-w-3xl mx-auto px-6 py-20">
+    <section className="max-w-3xl mx-auto px-6 py-10 md:py-14">
       <Reveal>
         <h2 className="font-display t-display font-medium text-center mb-3" style={{ color: COLORS.text }}>{t.showcaseTitle}</h2>
         <p className="font-body t-small tracking-wide text-center mb-6" style={{ color: COLORS.accent }}>
@@ -3793,26 +3800,13 @@ function ProductShowcaseSection({ t, onSeeSample }) {
       <p className="font-body t-caption text-center mt-5" style={{ color: COLORS.subtext }}>
         {t.showcaseFooter}
       </p>
-      {/* Esta sección enseña seis titulares de lo que lleva el informe y luego
-          dice "el informe completo incluye...". Es el sitio exacto donde a uno
-          le apetece verlo entero, y hasta ahora no había por dónde. */}
-      <div className="text-center">
-        <button
-          onClick={onSeeSample}
-          className="tap-scale mt-5 inline-flex items-center gap-2 rounded-xl px-5 py-3 font-body t-small font-medium transition-all duration-200"
-          style={{ color: COLORS.text, backgroundColor: COLORS.bgAlt, border: `1px solid ${COLORS.border}` }}
-        >
-          {t.showcaseSampleLink}
-          <ChevronRight size={14} color={COLORS.text} />
-        </button>
-      </div>
     </section>
   );
 }
 
 function CredentialSection({ t }) {
   return (
-    <section className="max-w-3xl mx-auto px-6 py-20 text-center">
+    <section className="max-w-3xl mx-auto px-6 py-10 md:py-14 text-center">
       <Reveal>
         <div className="w-10 h-px mx-auto mb-8" style={{ backgroundColor: COLORS.subtext }} />
         <p className="font-display t-title font-medium mb-3" style={{ color: COLORS.text }}>{t.credentialTitle}</p>
@@ -3826,7 +3820,7 @@ function CredentialSection({ t }) {
 
 function AccessSection({ onStart, t }) {
   return (
-    <section className="max-w-3xl mx-auto px-6 py-20 text-center">
+    <section className="max-w-3xl mx-auto px-6 py-10 md:py-14 text-center">
       <Reveal>
       <div className="rounded-xl p-8 transition-all duration-300" style={{ backgroundColor: COLORS.bgAlt, border: `1px solid ${COLORS.border}` }}>
         <p className="font-body t-eyebrow mb-3" style={{ color: COLORS.primary }}>{t.accessLabel}</p>
@@ -3894,11 +3888,11 @@ function FAQItem({ q, a }) {
 
 function FAQSection({ t }) {
   return (
-    <section id="faq" className="max-w-3xl mx-auto px-6 py-20">
+    <section id="faq" className="max-w-3xl mx-auto px-6 py-10 md:py-14">
       <Reveal><h2 className="font-display t-display font-medium text-center mb-8" style={{ color: COLORS.text }}>{t.faqTitle}</h2></Reveal>
       <div className="flex flex-col gap-3">
         {t.faqs.map((f, i) => (
-          <Reveal key={i} delay={i * 80}>
+          <Reveal key={i} delay={i * 50}>
             <FAQItem q={f.q} a={f.a} />
           </Reveal>
         ))}
@@ -3986,7 +3980,7 @@ function LandingPage({ onStart, onSeeSample }) {
       <LandingNav onStart={onStart} lang={lang} setLang={setLang} t={t} />
       <LandingHero onStart={onStart} onSeeSample={onSeeSample} t={t} />
       <HowItWorksSection t={t} />
-      <ProductShowcaseSection t={t} onSeeSample={onSeeSample} />
+      <ProductShowcaseSection t={t} />
       <CredentialSection t={t} />
       <AccessSection onStart={onStart} t={t} />
       <LandingInstagramSection t={t} />
