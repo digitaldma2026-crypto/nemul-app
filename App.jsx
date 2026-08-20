@@ -2705,14 +2705,24 @@ function CeilingPlan({ grid, onlyLights = false }) {
   const PAD = 20;
   const BOX_W = 300;
   const BOX_H = Math.max(120, Math.min(240, Math.round((BOX_W * d) / w)));
-  const vbW = BOX_W + PAD * 2;
+
+  // Hueco extra a la izquierda para la cota vertical. El plano acotaba solo la
+  // separación horizontal, así que una retícula de 1,75 x 1,29 m se leía como
+  // si los focos estuvieran a 1,7 m en las dos direcciones. Con un solo número
+  // a la vista, el dibujo dice menos de lo que sabe.
+  //
+  // Solo se reserva cuando hay dos filas que acotar: en un plano de una sola
+  // fila ese margen quedaría vacío y descentraría la estancia.
+  const GUTTER = rows >= 2 ? 22 : 0;
+  const LEFT = PAD + GUTTER;
+  const vbW = LEFT + BOX_W + PAD;
   const vbH = BOX_H + PAD * 2 + 26;
 
   // El plano dibuja el margen a pared real. Antes repartía los focos en
   // huecos iguales —medio hueco a cada lado—, así que con separaciones
   // grandes el muro quedaba a más de un metro sin que nadie lo hubiera
   // decidido.
-  const cx = (c) => PAD + (BOX_W * (cols > 1 ? mx + c * sx : w / 2)) / w;
+  const cx = (c) => LEFT + (BOX_W * (cols > 1 ? mx + c * sx : w / 2)) / w;
   const cy = (r) => PAD + (BOX_H * (rows > 1 ? my + r * sy : d / 2)) / d;
   const stepX = cols > 1 ? (BOX_W * sx) / w : BOX_W;
   const stepY = rows > 1 ? (BOX_H * sy) / d : BOX_H;
@@ -2731,7 +2741,7 @@ function CeilingPlan({ grid, onlyLights = false }) {
       </p>
       <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
         <svg viewBox={`0 0 ${vbW} ${vbH}`} xmlns="http://www.w3.org/2000/svg" role="img"
-          aria-label={`Plano orientativo visto desde arriba: ${n} focos repartidos en ${cols} columnas y ${rows} filas`}
+          aria-label={`Plano orientativo visto desde arriba: ${n} focos repartidos en ${cols} columnas y ${rows} filas, con ${spacingText(grid)}`}
           style={{ display: "block", width: "100%", height: "auto" }}>
           <defs>
             <radialGradient id="nemul-pool">
@@ -2740,7 +2750,7 @@ function CeilingPlan({ grid, onlyLights = false }) {
             </radialGradient>
           </defs>
 
-          <rect x={PAD} y={PAD} width={BOX_W} height={BOX_H} rx="4" fill="#FFFDF8" stroke={COLORS.text} strokeWidth="2" />
+          <rect x={LEFT} y={PAD} width={BOX_W} height={BOX_H} rx="4" fill="#FFFDF8" stroke={COLORS.text} strokeWidth="2" />
           {lights.map(({ c, r }, i) => <circle key={`p${i}`} cx={cx(c)} cy={cy(r)} r={pool} fill="url(#nemul-pool)" />)}
           {lights.map(({ c, r }, i) => (
             <circle key={`l${i}`} cx={cx(c)} cy={cy(r)} r="7" fill={COLORS.bulb} stroke={COLORS.text} strokeWidth="1.6" />
@@ -2760,12 +2770,30 @@ function CeilingPlan({ grid, onlyLights = false }) {
             </>
           )}
 
+          {rows >= 2 && (
+            <>
+              <g stroke={COLORS.text} strokeWidth="1.1" fill="none">
+                <line x1={LEFT - 8} y1={cy(0)} x2={LEFT - 8} y2={cy(1)} strokeDasharray="3 2" />
+                <line x1={LEFT - 12} y1={cy(0)} x2={LEFT - 4} y2={cy(0)} />
+                <line x1={LEFT - 12} y1={cy(1)} x2={LEFT - 4} y2={cy(1)} />
+              </g>
+              {/* La misma píldora que arriba, girada sobre su propio centro:
+                  así el texto sube por el lateral en vez de tumbarse. */}
+              <g transform={`rotate(-90 ${LEFT - 11} ${(cy(0) + cy(1)) / 2})`}>
+                <rect x={LEFT - 38} y={(cy(0) + cy(1)) / 2 - 7.5} width="54" height="15" rx="7" fill={COLORS.text} />
+                <text x={LEFT - 11} y={(cy(0) + cy(1)) / 2 + 3.6} textAnchor="middle" fontFamily="Montserrat, sans-serif" fontSize="9.5" fontWeight="600" fill="#FFF7E8">
+                  {fmtM(sy)} m
+                </text>
+              </g>
+            </>
+          )}
+
           <g stroke={COLORS.subtext} strokeWidth="1" fill="none">
-            <line x1={PAD} y1={vbH - 18} x2={PAD + BOX_W} y2={vbH - 18} strokeDasharray="3 2" />
-            <line x1={PAD} y1={vbH - 22} x2={PAD} y2={vbH - 14} />
-            <line x1={PAD + BOX_W} y1={vbH - 22} x2={PAD + BOX_W} y2={vbH - 14} />
+            <line x1={LEFT} y1={vbH - 18} x2={LEFT + BOX_W} y2={vbH - 18} strokeDasharray="3 2" />
+            <line x1={LEFT} y1={vbH - 22} x2={LEFT} y2={vbH - 14} />
+            <line x1={LEFT + BOX_W} y1={vbH - 22} x2={LEFT + BOX_W} y2={vbH - 14} />
           </g>
-          <text x={vbW / 2} y={vbH - 4} textAnchor="middle" fontFamily="Montserrat, sans-serif" fontSize="9.5" fill={COLORS.subtext}>
+          <text x={LEFT + BOX_W / 2} y={vbH - 4} textAnchor="middle" fontFamily="Montserrat, sans-serif" fontSize="9.5" fill={COLORS.subtext}>
             {area} m² · unos {fmtM(w)} × {fmtM(d)} m
           </text>
         </svg>
