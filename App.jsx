@@ -269,6 +269,32 @@ const WALL_MARGIN_MAX = 0.75;
 const WALL_MARGIN_ABS_MAX = 0.9;
 const WALL_MARGIN_STEP = 0.05;
 
+/* Reparto de las estancias de estar (salón y salón-comedor). Ver openPlanLayout.
+ *
+ * Exigir 1,20-1,50 m en cada eje por separado no deja elegir: cada foco acaba
+ * cubriendo entre 1,44 y 2,25 m², así que un salón de 20 m² cae por aritmética
+ * entre 9 y 14 puntos, hagas lo que hagas con los márgenes. Los 12 focos de
+ * 300 lm que salían no eran una decisión de diseño, eran la única celda de la
+ * tabla. Un techo de salón con doce agujeros no es un techo limpio.
+ *
+ * Así que aquí la medida no es cada eje por su cuenta, sino la superficie que
+ * cubre cada punto: SE_* es el lado del cuadrado equivalente. 1,26 x 1,98 m
+ * reparte mejor en una estancia alargada que 1,50 x 1,50, y un eje suelto no
+ * sabe decirlo. */
+const SE_OPEN_MAX = 1.75;
+// Con la superficie por punto como única medida, el cálculo se iba a 2,12 m
+// entre focos: aprobaba de sobra en superficie y en el techo dejaba sombra.
+// 1,80 y no 2,00 porque arreglar el exceso de focos abriendo la retícula hasta
+// casi dos metros es cambiar un problema por el contrario. En un salón de
+// 20 m² este tope es justo lo que descarta 8 focos con las filas a 1,98 m y
+// deja 9 en 3x3, que es la retícula que de verdad queda limpia.
+const AXIS_OPEN_MAX = 1.8;
+// Y una retícula estirada —una fila de siete— también aprueba en superficie.
+const GRID_ANISO_MAX = 1.6;
+// Por encima de 900 lm un downlight doméstico hace mancha y deslumbra: es el
+// suelo del número de puntos.
+const DOWNLIGHT_LM_CAP = 900;
+
 // Flujos habituales de un downlight LED doméstico.
 //
 // Antes el foco era fijo —800 lm— y de ahí salía el número de puntos: en un
@@ -385,7 +411,10 @@ function generateLivingReport(answers = {}) {
   const tempK = TEMP_BY_STYLE[style];
   const lux = getLux("living", light);
   const lumens = Math.round((lux * area) / 100) * 100;
-  const grid = planLayout(area, lumens, 4);
+  // Un salón se reparte con el criterio abierto: aquí un techo despejado vale
+  // tanto como la uniformidad. La cocina, el baño y las demás siguen con
+  // planLayout, donde manda la encimera o el espejo y no el número de agujeros.
+  const grid = openPlanLayout(area, lumens, 4);
 
   const tips = [];
   tips.push(`Coloca los downlights siguiendo la retícula del plano: unos ${spacingText(grid)}, y a unos ${marginText(grid)} de las paredes.`);
@@ -1105,6 +1134,11 @@ const ROOM_TECH_CONFIG = {
     defaultArea: 12,
     minDownlights: 2,
     getTempK: (a) => ((a.activities || []).includes("work") ? 3500 : 2700),
+    // Un dormitorio es una estancia de estar: nadie trabaja bajo la retícula,
+    // y el techo se mira desde la cama. Con el reparto estricto un dormitorio
+    // de 17 m² salían doce focos de 200 lm, un flujo que casi no existe como
+    // producto. Ver openPlanLayout.
+    openGrid: true,
   },
   bathroom: {
     areaMap: BATHROOM_AREA_BY_SIZE,
@@ -1174,6 +1208,28 @@ const ROOM_TECH_MISTAKES = {
   ],
 };
 
+/* La retícula del techo no tiene por qué dar toda la luz de un dormitorio, y
+ * en los grandes conviene decirlo. El cálculo reparte el total entre
+ * downlights porque es lo único que sabe dibujar, pero una mesita, un aplique
+ * a la cabecera o la luz de dentro del armario cubren parte de ese total y
+ * dejan el techo más despejado.
+ *
+ * Sin esta frase una propuesta de doce puntos se lee como la única solución
+ * correcta, cuando es solo la retícula uniforme más despejada que cabe dentro
+ * de los límites. En un dormitorio de 24 m² no hay forma de bajar de 4 x 3 sin
+ * pasar de 1,80 m entre focos, así que lo que se abre no es la retícula: es la
+ * idea de que el techo no está solo. */
+function bedroomLayerTips(area, grid) {
+  if (area < 15) return [];
+  const tips = [
+    "En un dormitorio de este tamaño no hace falta que toda la luz salga del techo: lámparas de mesita, apliques a la cabecera, luz dentro del armario o una tira LED oculta cubren buena parte del total y dan un ambiente mucho más cálido para descansar.",
+  ];
+  if (grid.n >= 9) {
+    tips.push(`Los ${grid.n} downlights son la retícula más despejada que cabe respetando las distancias entre focos, no la única solución posible: si sumas esas otras capas de luz, puedes poner menos focos en el techo y dejar que el resto del flujo venga de ellas.`);
+  }
+  return tips;
+}
+
 function generateGenericTechnicalReport(roomId, answers = {}) {
   const cfg = ROOM_TECH_CONFIG[roomId];
   const area = cfg.areaMap[answers.size] ?? cfg.defaultArea;
@@ -1181,9 +1237,12 @@ function generateGenericTechnicalReport(roomId, answers = {}) {
   const lumens = Math.round((lux * area) / 100) * 100;
   const grid = cfg.ambient
     ? ambientLayout(area, lumens, cfg.minDownlights)
-    : planLayout(area, lumens, cfg.minDownlights);
+    : cfg.openGrid
+      ? openPlanLayout(area, lumens, cfg.minDownlights)
+      : planLayout(area, lumens, cfg.minDownlights);
   const tempK = cfg.getTempK(answers);
   const tips = getReport(roomId, answers);
+  if (roomId === "bedroom") tips.push(...bedroomLayerTips(area, grid));
   const mistakes = ROOM_TECH_MISTAKES[roomId] || [];
   return { tempK, lumens, grid, area, lux, tips, mistakes };
 }
@@ -1888,7 +1947,7 @@ function CalculationBlock({ area, lux, lumens, grid }) {
         </div>
       </div>
       <p className="font-body t-caption mt-2.5" style={{ color: COLORS.subtext }}>
-        El número de focos sale de la retícula, no del catálogo: se colocan separados entre {fmtM(SPACING_MIN)} y {fmtM(SPACING_MAX)} m para que la luz caiga pareja, y el flujo de cada uno se ajusta después para llegar al total necesario. Por eso salen varios focos suaves en vez de unos pocos muy potentes. Si el modelo que eliges da más o menos lúmenes, mantén el número de puntos y acércate a ese flujo total: es el número que importa.
+        El número de focos sale de la retícula, no del catálogo: se busca el reparto más despejado que ilumine bien —los focos van separados en torno a {fmtM(SPACING_MIN)}-{fmtM(SPACING_MAX)} m— y el flujo de cada uno se ajusta después para llegar al total necesario. Es una propuesta equilibrada, no una regla: si el modelo que te gusta da más o menos lúmenes, puedes poner algún foco más o menos y repartirlos a tu manera. Lo que conviene mantener es el flujo total.
       </p>
     </div>
   );
@@ -2492,6 +2551,77 @@ function downlightLumens(lumens, n) {
     Math.abs(b * n - lumens) < Math.abs(a * n - lumens) ? b : a);
 }
 
+/* Todas las colocaciones posibles de un eje: cuántos puntos, a qué margen, y
+ * qué franja cubre cada uno. A diferencia de axisOptions no puntúa ni descarta
+ * nada, porque en el reparto abierto un eje no se juzga solo: lo que decide es
+ * la superficie que sale al cruzarlo con el otro. Un eje de un solo punto
+ * cubre el eje entero. */
+function axisSpreads(len) {
+  const out = [];
+  if (len / 2 <= WALL_MARGIN_ABS_MAX) out.push({ count: 1, cover: len, spacing: 0, margin: len / 2 });
+  const steps = Math.round((WALL_MARGIN_ABS_MAX - WALL_MARGIN_ABS_MIN) / WALL_MARGIN_STEP);
+  for (let count = 2; count <= 12; count++) {
+    for (let k = 0; k <= steps; k++) {
+      const margin = Math.round((WALL_MARGIN_ABS_MIN + k * WALL_MARGIN_STEP) * 100) / 100;
+      const spacing = (len - 2 * margin) / (count - 1);
+      if (spacing > 0) out.push({ count, cover: spacing, spacing, margin });
+    }
+  }
+  return out;
+}
+
+/* La retícula de un salón: la más despejada que siga iluminando bien.
+ *
+ * Filtra por superficie por punto, por que ningún eje se dispare, por que la
+ * retícula no se estire y por que ningún foco tenga que ser una bomba. De las
+ * que pasan gana la de MENOS puntos —no la más cercana a una separación
+ * ideal—, y solo entre las empatadas a puntos decide la puntuación fina.
+ *
+ * Esa preferencia por menos puntos es el ajuste entero: sin ella el cálculo
+ * sube focos gratis para apretar la retícula, que es de donde venían los 12.
+ */
+function openPlanLayout(area, lumens, minCount = 1) {
+  const w = Math.sqrt(area * PLAN_ASPECT);
+  const d = area / w;
+  let best = null;
+
+  for (const x of axisSpreads(w)) {
+    for (const y of axisSpreads(d)) {
+      const n = x.count * y.count;
+      if (n < minCount || lumens / n > DOWNLIGHT_LM_CAP) continue;
+      const wide = Math.max(x.cover, y.cover);
+      const tight = Math.min(x.cover, y.cover);
+      if (wide > AXIS_OPEN_MAX + 1e-9) continue;
+      const se = Math.sqrt(x.cover * y.cover);
+      if (se > SE_OPEN_MAX + 1e-9) continue;
+      const aniso = wide / tight;
+      if (aniso > GRID_ANISO_MAX + 1e-9) continue;
+      const score =
+        Math.max(0, SPACING_MIN - se) +
+        Math.max(0, se - SPACING_MAX) +
+        marginPenalty(x.margin) + marginPenalty(y.margin) +
+        (aniso - 1) * 0.3;
+      if (!best || n < best.n || (n === best.n && score < best.score)) best = { x, y, n, score };
+    }
+  }
+
+  // Ninguna retícula abierta sirve para esta estancia: se reparte como el
+  // resto de la casa antes que devolver un informe sin plano.
+  if (!best) return planLayout(area, lumens, minCount);
+
+  const { x, y, n } = best;
+  const lmPer = downlightLumens(lumens, n);
+  return {
+    area, w, d, n,
+    cols: x.count, rows: y.count,
+    sx: x.spacing, sy: y.spacing,
+    mx: x.margin, my: y.margin,
+    lmPer,
+    totalLm: lmPer * n,
+    watts: Math.max(3, Math.round(lmPer / 100)),
+  };
+}
+
 /* La retícula completa.
  *
  * La forma de la estancia no se pregunta en ningún sitio, así que se parte de
@@ -2654,17 +2784,6 @@ function CeilingPlan({ grid, onlyLights = false }) {
         <p className="font-body t-small italic mt-2.5" style={{ color: COLORS.subtext }}>
           Colocación orientativa en {cols} × {rows}: unos {spacingText(grid)}, y a unos {marginText(grid)} de las paredes. La forma de la estancia se ha dibujado como un rectángulo corriente a partir de los m²: ajusta la retícula a tu planta real y a dónde estén los muebles, apartando los focos de los sitios donde os sentáis para que no queden en el campo de visión.
         </p>
-        {/* Lo que ahora sorprende no es que los focos estén lejos, sino que
-            sean bastantes: la retícula pide un punto cada metro y pico, y el
-            flujo se reparte entre todos. Merece una frase, porque quien
-            esperaba cuatro focos de 800 lm ve ocho de 350 y piensa que se ha
-            calculado de menos. */}
-        {n >= 6 && (
-          <p className="font-body t-small italic mt-1.5" style={{ color: COLORS.subtext }}>
-            Son varios focos de poca potencia y no unos pocos muy fuertes a propósito: repartidos así la luz cae pareja, sin manchas brillantes debajo de cada foco ni sombras entre medias. El total de lúmenes es el mismo.
-          </p>
-        )}
-
         {/* Este plano dibuja la distribución ideal para los m² de la estancia:
             no sabe dónde están los puntos de luz actuales, porque no se
             preguntan. A quien va a reformar eso le vale como plano. A quien
