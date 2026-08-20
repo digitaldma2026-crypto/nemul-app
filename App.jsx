@@ -244,18 +244,44 @@ const STYLE_OPTIONS = [
 ];
 
 const TEMP_BY_STYLE = { acogedor: 2700, equilibrado: 3000, luminoso: 4000 };
-const LUMENS_PER_DOWNLIGHT = 800;
-const WATTS_PER_DOWNLIGHT = 8;
+// La bombilla de toda la vida, que sirve para explicar qué es un lumen. No es
+// la luminaria del proyecto: esa la decide la retícula (ver planLayout).
+const REFERENCE_BULB_LM = 800;
+const REFERENCE_BULB_W = 8;
 
-// Un criterio profesional nunca da una única cifra exacta: da un rango,
-// porque el número real depende del modelo de luminaria, la altura del
-// techo o la distribución final. Siempre se muestra como un rango de 2.
-function downlightRange(lumens, minCount) {
-  const exact = lumens / LUMENS_PER_DOWNLIGHT;
-  const low = Math.max(minCount, Math.round(exact));
-  const high = low + 1;
-  return { low, high };
-}
+// Criterio de reparto de downlights: de 1,20 a 1,50 m entre centros, y unos
+// 60-75 cm a las paredes como punto de partida.
+// Entre focos: 1,20-1,50 m es la franja objetivo.
+const SPACING_MIN = 1.2;
+const SPACING_MAX = 1.5;
+
+// A pared: 60-75 cm es lo recomendado, y 45-90 cm el margen excepcional. Los
+// dos extremos son topes duros, no penalizaciones: fuera de ahí no se estira
+// el margen, se cambia el número de puntos.
+//
+// Los 45 cm de suelo no son un descuido. En un eje corto —una cocina o un baño
+// de 2,07 m de fondo— obligar a 60 cm deja los focos a 87 cm entre sí, o sea
+// una retícula apretada sin motivo. Poder bajar a 45 le da aire al cálculo y
+// saca una distribución más lógica en esas estancias estrechas.
+const WALL_MARGIN_ABS_MIN = 0.45;
+const WALL_MARGIN_MIN = 0.6;
+const WALL_MARGIN_MAX = 0.75;
+const WALL_MARGIN_ABS_MAX = 0.9;
+const WALL_MARGIN_STEP = 0.05;
+
+// Flujos habituales de un downlight LED doméstico.
+//
+// Antes el foco era fijo —800 lm— y de ahí salía el número de puntos: en un
+// salón de 25 m² daban seis, y para repartir seis puntos en 25 m² el plano
+// tenía que separarlos 2,6 m. Eso no es una retícula, son manchas de luz con
+// sombra entre medias. Ahora el orden es el de un proyecto de verdad: primero
+// cuántos puntos caben con la separación correcta, y después qué foco reparte
+// el total entre ellos. Salen más puntos y de menos flujo cada uno, que es
+// exactamente lo que se busca.
+const DOWNLIGHT_LM_STEPS = [200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000];
+
+// Un foco de exterior no cuelga de una retícula de techo. Ver ambientLayout.
+const AMBIENT_LM_PER_POINT = 400;
 
 // Traducción a lenguaje humano: el número técnico no desaparece, pero nunca
 // se queda solo. Así lo explicaría una diseñadora en persona.
@@ -359,11 +385,12 @@ function generateLivingReport(answers = {}) {
   const tempK = TEMP_BY_STYLE[style];
   const lux = getLux("living", light);
   const lumens = Math.round((lux * area) / 100) * 100;
-  const { low: downlightsLow, high: downlightsHigh } = downlightRange(lumens, 4);
+  const grid = planLayout(area, lumens, 4);
 
   const tips = [];
-  tips.push(`Coloca los downlights siguiendo la retícula del plano: unos ${spacingText(area, downlightsLow, downlightsHigh)}.`);
-  tips.push("Evita colocar focos justo encima del sofá para reducir deslumbramientos.");
+  tips.push(`Coloca los downlights siguiendo la retícula del plano: unos ${spacingText(grid)}, y a unos ${marginText(grid)} de las paredes.`);
+  tips.push("Ajusta esa retícula a la planta real y a los muebles: es una referencia de partida, no una plantilla que haya que respetar punto por punto.");
+  tips.push("Evita colocar focos justo encima del sofá o de donde os sentéis: desde ahí el foco queda en el campo de visión y deslumbra.");
   tips.push("Al ser una zona de relax, prioriza lámparas de pared, de pie o de sobremesa sobre la luz general de techo; mejor varios puntos suaves repartidos que pocos focos potentes.");
 
   if (activities.includes("read") || goals.includes("reading") || problem === "reading") tips.push("Añade una lámpara de pie regulable junto al sofá, pensada para leer sin depender de la luz general.");
@@ -410,7 +437,7 @@ function generateLivingReport(answers = {}) {
   if (activities.includes("tv") || problem === "glare") mistakes.push("Evita dirigir la luz directamente hacia la pantalla del televisor, ya que produce reflejos que obligan a forzar la vista.");
   if (ceiling === "vigas") mistakes.push("No es recomendable empotrar focos en las vigas de madera sin consultarlo antes con un instalador, ya que son elementos estructurales y no siempre admiten perforaciones.");
 
-  return { tempK, lumens, downlightsLow, downlightsHigh, area, lux, tips: [...new Set(tips)], mistakes: [...new Set(mistakes)] };
+  return { tempK, lumens, grid, area, lux, tips: [...new Set(tips)], mistakes: [...new Set(mistakes)] };
 }
 
 // ---------- Cocina ----------
@@ -532,12 +559,12 @@ function generateKitchenReport(answers = {}) {
   const area = KITCHEN_AREA_BY_SIZE[size] || 11;
   const heightFactor = tallCeiling ? TALL_CEILING_FACTOR : 1;
   const lumens = Math.round((lux * area * heightFactor) / 100) * 100;
-  const { low: downlightsLow, high: downlightsHigh } = downlightRange(lumens, 4);
+  const grid = planLayout(area, lumens, 4);
 
   const distribution = [];
   // Misma decisión que en el bloque de cálculo: un número, no un rango.
-  distribution.push(`${planLayout(area, downlightsLow, downlightsHigh).n} downlights recomendados, de ${LUMENS_PER_DOWNLIGHT} lm cada uno.`);
-  distribution.push(`Sepáralos siguiendo la retícula del plano: unos ${spacingText(area, downlightsLow, downlightsHigh)}.`);
+  distribution.push(`${grid.n} downlights recomendados, de ${grid.lmPer} lm cada uno.`);
+  distribution.push(`Sepáralos siguiendo la retícula del plano: unos ${spacingText(grid)}, dejando unos ${marginText(grid)} hasta las paredes.`);
   if (upperCabinets && upperCabinets !== "no") {
     distribution.push("Coloca la línea de focos entre 30 y 40 cm por delante de los muebles altos, para iluminar bien el centro de la encimera y evitar sombras al cocinar.");
     distribution.push("Añade iluminación LED bajo los muebles altos.");
@@ -617,7 +644,7 @@ function generateKitchenReport(answers = {}) {
   if (problem === "onlyLighting") mistakes.push("No conviene elegir soluciones que requieran romper alicatado o encimera, ya que encarecen mucho una intervención pensada sin obra.");
   if (adjoiningStyle) mistakes.push("Evita una temperatura de luz muy distinta entre la cocina y el salón, ya que en un espacio abierto el contraste se percibe con mucha más fuerza que entre habitaciones separadas.");
 
-  return { tempK, lumens, downlightsLow, downlightsHigh, area, lux, distribution, narrative: sentences.join(" "), mistakes: [...new Set(mistakes)] };
+  return { tempK, lumens, grid, area, lux, distribution, narrative: sentences.join(" "), mistakes: [...new Set(mistakes)] };
 }
 
 // ---------- Dormitorio, baño, comedor, pasillo, vestidor y terraza ----------
@@ -1102,6 +1129,9 @@ const ROOM_TECH_CONFIG = {
     defaultArea: 12,
     minDownlights: 2,
     getTempK: () => 3000,
+    // Una terraza no tiene techo donde trazar una retícula, y su informe
+    // enseña zonas en vez de un plano: aquí el reparto sale del flujo.
+    ambient: true,
   },
   office: {
     areaMap: OFFICE_AREA_BY_SIZE,
@@ -1149,11 +1179,13 @@ function generateGenericTechnicalReport(roomId, answers = {}) {
   const area = cfg.areaMap[answers.size] ?? cfg.defaultArea;
   const lux = getLux(roomId, answers.light);
   const lumens = Math.round((lux * area) / 100) * 100;
-  const { low: downlightsLow, high: downlightsHigh } = downlightRange(lumens, cfg.minDownlights);
+  const grid = cfg.ambient
+    ? ambientLayout(area, lumens, cfg.minDownlights)
+    : planLayout(area, lumens, cfg.minDownlights);
   const tempK = cfg.getTempK(answers);
   const tips = getReport(roomId, answers);
   const mistakes = ROOM_TECH_MISTAKES[roomId] || [];
-  return { tempK, lumens, downlightsLow, downlightsHigh, area, lux, tips, mistakes };
+  return { tempK, lumens, grid, area, lux, tips, mistakes };
 }
 
 const ROOM_FLOWS = {
@@ -1831,15 +1863,12 @@ function MistakesList({ mistakes }) {
 // sin que nadie le explique una fórmula.
 //
 // Aquí se daba un rango ("6–7 × 800 lm") y el plano de abajo dibujaba 6, así
-// que quien lo leía se quedaba sin saber cuál poner. El informe ya tomaba la
-// decisión —planLayout elige, de los dos valores, el que se reparte en una
-// retícula más pareja— pero no la decía. Ahora la dice: una propuesta con un
-// número, su flujo total, y el margen explicado en palabras debajo. Un rango
-// es honesto en la cabeza de quien calcula; en la de quien compra bombillas
-// es una pregunta sin responder.
-function CalculationBlock({ area, lux, lumens, downlightsLow, downlightsHigh }) {
-  const { n } = planLayout(area, downlightsLow, downlightsHigh);
-  const totalLm = n * LUMENS_PER_DOWNLIGHT;
+// que quien lo leía se quedaba sin saber cuál poner. Ahora hay una propuesta
+// con un número: los focos que pide la retícula y el flujo que le toca a cada
+// uno. Un rango es honesto en la cabeza de quien calcula; en la de quien
+// compra bombillas es una pregunta sin responder.
+function CalculationBlock({ area, lux, lumens, grid }) {
+  const { n, lmPer, totalLm, watts } = grid;
   return (
     <div>
       <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Cálculo realizado</p>
@@ -1850,16 +1879,16 @@ function CalculationBlock({ area, lux, lumens, downlightsLow, downlightsHigh }) 
           <p className="font-body t-small italic mt-1 ml-9" style={{ color: COLORS.subtext }}>{describeLux(lux)}</p>
         </div>
         <StatRow label="Iluminación total necesaria" value={`${lumens.toLocaleString("es-ES")} lúmenes`} />
-        <StatRow label="Propuesta" value={`${n} downlights de ${LUMENS_PER_DOWNLIGHT} lm`} />
+        <StatRow label="Propuesta" value={`${n} downlights de ${lmPer} lm`} />
         <div>
           <StatRow label="Flujo total aproximado" value={`${totalLm.toLocaleString("es-ES")} lm`} />
           <p className="font-body t-small italic mt-1 ml-9" style={{ color: COLORS.subtext }}>
-            Equivale a downlights LED de unos {WATTS_PER_DOWNLIGHT}W cada uno, el estándar más habitual en casa.
+            Equivale a downlights LED de unos {watts} W cada uno.
           </p>
         </div>
       </div>
       <p className="font-body t-caption mt-2.5" style={{ color: COLORS.subtext }}>
-        La cantidad de luminarias se calcula según los m² de la estancia, el nivel de iluminación recomendado y el flujo luminoso de cada downlight. Si el modelo que eliges da más o menos lúmenes por foco, ajusta la cantidad para acercarte a ese flujo total: es el número que importa, no la cifra de focos.
+        El número de focos sale de la retícula, no del catálogo: se colocan separados entre {fmtM(SPACING_MIN)} y {fmtM(SPACING_MAX)} m para que la luz caiga pareja, y el flujo de cada uno se ajusta después para llegar al total necesario. Por eso salen varios focos suaves en vez de unos pocos muy potentes. Si el modelo que eliges da más o menos lúmenes, mantén el número de puntos y acércate a ese flujo total: es el número que importa.
       </p>
     </div>
   );
@@ -2334,7 +2363,7 @@ function LightingBasicsView({ terms }) {
         <div>
           <p className="font-body t-small font-medium" style={{ color: COLORS.text }}>Los lúmenes son la cantidad de luz</p>
           <p className="font-body t-small mt-1" style={{ color: COLORS.subtext }}>
-            Antes mirábamos los vatios; con el LED se miran los lúmenes. Como referencia: {LUMENS_PER_DOWNLIGHT} lúmenes es la luz de una bombilla de toda la vida de 60 W, y hoy se consigue con un LED de unos {WATTS_PER_DOWNLIGHT} W.
+            Antes mirábamos los vatios; con el LED se miran los lúmenes. Como referencia: {REFERENCE_BULB_LM} lúmenes es la luz de una bombilla de toda la vida de 60 W, y hoy se consigue con un LED de unos {REFERENCE_BULB_W} W.
           </p>
         </div>
       </div>
@@ -2363,65 +2392,201 @@ function LightingBasicsView({ terms }) {
  * pie, porque un plano que no avisa de que la forma es inventada se lee como
  * si fuera la casa de quien lo mira.
  *
- * El número de focos SÍ es real: se elige, de entre los dos del rango
- * calculado, el que se reparte en una retícula más pareja. Y la separación
- * que se acota es la que sale de esa retícula, no una cifra de manual: si el
- * cálculo da pocos focos para muchos metros, el plano lo enseña en vez de
- * taparlo.
+ * La retícula SÍ es real, y es la que manda: los focos se separan entre 1,20
+ * y 1,50 m y se dejan unos 60-75 cm hasta la pared. De ahí sale cuántos hay,
+ * y el flujo de cada uno se ajusta después para dar el total calculado. Al
+ * revés —foco fijo, focos contados, separación la que salga— es como se
+ * llegaba a acotar 2,6 m en un salón mediano.
  */
 const PLAN_ASPECT = 1.4;
-function planLayout(area, low, high) {
+
+// Cuánto se castiga un margen a pared fuera de los 60-75 cm de referencia.
+/* De 1,20 a 1,50 m es una franja objetivo, no una diana. Dentro de ella todas
+ * las separaciones valen lo mismo: no hay motivo para preferir 1,35 m a 1,45 m,
+ * y forzar el centro de la franja metía filas de más en estancias que admitían
+ * una retícula más abierta.
+ *
+ * Solo se penaliza quedarse corto, y se penaliza flojo: en una estancia
+ * estrecha no siempre hay forma de llegar a 1,20 m. Pasarse de 1,50 no se
+ * penaliza porque no se permite — de eso se encarga axisOptions dejando esas
+ * combinaciones fuera de la búsqueda. Cuando era una penalización, por fuerte
+ * que fuera, había estancias donde ganaba por unas milésimas: 3,11 m de fondo
+ * salían a 1,505 m porque la alternativa correcta costaba un pelín más. */
+const spacingPenalty = (s) => Math.max(0, SPACING_MIN - s);
+
+/* Dentro de 60-75 cm no resta nada. Salirse de ahí resta poco —a veces es lo
+ * que permite abrir la retícula, o lo que la desapretuja en una estancia
+ * estrecha— pero acercarse a la pared resta el triple que alejarse, porque un
+ * foco a 45 cm ilumina el muro más que la estancia: es un recurso, no un
+ * punto de partida. Los topes de 45 y 90 no aparecen aquí; los aplica
+ * axisOptions dejando fuera de la búsqueda todo lo que se salga. */
+const marginPenalty = (m) =>
+  Math.max(0, m - WALL_MARGIN_MAX) * 0.5 + Math.max(0, WALL_MARGIN_MIN - m) * 1.5;
+
+/* Reparto de UN eje: cuántos puntos y a qué separación.
+ *
+ * Se prueban todos los números de puntos con todos los márgenes a pared
+ * razonables. Como dentro de la franja no hay preferencia, lo normal es que
+ * varias combinaciones empaten a cero; el bucle va de menos puntos a más y se
+ * queda con la primera, así que ante dos retículas igual de válidas gana la
+ * más abierta —menos focos, más separados— en vez de la más apretada.
+ */
+function axisOptions(len) {
+  const out = [];
+  for (let count = 1; count <= 20; count++) {
+    if (count === 1) {
+      // Un punto solo se queda a media estancia de cada pared: solo vale si
+      // esa media estancia cabe dentro del tope.
+      const margin = len / 2;
+      if (margin <= WALL_MARGIN_ABS_MAX) {
+        out.push({ count, spacing: 0, margin, score: Math.max(0, margin - WALL_MARGIN_MAX) * 2 });
+      }
+      continue;
+    }
+    let best = null;
+    // El margen solo se busca entre los dos topes: de 45 a 90 cm. Dentro de
+    // esa horquilla decide marginPenalty; fuera no hay nada que decidir,
+    // porque lo que cambia es el número de puntos, no el margen.
+    const steps = Math.round((WALL_MARGIN_ABS_MAX - WALL_MARGIN_ABS_MIN) / WALL_MARGIN_STEP);
+    for (let k = 0; k <= steps; k++) {
+      const margin = Math.round((WALL_MARGIN_ABS_MIN + k * WALL_MARGIN_STEP) * 100) / 100;
+      const spacing = (len - 2 * margin) / (count - 1);
+      // Los tres topes duros, en una línea: si con este número de puntos no
+      // hay margen legal que baje de 1,50 m, este número de puntos no vale.
+      if (spacing <= 0 || spacing > SPACING_MAX + 1e-9) continue;
+      const score = spacingPenalty(spacing) + marginPenalty(margin);
+      if (!best || score < best.score) best = { count, spacing, margin, score };
+    }
+    if (best) out.push(best);
+  }
+  // Con estancias de casa nunca pasa —a 20 puntos por eje se cubren 30 m—,
+  // pero un eje sin ninguna opción dejaría el informe sin plano.
+  if (!out.length) {
+    const count = Math.max(2, Math.ceil((len - 2 * WALL_MARGIN_ABS_MAX) / SPACING_MAX) + 1);
+    out.push({
+      count,
+      spacing: (len - 2 * WALL_MARGIN_ABS_MAX) / (count - 1),
+      margin: WALL_MARGIN_ABS_MAX,
+      score: 99,
+    });
+  }
+  return out;
+}
+
+// Reparto para un espacio sin techo: la separación entre centros no manda
+// porque no hay retícula que dibujar, así que se parte de un punto de luz
+// exterior corriente y se ajusta el flujo al total.
+function ambientLayout(area, lumens, minCount = 1) {
+  const n = Math.max(minCount, Math.round(lumens / AMBIENT_LM_PER_POINT));
+  const lmPer = downlightLumens(lumens, n);
+  return {
+    area, w: 0, d: 0, n, cols: n, rows: 1,
+    sx: 0, sy: 0, mx: 0, my: 0,
+    lmPer, totalLm: lmPer * n, watts: Math.max(3, Math.round(lmPer / 100)),
+  };
+}
+
+// Qué foco reparte `lumens` entre `n` puntos: el flujo comercial más cercano.
+function downlightLumens(lumens, n) {
+  return DOWNLIGHT_LM_STEPS.reduce((a, b) =>
+    Math.abs(b * n - lumens) < Math.abs(a * n - lumens) ? b : a);
+}
+
+/* La retícula completa.
+ *
+ * La forma de la estancia no se pregunta en ningún sitio, así que se parte de
+ * un rectángulo de proporción corriente sacado de los m². Lo que sí es real
+ * es el criterio: la separación entre centros manda, el número de puntos sale
+ * de ella, y el flujo de cada foco se ajusta después para dar el total
+ * calculado. Nunca al revés.
+ */
+function planLayout(area, lumens, minCount = 1) {
   const w = Math.sqrt(area * PLAN_ASPECT);
   const d = area / w;
+  const xs = axisOptions(w);
+  const ys = axisOptions(d);
+
   let best = null;
-  for (const n of [low, high]) {
-    for (let cols = 1; cols <= n; cols++) {
-      if (n % cols !== 0) continue;
-      const rows = n / cols;
-      const score = Math.abs(w / cols - d / rows);
-      if (!best || score < best.score) best = { n, cols, rows, sx: w / cols, sy: d / rows, score };
+  for (const x of xs) {
+    for (const y of ys) {
+      if (x.count * y.count < minCount) continue;
+      const score = x.score + y.score;
+      if (!best || score < best.score) best = { x, y, score };
     }
   }
-  return { w, d, ...best };
+
+  const { x, y } = best;
+  const n = x.count * y.count;
+  const lmPer = downlightLumens(lumens, n);
+  return {
+    area, w, d, n,
+    cols: x.count, rows: y.count,
+    sx: x.spacing, sy: y.spacing,
+    mx: x.margin, my: y.margin,
+    lmPer,
+    totalLm: lmPer * n,
+    watts: Math.max(3, Math.round(lmPer / 100)),
+  };
 }
 
 const fmtM = (n) => n.toFixed(1).replace(".", ",");
+const fmtCm = (m) => `${Math.round((m * 100) / 5) * 5} cm`;
 
-// La separación entre focos se daba como "1,20–1,50 m" en tres sitios del
-// informe mientras el plano, justo al lado, acotaba la real —2,6 m en un salón
-// mediano—. Era el número de manual contra el número calculado, y el informe
-// se contradecía consigo mismo a la vista. Ahora los tres piden la separación
-// a la misma retícula que dibuja el plano.
+// La separación que se dice en el texto es siempre la que dibuja el plano de
+// al lado, no una cifra de manual: si no coinciden, el informe se contradice
+// a la vista. Cuando la retícula sale cuadrada, las dos medidas son la misma
+// y decir dos veces el mismo número sobra: se dice una.
 //
-// Cuando la retícula sale cuadrada, las dos medidas coinciden y decir dos
-// veces el mismo número sobra: se dice una.
-function spacingText(area, low, high) {
-  const { sx, sy } = planLayout(area, low, high);
+// Un eje puede tener un solo punto (una estancia estrecha), y ahí no hay
+// separación que dar: no se inventa un "0,0 m".
+function spacingText(grid) {
+  const { cols, rows, sx, sy } = grid;
   const x = fmtM(sx);
   const y = fmtM(sy);
-  return x === y ? `${x} m` : `${x} m entre focos y ${y} m entre filas`;
+  if (cols > 1 && rows > 1) return x === y ? `${x} m` : `${x} m entre focos y ${y} m entre filas`;
+  if (cols > 1) return `${x} m entre focos, en una sola fila`;
+  if (rows > 1) return `${y} m entre filas, en una sola columna`;
+  return "un único punto centrado";
 }
 
 // La misma medida, para una fila de datos: ahí "1,4 m entre focos y 1,0 m
 // entre filas" repite lo que ya dice la etiqueta de al lado.
-function spacingShort(area, low, high) {
-  const { sx, sy } = planLayout(area, low, high);
+function spacingShort(grid) {
+  const { cols, rows, sx, sy } = grid;
   const x = fmtM(sx);
   const y = fmtM(sy);
-  return x === y ? `${x} m` : `${x} × ${y} m`;
+  if (cols > 1 && rows > 1) return x === y ? `${x} m` : `${x} × ${y} m`;
+  if (cols > 1) return `${x} m`;
+  if (rows > 1) return `${y} m`;
+  return "punto único";
 }
 
-function CeilingPlan({ area, low, high, onlyLights = false }) {
-  const { w, d, n, cols, rows, sx, sy } = planLayout(area, low, high);
+// La distancia a la pared es la otra mitad del criterio, y hasta ahora no se
+// decía en ningún sitio: el plano repartía los focos dejando medio hueco a
+// cada lado, que con separaciones grandes dejaba el muro a más de un metro.
+function marginText(grid) {
+  const lo = Math.min(grid.mx, grid.my);
+  const hi = Math.max(grid.mx, grid.my);
+  return fmtCm(lo) === fmtCm(hi) ? fmtCm(hi) : `${Math.round((lo * 100) / 5) * 5}-${fmtCm(hi)}`;
+}
+
+function CeilingPlan({ grid, onlyLights = false }) {
+  const { area, w, d, n, cols, rows, sx, sy, mx, my } = grid;
   const PAD = 20;
   const BOX_W = 300;
   const BOX_H = Math.max(120, Math.min(240, Math.round((BOX_W * d) / w)));
   const vbW = BOX_W + PAD * 2;
   const vbH = BOX_H + PAD * 2 + 26;
 
-  const cx = (c) => PAD + (BOX_W * (c + 0.5)) / cols;
-  const cy = (r) => PAD + (BOX_H * (r + 0.5)) / rows;
-  const pool = Math.min(BOX_W / cols, BOX_H / rows) * 0.62;
+  // El plano dibuja el margen a pared real. Antes repartía los focos en
+  // huecos iguales —medio hueco a cada lado—, así que con separaciones
+  // grandes el muro quedaba a más de un metro sin que nadie lo hubiera
+  // decidido.
+  const cx = (c) => PAD + (BOX_W * (cols > 1 ? mx + c * sx : w / 2)) / w;
+  const cy = (r) => PAD + (BOX_H * (rows > 1 ? my + r * sy : d / 2)) / d;
+  const stepX = cols > 1 ? (BOX_W * sx) / w : BOX_W;
+  const stepY = rows > 1 ? (BOX_H * sy) / d : BOX_H;
+  const pool = Math.min(stepX, stepY) * 0.62;
 
   const lights = [];
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) lights.push({ c, r });
@@ -2478,7 +2643,7 @@ function CeilingPlan({ area, low, high, onlyLights = false }) {
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
           <div className="flex items-center gap-2">
             <span className="rounded-full" style={{ width: 11, height: 11, backgroundColor: COLORS.bulb, boxShadow: `inset 0 0 0 1.4px ${COLORS.text}` }} />
-            <span className="font-body t-caption" style={{ color: COLORS.subtext }}>{n} focos de {LUMENS_PER_DOWNLIGHT} lm</span>
+            <span className="font-body t-caption" style={{ color: COLORS.subtext }}>{n} focos de {grid.lmPer} lm</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full" style={{ width: 11, height: 11, backgroundColor: "#F6DFAE" }} />
@@ -2487,17 +2652,16 @@ function CeilingPlan({ area, low, high, onlyLights = false }) {
         </div>
 
         <p className="font-body t-small italic mt-2.5" style={{ color: COLORS.subtext }}>
-          Colocación orientativa en {cols} × {rows}, con unos {fmtM(sx)} m entre focos y {fmtM(sy)} m entre filas. La forma de la estancia se ha dibujado como un rectángulo corriente a partir de los m²: ajusta la retícula a tu planta real.
+          Colocación orientativa en {cols} × {rows}: unos {spacingText(grid)}, y a unos {marginText(grid)} de las paredes. La forma de la estancia se ha dibujado como un rectángulo corriente a partir de los m²: ajusta la retícula a tu planta real y a dónde estén los muebles, apartando los focos de los sitios donde os sentáis para que no queden en el campo de visión.
         </p>
-        {/* Sin esta frase, el plano y el consejo de "sepáralos 1,2–1,5 m" se
-            contradicen a la vista: el número de focos se calcula contando con
-            que habrá lámparas de pie, de mesa o apliques, así que reparte
-            menos focos y más lejos de lo que pide un techo que ilumina solo.
-            La contradicción ya existía en el informe; el dibujo solo la
-            enseña, y aquí se explica en vez de taparla. */}
-        {Math.max(sx, sy) > 1.6 && (
+        {/* Lo que ahora sorprende no es que los focos estén lejos, sino que
+            sean bastantes: la retícula pide un punto cada metro y pico, y el
+            flujo se reparte entre todos. Merece una frase, porque quien
+            esperaba cuatro focos de 800 lm ve ocho de 350 y piensa que se ha
+            calculado de menos. */}
+        {n >= 6 && (
           <p className="font-body t-small italic mt-1.5" style={{ color: COLORS.subtext }}>
-            Van así de separados porque estos focos no son la única luz de la estancia: el cálculo cuenta con que habrá además lámparas de pie, de mesa o apliques. Si quieres que el techo ilumine por sí solo, necesitarás más focos y más juntos.
+            Son varios focos de poca potencia y no unos pocos muy fuertes a propósito: repartidos así la luz cae pareja, sin manchas brillantes debajo de cada foco ni sombras entre medias. El total de lúmenes es el mismo.
           </p>
         )}
 
@@ -2614,7 +2778,7 @@ function ColorTempBlock({ roomId, tempK, extra, sameToneAs }) {
 }
 
 function TechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
-  const { tempK, lumens, downlightsLow, downlightsHigh, area, lux, tips, mistakes } = generateLivingReport(answers);
+  const { tempK, lumens, grid, area, lux, tips, mistakes } = generateLivingReport(answers);
   const { Icon } = room;
   return (
     <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
@@ -2630,9 +2794,9 @@ function TechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) 
         <div className="px-5 pb-5 flex flex-col gap-5">
           <ColorTempBlock roomId={room.id} tempK={tempK} sameToneAs={sameToneAs} />
 
-          <CalculationBlock area={area} lux={lux} lumens={lumens} downlightsLow={downlightsLow} downlightsHigh={downlightsHigh} />
+          <CalculationBlock area={area} lux={lux} lumens={lumens} grid={grid} />
 
-          <CeilingPlan area={area} low={downlightsLow} high={downlightsHigh} onlyLights={answers.renovationStatus === "onlyLights"} />
+          <CeilingPlan grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} />
 
           <TipsList tips={tips} />
 
@@ -2644,7 +2808,7 @@ function TechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) 
 }
 
 function KitchenReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
-  const { tempK, lumens, downlightsLow, downlightsHigh, area, lux, distribution, narrative, mistakes } = generateKitchenReport(answers);
+  const { tempK, lumens, grid, area, lux, distribution, narrative, mistakes } = generateKitchenReport(answers);
   const { Icon } = room;
   return (
     <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
@@ -2662,12 +2826,12 @@ function KitchenReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
             roomId={room.id}
             tempK={tempK}
             sameToneAs={sameToneAs}
-            extra={<StatRow label="Separación entre downlights" value={spacingShort(area, downlightsLow, downlightsHigh)} />}
+            extra={<StatRow label="Separación entre downlights" value={spacingShort(grid)} />}
           />
 
-          <CalculationBlock area={area} lux={lux} lumens={lumens} downlightsLow={downlightsLow} downlightsHigh={downlightsHigh} />
+          <CalculationBlock area={area} lux={lux} lumens={lumens} grid={grid} />
 
-          <CeilingPlan area={area} low={downlightsLow} high={downlightsHigh} onlyLights={answers.renovationStatus === "onlyLights"} />
+          <CeilingPlan grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} />
 
           <div>
             <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Distribución recomendada de los focos</p>
@@ -2729,7 +2893,7 @@ function RoomReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
 }
 
 function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
-  const { tempK, lumens, downlightsLow, downlightsHigh, area, lux, tips, mistakes } = generateGenericTechnicalReport(room.id, answers);
+  const { tempK, lumens, grid, area, lux, tips, mistakes } = generateGenericTechnicalReport(room.id, answers);
   const { Icon } = room;
   return (
     <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
@@ -2745,7 +2909,7 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameTon
         <div className="px-5 pb-5 flex flex-col gap-5">
           <ColorTempBlock roomId={room.id} tempK={tempK} sameToneAs={sameToneAs} />
 
-          <CalculationBlock area={area} lux={lux} lumens={lumens} downlightsLow={downlightsLow} downlightsHigh={downlightsHigh} />
+          <CalculationBlock area={area} lux={lux} lumens={lumens} grid={grid} />
 
           {/* La terraza no lleva plano de techo: no hay techo donde empotrar
               nada, y su esquema de zonas ya hace ese trabajo. */}
@@ -2757,7 +2921,7 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameTon
               </div>
             </div>
           ) : (
-            <CeilingPlan area={area} low={downlightsLow} high={downlightsHigh} onlyLights={answers.renovationStatus === "onlyLights"} />
+            <CeilingPlan grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} />
           )}
 
           <TipsList tips={tips} />
