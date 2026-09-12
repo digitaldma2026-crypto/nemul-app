@@ -295,6 +295,36 @@ const GRID_ANISO_MAX = 1.6;
 // suelo del número de puntos.
 const DOWNLIGHT_LM_CAP = 900;
 
+/* Y el suelo, que faltaba. El tope de arriba obliga a poner MÁS puntos cuando
+ * el total es alto; sin su pareja, nada impedía repartir un total bajo entre
+ * todos los puntos que cupieran, y el número de focos quedaba decidido solo
+ * por la geometría de la estancia. Con las dos cotas, la cuenta de puntos sale
+ * de los lúmenes en las dos direcciones: primero cuánta luz hace falta,
+ * después entre cuántos puntos tiene sentido repartirla.
+ *
+ * 300 lm es el flujo por debajo del cual un downlight deja de aportar luz
+ * general y pasa a ser decorativo. */
+const DOWNLIGHT_LM_FLOOR = 300;
+
+/* La segunda capa del despacho: la mesa.
+ *
+ * Los 500 lux de la norma son el nivel de la SUPERFICIE DE TRABAJO, no el de
+ * la habitación. Esa confusión es la que llenaba el techo de focos. La luz
+ * general deja el despacho cómodo, y la diferencia hasta los 500 lux la pone
+ * una lámpara de escritorio, que además se orienta y se apaga cuando no se
+ * trabaja. */
+const TASK_LUX_TARGET = 500;   // lux objetivo sobre la mesa
+const TASK_AREA = 0.6;         // m² de zona de trabajo a cubrir
+const TASK_UTILISATION = 0.55; // parte del flujo de la lámpara que cae ahí
+const AMBIENT_TO_TASK = 0.65;  // parte del nivel general que llega al tablero
+
+function deskTaskLamp(lux) {
+  const fromAmbient = Math.round(lux * AMBIENT_TO_TASK);
+  const missing = Math.max(0, TASK_LUX_TARGET - fromAmbient);
+  const lm = Math.max(200, Math.round((missing * TASK_AREA) / TASK_UTILISATION / 50) * 50);
+  return { fromAmbient, missing, lm };
+}
+
 // Flujos habituales de un downlight LED doméstico.
 //
 // Antes el foco era fijo —800 lm— y de ahí salía el número de puntos: en un
@@ -345,7 +375,13 @@ const ROOM_LUX_BY_LIGHT = {
   dining: { bright: 175, moderate: 200, low: 225 },
   closet: { bright: 225, moderate: 250, low: 275 },
   terrace: { bright: 80, moderate: 100, low: 120 },
-  office: { bright: 300, moderate: 350, low: 400 },
+  // El despacho tiene DOS capas y esta tabla solo calcula la primera: la luz
+  // general de la estancia. Antes ponía 300-400 lm/m², que son los 500 lux que
+  // la norma pide sobre la superficie de trabajo aplicados a la habitación
+  // entera. En 9 m² eso pedía 3.200 lm y el techo acababa con seis downlights
+  // para iluminar un escritorio de medio metro cuadrado. Los lux de la mesa se
+  // resuelven con luz de tarea (ver deskTaskLamp), no subiendo la retícula.
+  office: { bright: 200, moderate: 225, low: 250 },
 };
 function getLux(roomId, light) {
   const table = ROOM_LUX_BY_LIGHT[roomId] || {};
@@ -1172,6 +1208,13 @@ const ROOM_TECH_CONFIG = {
     defaultArea: 9,
     minDownlights: 2,
     getTempK: (a) => (a.problem === "cold" ? 3500 : 4000),
+    // El techo del despacho solo tiene que resolver el ambiente, así que se
+    // reparte como el de un dormitorio: la retícula más despejada que ilumine
+    // bien, no la más apretada que quepa. Con el reparto estricto, 9 m² daban
+    // 3 x 2 y 20 m² daban 4 x 3 — doce focos en un despacho — porque el número
+    // de puntos salía solo de la geometría. Ver openPlanLayout.
+    openGrid: true,
+    minLmPerPoint: DOWNLIGHT_LM_FLOOR,
   },
 };
 
@@ -1230,6 +1273,20 @@ function bedroomLayerTips(area, grid) {
   return tips;
 }
 
+/* Lo que el número de arriba ya no dice.
+ *
+ * Al bajar la luz general del despacho a 200-250 lm/m², el informe deja de
+ * prometer por sí solo que se puede trabajar en esa mesa — y es verdad que no
+ * se puede, con la luz del techo sola. La que faltaba no era una cifra más
+ * alta, era esta frase: la mesa es otra capa. */
+function officeTaskTips(lux) {
+  const { lm } = deskTaskLamp(lux);
+  return [
+    `La luz del techo resuelve el ambiente del despacho (${lux} lm/m²), no la mesa. Para trabajar se busca alrededor de ${TASK_LUX_TARGET} lux sobre la superficie del escritorio, y eso lo da una lámpara de escritorio de unos ${lm} lm: no hace falta añadir focos al techo para llegar a esa cifra.`,
+    "Conviene poder encender la luz de la mesa y la del techo por separado. Trabajar solo con el flexo, con el resto de la habitación a oscuras, crea un contraste fuerte con la pantalla que es justo lo que cansa la vista en jornadas largas.",
+  ];
+}
+
 function generateGenericTechnicalReport(roomId, answers = {}) {
   const cfg = ROOM_TECH_CONFIG[roomId];
   const area = cfg.areaMap[answers.size] ?? cfg.defaultArea;
@@ -1238,11 +1295,12 @@ function generateGenericTechnicalReport(roomId, answers = {}) {
   const grid = cfg.ambient
     ? ambientLayout(area, lumens, cfg.minDownlights)
     : cfg.openGrid
-      ? openPlanLayout(area, lumens, cfg.minDownlights)
+      ? openPlanLayout(area, lumens, cfg.minDownlights, cfg.minLmPerPoint)
       : planLayout(area, lumens, cfg.minDownlights);
   const tempK = cfg.getTempK(answers);
   const tips = getReport(roomId, answers);
   if (roomId === "bedroom") tips.push(...bedroomLayerTips(area, grid));
+  if (roomId === "office") tips.push(...officeTaskTips(lux));
   const mistakes = ROOM_TECH_MISTAKES[roomId] || [];
   return { tempK, lumens, grid, area, lux, tips, mistakes };
 }
@@ -1396,7 +1454,7 @@ const ROOM_FLOWS = {
       lateral: "De lado a la ventana, es la posición más equilibrada: aprovechamos la luz sin deslumbrar ni generar reflejos.",
       sinVentana: "Sin ventana cerca, la luz artificial va a tener que cubrir todo el trabajo por sí sola.",
     } },
-    { key: "size", title: "¿Cuántos metros cuadrados tiene el despacho?", subtitle: "Un cálculo aproximado está bien.", info: "Para trabajar con pantallas y papeleo suelen recomendarse entre 300 y 400 lm/m². Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: OFFICE_SIZE_OPTIONS },
+    { key: "size", title: "¿Cuántos metros cuadrados tiene el despacho?", subtitle: "Un cálculo aproximado está bien.", info: "Un despacho se calcula en dos capas: la luz general de la estancia, entre 200 y 250 lm/m², y la de la mesa, que debe llegar a unos 500 lux con una lámpara de escritorio. Nemul calcula las dos por separado.", type: "single", layout: "grid", options: OFFICE_SIZE_OPTIONS },
     { key: "light", title: "¿Cuánta luz natural recibe durante el día?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
     { key: "videoCalls", title: "¿Haces videollamadas con frecuencia?", subtitle: "Para adaptar la iluminación de tu zona de trabajo.", type: "single", layout: "list", options: YES_NO_OPTIONS },
     problemStep("office"),
@@ -1926,7 +1984,7 @@ function MistakesList({ mistakes }) {
 // con un número: los focos que pide la retícula y el flujo que le toca a cada
 // uno. Un rango es honesto en la cabeza de quien calcula; en la de quien
 // compra bombillas es una pregunta sin responder.
-function CalculationBlock({ area, lux, lumens, grid }) {
+function CalculationBlock({ area, lux, lumens, grid, onlyLights = false, ambientOnly = false }) {
   const { n, lmPer, totalLm, watts } = grid;
   return (
     <div>
@@ -1934,20 +1992,67 @@ function CalculationBlock({ area, lux, lumens, grid }) {
       <div className="flex flex-col gap-3 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
         <StatRow label="Superficie" value={`${area} m²`} />
         <div>
-          <StatRow label="Nivel de iluminación recomendado" value={`${lux} lm/m²`} />
-          <p className="font-body t-small italic mt-1 ml-9" style={{ color: COLORS.subtext }}>{describeLux(lux)}</p>
+          {/* En una estancia con zona de trabajo este número NO es el nivel de
+              la mesa, y llamarlo "nivel de iluminación recomendado" a secas es
+              lo que llevaba a aplicarle los 500 lux del escritorio a los m²
+              enteros. Aquí se dice de qué luz habla. */}
+          <StatRow label={ambientOnly ? "Luz general recomendada" : "Nivel de iluminación recomendado"} value={`${lux} lm/m²`} />
+          <p className="font-body t-small italic mt-1 ml-9" style={{ color: COLORS.subtext }}>
+            {ambientOnly ? "una luz cómoda para estar y moverse por la estancia; la de la mesa se calcula aparte, justo debajo" : describeLux(lux)}
+          </p>
         </div>
-        <StatRow label="Iluminación total necesaria" value={`${lumens.toLocaleString("es-ES")} lúmenes`} />
-        <StatRow label="Propuesta" value={`${n} downlights de ${lmPer} lm`} />
+        <StatRow label={ambientOnly ? "Luz general total necesaria" : "Iluminación total necesaria"} value={`${lumens.toLocaleString("es-ES")} lúmenes`} />
+        {/* Quien no va a abrir puntos nuevos no necesita una lista de focos:
+            necesita saber en cuántas zonas repartir la luz que ya puede
+            encender. El número es el mismo; lo que cambia es qué promete. */}
+        <StatRow
+          label={onlyLights ? "Reparto orientativo" : "Propuesta"}
+          value={onlyLights ? `${n} zonas de luz de unos ${lmPer} lm` : `${n} downlights de ${lmPer} lm`}
+        />
         <div>
           <StatRow label="Flujo total aproximado" value={`${totalLm.toLocaleString("es-ES")} lm`} />
           <p className="font-body t-small italic mt-1 ml-9" style={{ color: COLORS.subtext }}>
-            Equivale a downlights LED de unos {watts} W cada uno.
+            {onlyLights
+              ? `Equivale a unos ${watts} W de LED por zona.`
+              : `Equivale a downlights LED de unos ${watts} W cada uno.`}
           </p>
         </div>
       </div>
       <p className="font-body t-caption mt-2.5" style={{ color: COLORS.subtext }}>
-        El número de focos sale de la retícula, no del catálogo: se busca el reparto más despejado que ilumine bien —los focos van separados en torno a {fmtM(SPACING_MIN)}-{fmtM(SPACING_MAX)} m— y el flujo de cada uno se ajusta después para llegar al total necesario. Es una propuesta equilibrada, no una regla: si el modelo que te gusta da más o menos lúmenes, puedes poner algún foco más o menos y repartirlos a tu manera. Lo que conviene mantener es el flujo total.
+        {onlyLights
+          ? `Esto no es una lista de compra ni un plano de obra: dice cuánta luz pide la estancia y en cuántas zonas conviene repartirla —separadas en torno a ${fmtM(SPACING_MIN)}-${fmtM(SPACING_MAX)} m— sin tocar la instalación. Con los puntos que ya tienes, acércate a ese total con luminarias que abran el haz en varias direcciones y con lámparas de pie o de mesa donde no llegue ningún punto. Lo que conviene mantener es el flujo total, no el número de zonas.`
+          : `El número de focos sale de la retícula, no del catálogo: primero se calcula cuánta luz hace falta, después entre cuántos puntos tiene sentido repartirla —los focos van separados en torno a ${fmtM(SPACING_MIN)}-${fmtM(SPACING_MAX)} m— y el flujo de cada uno se ajusta al final para llegar al total. Es una propuesta equilibrada, no una regla: si el modelo que te gusta da más o menos lúmenes, puedes poner algún foco más o menos y repartirlos a tu manera. Lo que conviene mantener es el flujo total.`}
+      </p>
+    </div>
+  );
+}
+
+/* La capa que faltaba: la mesa.
+ *
+ * El bloque de arriba habla de la habitación. Este habla de los 60 cm donde
+ * se lee y se escribe, que piden mucha más luz y no la piden del techo. Antes
+ * los dos niveles eran el mismo número, así que para dar a la mesa sus 500 lux
+ * se iluminaba todo el despacho a 500 lux: seis focos en 9 m² para acabar
+ * escribiendo sobre la sombra de la propia mano, que es lo que hace un
+ * downlight situado detrás de quien trabaja.
+ */
+function TaskLightingBlock({ lux }) {
+  const { fromAmbient, lm } = deskTaskLamp(lux);
+  return (
+    <div data-pdf-keep>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Luz de tarea: la zona del escritorio</p>
+      <div className="flex flex-col gap-3 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
+        <StatRow label="Objetivo sobre la mesa" value={`unos ${TASK_LUX_TARGET} lux`} />
+        <StatRow label="Aporta la luz general" value={`del orden de ${fromAmbient} lux`} />
+        <div>
+          <StatRow label="Lámpara de escritorio" value={`unos ${lm} lm, regulable`} />
+          <p className="font-body t-small italic mt-1 ml-9" style={{ color: COLORS.subtext }}>
+            Una lámpara de mesa o un flexo orientable corriente, no un foco más en el techo.
+          </p>
+        </div>
+      </div>
+      <p className="font-body t-caption mt-2.5" style={{ color: COLORS.subtext }}>
+        Los {TASK_LUX_TARGET} lux son el nivel de la superficie de trabajo, no el de la habitación entera. Llevar ahí toda la estancia obligaría a llenar el techo de focos, deslumbraría al levantar la vista y aun así dejaría tu propia sombra sobre el papel. Elige la lámpara con buena fidelidad de color (CRI ≥ 90) y colócala del lado contrario a tu mano dominante.
       </p>
     </div>
   );
@@ -2545,7 +2650,19 @@ function ambientLayout(area, lumens, minCount = 1) {
   };
 }
 
-// Qué foco reparte `lumens` entre `n` puntos: el flujo comercial más cercano.
+/* Qué foco reparte `lumens` entre `n` puntos: el flujo comercial más cercano.
+ *
+ * "Más cercano" quiere decir que el total instalado casi nunca cae clavado en
+ * el objetivo, y eso es deliberado. Los focos existen en escalones (300, 350,
+ * 400, 450...), así que un despacho de 20 m² con poca luz natural pide 5.000 lm
+ * y acaba en 9 x 600 = 5.400, o sea 270 lm/m² frente a los 250 de la tabla.
+ *
+ * La alternativa sería obligar a no pasar del objetivo, y entonces ese mismo
+ * despacho bajaría a 4.500 lm: 500 lm por debajo de lo que necesita, en el
+ * caso en que MENOS luz natural hay. Quedarse corto se nota; pasarse un 8 %
+ * con la luz regulada, no. Los lm/m² de ROOM_LUX_BY_LIGHT son el objetivo del
+ * cálculo, no un techo que haya que respetar al elegir producto real.
+ */
 function downlightLumens(lumens, n) {
   return DOWNLIGHT_LM_STEPS.reduce((a, b) =>
     Math.abs(b * n - lumens) < Math.abs(a * n - lumens) ? b : a);
@@ -2580,7 +2697,7 @@ function axisSpreads(len) {
  * Esa preferencia por menos puntos es el ajuste entero: sin ella el cálculo
  * sube focos gratis para apretar la retícula, que es de donde venían los 12.
  */
-function openPlanLayout(area, lumens, minCount = 1) {
+function openPlanLayout(area, lumens, minCount = 1, minLmPer = 0) {
   const w = Math.sqrt(area * PLAN_ASPECT);
   const d = area / w;
   let best = null;
@@ -2589,6 +2706,9 @@ function openPlanLayout(area, lumens, minCount = 1) {
     for (const y of axisSpreads(d)) {
       const n = x.count * y.count;
       if (n < minCount || lumens / n > DOWNLIGHT_LM_CAP) continue;
+      // El suelo de flujo: repartir el total entre tantos puntos que a cada
+      // uno le toquen migajas es tener focos de más, no luz mejor repartida.
+      if (minLmPer && lumens / n < minLmPer) continue;
       const wide = Math.max(x.cover, y.cover);
       const tight = Math.min(x.cover, y.cover);
       if (wide > AXIS_OPEN_MAX + 1e-9) continue;
@@ -2605,8 +2725,11 @@ function openPlanLayout(area, lumens, minCount = 1) {
     }
   }
 
-  // Ninguna retícula abierta sirve para esta estancia: se reparte como el
-  // resto de la casa antes que devolver un informe sin plano.
+  // Ninguna retícula abierta sirve para esta estancia. Si lo que sobraba era
+  // el suelo de flujo, se reintenta sin él antes de cambiar de criterio: es
+  // una preferencia, no un requisito. Y si aun así no hay nada, se reparte
+  // como el resto de la casa antes que devolver un informe sin plano.
+  if (!best && minLmPer) return openPlanLayout(area, lumens, minCount, 0);
   if (!best) return planLayout(area, lumens, minCount);
 
   const { x, y, n } = best;
@@ -2669,12 +2792,13 @@ const fmtCm = (m) => `${Math.round((m * 100) / 5) * 5} cm`;
 //
 // Un eje puede tener un solo punto (una estancia estrecha), y ahí no hay
 // separación que dar: no se inventa un "0,0 m".
-function spacingText(grid) {
+function spacingText(grid, onlyLights = false) {
   const { cols, rows, sx, sy } = grid;
   const x = fmtM(sx);
   const y = fmtM(sy);
-  if (cols > 1 && rows > 1) return x === y ? `${x} m` : `${x} m entre focos y ${y} m entre filas`;
-  if (cols > 1) return `${x} m entre focos, en una sola fila`;
+  const unit = onlyLights ? "zonas" : "focos";
+  if (cols > 1 && rows > 1) return x === y ? `${x} m` : `${x} m entre ${unit} y ${y} m entre filas`;
+  if (cols > 1) return `${x} m entre ${unit}, en una sola fila`;
   if (rows > 1) return `${y} m entre filas, en una sola columna`;
   return "un único punto centrado";
 }
@@ -2741,7 +2865,7 @@ function CeilingPlan({ grid, onlyLights = false }) {
       </p>
       <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
         <svg viewBox={`0 0 ${vbW} ${vbH}`} xmlns="http://www.w3.org/2000/svg" role="img"
-          aria-label={`Plano orientativo visto desde arriba: ${n} focos repartidos en ${cols} columnas y ${rows} filas, con ${spacingText(grid)}`}
+          aria-label={`Plano orientativo visto desde arriba: ${n} ${onlyLights ? "zonas de luz repartidas" : "focos repartidos"} en ${cols} columnas y ${rows} filas, con ${spacingText(grid, onlyLights)}`}
           style={{ display: "block", width: "100%", height: "auto" }}>
           <defs>
             <radialGradient id="nemul-pool">
@@ -2801,7 +2925,9 @@ function CeilingPlan({ grid, onlyLights = false }) {
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
           <div className="flex items-center gap-2">
             <span className="rounded-full" style={{ width: 11, height: 11, backgroundColor: COLORS.bulb, boxShadow: `inset 0 0 0 1.4px ${COLORS.text}` }} />
-            <span className="font-body t-caption" style={{ color: COLORS.subtext }}>{n} focos de {grid.lmPer} lm</span>
+            <span className="font-body t-caption" style={{ color: COLORS.subtext }}>
+              {onlyLights ? `${n} zonas de luz de unos ${grid.lmPer} lm` : `${n} focos de ${grid.lmPer} lm`}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full" style={{ width: 11, height: 11, backgroundColor: "#F6DFAE" }} />
@@ -2810,7 +2936,9 @@ function CeilingPlan({ grid, onlyLights = false }) {
         </div>
 
         <p className="font-body t-small italic mt-2.5" style={{ color: COLORS.subtext }}>
-          Colocación orientativa en {cols} × {rows}: unos {spacingText(grid)}, y a unos {marginText(grid)} de las paredes. La forma de la estancia se ha dibujado como un rectángulo corriente a partir de los m²: ajusta la retícula a tu planta real y a dónde estén los muebles, apartando los focos de los sitios donde os sentáis para que no queden en el campo de visión.
+          {onlyLights
+            ? `Reparto orientativo en ${cols} × ${rows}: unos ${spacingText(grid, true)}, y a unos ${marginText(grid)} de las paredes. La forma de la estancia se ha dibujado como un rectángulo corriente a partir de los m²: llévalo a tu planta real y a dónde estén los muebles, y cuenta las lámparas que ya tienes como parte del reparto.`
+            : `Colocación orientativa en ${cols} × ${rows}: unos ${spacingText(grid)}, y a unos ${marginText(grid)} de las paredes. La forma de la estancia se ha dibujado como un rectángulo corriente a partir de los m²: ajusta la retícula a tu planta real y a dónde estén los muebles, apartando los focos de los sitios donde os sentáis para que no queden en el campo de visión.`}
         </p>
         {/* Este plano dibuja la distribución ideal para los m² de la estancia:
             no sabe dónde están los puntos de luz actuales, porque no se
@@ -2941,7 +3069,7 @@ function TechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) 
         <div className="px-5 pb-5 flex flex-col gap-5">
           <ColorTempBlock roomId={room.id} tempK={tempK} sameToneAs={sameToneAs} />
 
-          <CalculationBlock area={area} lux={lux} lumens={lumens} grid={grid} />
+          <CalculationBlock area={area} lux={lux} lumens={lumens} grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} />
 
           <CeilingPlan grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} />
 
@@ -2976,7 +3104,7 @@ function KitchenReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
             extra={<StatRow label="Separación entre downlights" value={spacingShort(grid)} />}
           />
 
-          <CalculationBlock area={area} lux={lux} lumens={lumens} grid={grid} />
+          <CalculationBlock area={area} lux={lux} lumens={lumens} grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} />
 
           <CeilingPlan grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} />
 
@@ -3056,7 +3184,16 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameTon
         <div className="px-5 pb-5 flex flex-col gap-5">
           <ColorTempBlock roomId={room.id} tempK={tempK} sameToneAs={sameToneAs} />
 
-          <CalculationBlock area={area} lux={lux} lumens={lumens} grid={grid} />
+          <CalculationBlock
+            area={area} lux={lux} lumens={lumens} grid={grid}
+            onlyLights={answers.renovationStatus === "onlyLights"}
+            ambientOnly={room.id === "office"}
+          />
+
+          {/* El despacho es la única estancia con una zona de trabajo fija, y
+              su nivel no es el de la habitación: va en su propio bloque, justo
+              después del general, para que se lean como dos capas. */}
+          {room.id === "office" && <TaskLightingBlock lux={lux} />}
 
           {/* La terraza no lleva plano de techo: no hay techo donde empotrar
               nada, y su esquema de zonas ya hace ese trabajo. */}
