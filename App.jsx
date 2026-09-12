@@ -189,8 +189,8 @@ const YES_NO_OPTIONS = [
 ];
 
 const CLOSET_LIGHT_OPTIONS = [
-  { id: "dentro", label: "Dentro del armario" },
-  { id: "delante", label: "Delante del armario" },
+  { id: "dentro", label: "Sí, por dentro" },
+  { id: "delante", label: "Sí, por delante" },
   { id: "no", label: "No hace falta" },
 ];
 
@@ -252,6 +252,11 @@ const RENOVATION_INSIGHT = {
   // adapta y enseñar debajo una retícula de seis focos deja a quien lo lee
   // pensando que tiene que abrir seis agujeros. Ahora se dice lo que es.
   onlyLights: "Como solo vas a cambiar las luminarias, toma el cálculo y el plano como el objetivo a alcanzar, no como una obra a ejecutar: indican cuánta luz necesita la estancia y cómo debería repartirse. Con los puntos de luz que ya tienes, acércate a ese reparto sin tocar la instalación — un plafón sustituido por un foco orientable, un carril o una suspensión múltiple en el punto existente, y lámparas de pie o de mesa en las zonas donde el plano pide luz y no llega ningún punto.",
+};
+
+const BEDROOM_RENOVATION_INSIGHT = {
+  onlyLights: "Como solo vas a cambiar las luminarias, esto no es una obra a ejecutar sino el objetivo de luz que hay que alcanzar: sustituye lo que cuelga de los puntos que ya tienes por luminarias que den el flujo indicado, y resuelve la cabecera con lámparas de mesita, apliques o colgantes, que no piden instalación nueva.",
+  renovation: "Como vas a reformar, aprovecha para dejar la luz general y la de la cabecera en circuitos separados: poder encender solo las mesitas es lo que convierte el dormitorio en una habitación de descanso por la noche.",
 };
 
 const STYLE_OPTIONS = [
@@ -750,18 +755,47 @@ function generateKitchenReport(answers = {}) {
 // Preguntas pensadas como las haría una diseñadora en una primera reunión con el cliente:
 // nunca "¿qué estilo?", siempre "¿cómo vives este espacio?".
 
+/* Antes había seis actividades y cuatro no cambiaban el cálculo: "Dormir" lo
+ * hace todo el mundo, y "Vestirme", "Trabajar" o "Ver la televisión" solo
+ * añadían un consejo suelto. Una pregunta de la que la mitad de las respuestas
+ * no mueven nada enseña a contestar por contestar.
+ *
+ * Quedan las dos que encienden una capa de luz, y una salida honesta para
+ * quien no hace ninguna. */
 const BEDROOM_ACTIVITY_OPTIONS = [
-  { id: "sleep", label: "Dormir", Icon: Moon },
-  { id: "readBed", label: "Leer en la cama", Icon: BookOpen },
-  { id: "dress", label: "Vestirme", Icon: Shirt },
-  { id: "makeup", label: "Maquillarme", Icon: Sparkles },
-  { id: "work", label: "Trabajar", Icon: Briefcase },
-  { id: "tv", label: "Ver la televisión", Icon: Tv },
+  { id: "readBed", label: "Leo en la cama", Icon: BookOpen },
+  { id: "makeup", label: "Me maquillo", Icon: Sparkles },
+  { id: "none", label: "Ninguna de estas", Icon: Moon, exclusive: true },
 ];
 
-const BEDROOM_CLOSET_TYPE_OPTIONS = [
-  { id: "empotrado", label: "Armario empotrado" },
-  { id: "independiente", label: "Armario independiente" },
+/* La pregunta del tipo de armario se retiró: empotrado o independiente cambia
+ * el mueble, no la luz que hay que darle. Lo que sí decide es la pregunta
+ * siguiente —dentro, delante o nada—, que es la que enciende la capa. */
+
+/* Lo primero que se pregunta, porque condiciona todo lo demás: si solo se van
+ * a cambiar luminarias, Nemul respeta la instalación que hay; si hay reforma,
+ * puede diseñar puntos nuevos. La clave sigue siendo `renovationStatus`, la
+ * misma que el resto de la casa, para no duplicar la lógica de los consejos.
+ * Lo que cambia son los textos, que aquí hablan del dormitorio. */
+const BEDROOM_PROJECT_OPTIONS = [
+  { id: "onlyLights", label: "Solo mejorar o cambiar la iluminación", Icon: Lightbulb },
+  { id: "renovation", label: "Estoy reformando el dormitorio", Icon: Hammer },
+];
+
+// Sin "con vigas": en un dormitorio la decisión útil es si hay cámara donde
+// empotrar o no, y las vigas se resuelven igual que un techo liso.
+const BEDROOM_CEILING_OPTIONS = [
+  { id: "liso", label: "Techo liso" },
+  { id: "pladur", label: "Falso techo / pladur" },
+  { id: "noSe", label: "No lo sé" },
+];
+
+// Sin "no tengo": si no hubiera ningún punto, la pregunta que toca no es esta
+// sino si va a haber obra. Y solo se pregunta cuando no hay reforma, porque
+// con reforma los puntos actuales dejan de condicionar nada.
+const BEDROOM_CEILING_POINTS_OPTIONS = [
+  { id: "uno", label: "Uno" },
+  { id: "varios", label: "Varios" },
 ];
 
 const BEDROOM_SIZE_OPTIONS = [
@@ -885,12 +919,9 @@ const ACTIVITY_OPTIONS = {
 
 const ACTIVITY_INSIGHT = {
   bedroom: {
-    sleep: "Para dormir bien, la luz principal debe poder atenuarse hasta casi apagarse: la última luz que ves antes de dormir marca el tono del descanso.",
     readBed: "Para leer en la cama, una lámpara orientable en la mesita, a la altura del hombro, evita que la luz general te deslumbre al recostarte.",
-    dress: "Para vestirte con buena luz, usa un tono neutro y sin sombras en la zona donde te cambias: la misma cálida que usas para dormir no te deja ver bien los colores.",
     makeup: "Para maquillarte, necesitas luz uniforme sobre el rostro, nunca solo cenital: la luz de techo genera sombras que engañan al ojo.",
-    work: "Si tienes un rincón de trabajo en el dormitorio, sepáralo con una luz blanca propia, distinta del resto del cuarto, para que el cerebro distinga descanso de trabajo.",
-    tv: "Si ves la televisión desde la cama, evita que la luz general quede justo detrás o enfrente de la pantalla para no generar reflejos.",
+    none: "Un dormitorio que solo se usa para dormir es el más fácil de iluminar: luz general atenuable y la cabecera, y poco más hace falta.",
   },
   terrace: {
     eat: "Para comer al aire libre, protege la luminaria de la intemperie y céntrala sobre la mesa.",
@@ -902,7 +933,7 @@ const ACTIVITY_INSIGHT = {
 };
 
 function activityStep(roomId, subtitle) {
-  return { key: "activities", title: roomId === "bedroom" ? "¿Qué haces habitualmente en el dormitorio?" : "¿Cómo utilizas la terraza?", subtitle, type: "multi", layout: "list", options: ACTIVITY_OPTIONS[roomId] };
+  return { key: "activities", title: roomId === "bedroom" ? "Además de dormir, ¿qué haces en el dormitorio?" : "¿Cómo utilizas la terraza?", subtitle, type: "multi", layout: "list", options: ACTIVITY_OPTIONS[roomId] };
 }
 
 // Reacciones cortas que aparecen justo después de responder la pregunta del
@@ -915,13 +946,6 @@ const PROBLEM_REACTIONS = {
     reading: "Anotado: un buen rincón de lectura va a ser prioridad.",
     cozy: "Vamos a priorizar tonos cálidos y luz regulable.",
     renovating: "Con reforma desde cero, podemos dejar varios circuitos independientes preparados.",
-  },
-  bedroom: {
-    dark: "Vamos a reforzar la luz general sin perder la calidez para descansar.",
-    glare: "Evitaremos puntos de luz que apunten directo a la cama.",
-    reading: "Anotado: un buen punto de luz en la mesita de noche será clave.",
-    cozy: "Priorizaremos tonos cálidos y la posibilidad de atenuar la luz.",
-    renovating: "Con reforma desde cero, separaremos en circuitos la zona de descanso y el vestidor.",
   },
   bathroom: {
     shadows: "Vamos a iluminar el espejo desde ambos lados, no solo desde arriba.",
@@ -973,13 +997,6 @@ function problemStep(roomId) {
 const lightStep = { key: "light", title: "¿Qué iluminación tiene?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS };
 
 const PROBLEM_OPTIONS = {
-  bedroom: [
-    { id: "dark", label: "El dormitorio se ve oscuro" },
-    { id: "glare", label: "La luz me deslumbra al despertar" },
-    { id: "reading", label: "Me falta luz para leer o vestirme" },
-    { id: "cozy", label: "Quiero un ambiente más relajante" },
-    { id: "renovating", label: "Estoy reformando desde cero", Icon: Hammer },
-  ],
   bathroom: [
     { id: "shadows", label: "Tengo sombras en el espejo" },
     { id: "cold", label: "La luz es demasiado fría o clínica" },
@@ -1028,10 +1045,6 @@ const PROBLEM_OPTIONS = {
 // se resuelven todas con este mismo mecanismo genérico.
 const EXTRA_INSIGHT = {
   bedroom: {
-    closetType: {
-      empotrado: "Con armario empotrado, una luz continua en la parte superior evita que el interior quede en sombra al abrir las puertas.",
-      independiente: "Con un armario independiente, un punto de luz cercano evita que el propio mueble haga sombra sobre sí mismo al abrirlo.",
-    },
     closetLight: {
       dentro: "Coloca una tira LED vertical en un lateral si el armario mide alrededor de 60 cm de ancho, o en ambos laterales si ronda los 120 cm. Usa tiras de unos 10W/m con los puntos de led muy juntos, para que no se note el punteado.",
       delante: "Cuando la luz dentro del armario no es posible, coloca luminarias empotrables o de superficie delante, a unos 15-20 cm de las puertas, para que la luz no quede detrás de ti al vestirte y genere sombras.",
@@ -1141,13 +1154,6 @@ const LIGHT_INSIGHT = {
 
 
 const PROBLEM_INSIGHT = {
-  bedroom: {
-    dark: "Como el dormitorio se ve oscuro, refuerza la luz general con un punto adicional, sin perder la calidez necesaria para descansar.",
-    glare: "Para que la luz no te deslumbre al despertar, evita puntos orientados directamente hacia la cama y prioriza luz indirecta.",
-    reading: "Ya que te falta luz para leer o vestirte, añade un punto dedicado en la mesita de noche y otro de luz neutra en la zona donde te cambias.",
-    cozy: "Para un ambiente más relajante, prioriza tonos cálidos y añade la posibilidad de atenuar la luz por la noche.",
-    renovating: "Como estás reformando desde cero, aprovecha para separar en circuitos la zona de descanso y la de vestidor.",
-  },
   bathroom: {
     shadows: "Para eliminar las sombras del espejo, coloca la luz a ambos lados del rostro en lugar de un único punto cenital.",
     cold: "Si la luz se siente demasiado fría, baja la temperatura de color general hacia un blanco más cálido y neutro.",
@@ -1203,7 +1209,9 @@ const ROOM_TECH_CONFIG = {
     areaMap: BEDROOM_AREA_BY_SIZE,
     defaultArea: 12,
     minDownlights: 2,
-    getTempK: (a) => ((a.activities || []).includes("work") ? 3500 : 2700),
+    // Sin la actividad "Trabajar" en el cuestionario, un dormitorio es siempre
+    // luz cálida: es la estancia donde el tono frío nunca ayuda.
+    getTempK: () => 2700,
     // Un dormitorio es una estancia de estar: nadie trabaja bajo la retícula,
     // y el techo se mira desde la cama. Con el reparto estricto un dormitorio
     // de 17 m² salían doce focos de 200 lm, un flujo que casi no existe como
@@ -1256,7 +1264,7 @@ const ROOM_TECH_CONFIG = {
 const ROOM_TECH_MISTAKES = {
   bedroom: [
     "Evita iluminar la zona de la cama con un único punto de techo, ya que deslumbra estando tumbado; es preferible combinar apliques, una lámpara de sobremesa, una suspensión o tiras de led ocultas.",
-    "Evita tonos de luz muy distintos entre la zona de la cama y la de vestir, ya que el salto de temperatura rompe la sensación de descanso.",
+    "Evita mezclar tonos de luz muy distintos dentro del dormitorio, ya que el salto de temperatura entre una zona y otra rompe la sensación de descanso.",
   ],
   bathroom: [
     "Evita un único punto de luz cenital sobre el espejo, ya que genera sombras bajo los ojos y la nariz; es preferible usar apliques de luz directa a ambos lados.",
@@ -1312,178 +1320,114 @@ const ROOM_TECH_MISTAKES = {
 // Pesos del reparto de ambiente. No son porcentajes: se normalizan con las
 // capas que estén activas, así que el techo solo se lleva el 100 % cuando es
 // la única capa. Con cabecera sale 77/23; con cabecera y acento, 70/21/9.
-const BEDROOM_LAYER_W = { techo: 100, techoUnico: 55, pie: 45, cabecera: 30, acento: 12 };
-
-// Un plafón solo no puede ser la luz de una habitación sin deslumbrar a quien
-// está tumbado: cuando el techo se reduce a un punto vale por la mitad, y la
-// capa de pie entra a cubrir lo que le falta.
-const BEDROOM_SINGLE_CEILING_CAP = 1500;
-
-// Por debajo de esto una luminaria no existe como producto. Si a una capa no
-// le llega para piezas de este tamaño, esa capa no se propone y su peso
-// vuelve al reparto: mejor tres capas de verdad que cuatro sobre el papel.
-const BEDROOM_MIN_PIECE_LM = 150;
-
-// Leer en la cama pide esto en la mesita. No es una capa nueva: es subir la
-// que ya hay, y solo se suma la diferencia.
-const BEDSIDE_READING_LM = 350;
-
-const BEDROOM_TASK_LM = { closetIn: 400, closetFront: 300, mirror: 500, desk: 400 };
-
-/* Las cuatro situaciones posibles, cruzando lo que hay en el techo con lo que
- * se va a hacer. Con reforma se pueden abrir puntos donde haga falta, así que
- * da igual lo que haya hoy: es el único caso en el que Nemul diseña una
- * retícula y dice dónde van los focos. En los demás no sabe dónde están los
- * puntos —ni cuántos, si son "varios"— y dibujar una planta sería inventarse
- * la casa de quien lo lee.
+/* Cuatro capas, y cada una la enciende una respuesta.
  *
- * Sin respuesta se asume "varios", que es el comportamiento de siempre: así
- * los planes guardados antes de esta pregunta no cambian de forma. */
-function bedroomCeilingMode(answers = {}) {
-  if (answers.renovationStatus === "renovation") return "reforma";
-  const points = answers.ceilingPoints || "varios";
-  return points === "no" ? "sin" : points === "uno" ? "uno" : "varios";
-}
+ * La luz general y la cabecera SE REPARTEN la necesidad calculada: las dos
+ * iluminan la habitación entera, así que suman entre ellas y su suma es
+ * exactamente la necesidad. Ni un lumen se cuenta dos veces.
+ *
+ * El maquillaje y el armario NO entran en ese reparto. Iluminan una
+ * superficie concreta —el rostro, el interior de un mueble— y se listan
+ * aparte con su propio flujo. Meterlas dentro obligaría a restarle luz al
+ * techo para que "cuadrara" una suma que no significa nada, y dejaría el
+ * dormitorio más oscuro de lo calculado.
+ *
+ * Y la lectura no es una capa: es la cabecera dimensionada para leer. Antes
+ * salía como una línea propia y sumaba lúmenes que ya estaban contados. */
 
-// Una lámpara de pie no ilumina 24 m², y tres mesitas en 7 m² no caben.
-function bedroomPieces(id, area) {
-  if (id === "pie") return area > 20 ? 3 : area >= 12 ? 2 : 1;
-  if (id === "cabecera") return area >= 20 ? 3 : 2;
-  return 1;
-}
+// La cabecera es capa base del dormitorio: existe siempre, se pregunte lo que
+// se pregunte. Se lleva esta parte de la necesidad general, en dos piezas.
+const BEDROOM_BEDSIDE_SHARE = 0.2;
+// Por debajo de esto no hay lámpara de mesita que valga.
+const BEDROOM_BEDSIDE_MIN_LM = 150;
+// Lo que pide leer en la cama, por pieza. No se suma: es la misma lámpara,
+// regulada. Atenuada aporta su parte de la luz general; a plena potencia,
+// ilumina el libro.
+const BEDROOM_READING_LM = 350;
+// Por encima de esto, un único punto de techo ya no da: no se inventa una
+// capa para taparlo, se dice y se propone un carril o una luminaria de varios
+// focos en ese mismo punto.
+const BEDROOM_SINGLE_POINT_LIMIT = 1800;
+// Luz localizada, fuera del reparto general.
+const BEDROOM_MAKEUP_LM = 250;   // por aplique, dos piezas a los lados del espejo
+const BEDROOM_CLOSET_LM = { dentro: 400, delante: 300 };
 
 const roundLm = (lm, step) => Math.round(lm / step) * step;
 
-function bedroomLayers(area, total, answers = {}) {
+/* Tres situaciones, no cuatro: con reforma Nemul diseña puntos nuevos y
+ * enseña dónde van; sin reforma se adapta a lo que hay y no dibuja ninguna
+ * retícula, porque no sabe dónde están esos puntos.
+ *
+ * Sin respuesta se asume "varios", que es el comportamiento de siempre: los
+ * planes guardados antes de esta pregunta no cambian de forma. */
+function bedroomCeilingMode(answers = {}) {
+  if (answers.renovationStatus === "renovation") return "reforma";
+  return (answers.ceilingPoints || "varios") === "uno" ? "uno" : "varios";
+}
+
+function bedroomLayers(area, need, answers = {}) {
   const mode = bedroomCeilingMode(answers);
   const activities = answers.activities || [];
-  // Ninguna capa se activa sola: cada una necesita una respuesta que la pida.
-  const wantsBedside = activities.includes("readBed") || ["glare", "cozy", "reading"].includes(answers.problem);
-  const wantsAccent = ["cozy", "glare"].includes(answers.problem) || activities.includes("tv");
-  const hasCeiling = mode !== "sin";
-  const singleCeiling = mode === "uno";
+  const reads = activities.includes("readBed");
 
-  // La capa de pie SUSTITUYE al techo, no se suma: aparece cuando no hay
-  // techo o cuando se reduce a un punto. Con una retícula completa arriba,
-  // una lámpara de pie es decoración, y eso ya lo cubre el acento.
-  const wanted = [];
-  if (hasCeiling) wanted.push({ id: "techo", w: singleCeiling ? BEDROOM_LAYER_W.techoUnico : BEDROOM_LAYER_W.techo });
-  if (!hasCeiling || singleCeiling) wanted.push({ id: "pie", w: BEDROOM_LAYER_W.pie });
-  if (wantsBedside) wanted.push({ id: "cabecera", w: BEDROOM_LAYER_W.cabecera });
-  if (wantsAccent) wanted.push({ id: "acento", w: BEDROOM_LAYER_W.acento });
+  // Cabecera primero, y la luz general se queda con el resto: así el reparto
+  // suma la necesidad exacta sin arrastrar redondeos.
+  const bedsidePer = Math.max(BEDROOM_BEDSIDE_MIN_LM, roundLm((need * BEDROOM_BEDSIDE_SHARE) / 2, 50));
+  const bedsideAmbient = bedsidePer * 2;
+  const generalLm = Math.max(0, need - bedsideAmbient);
+  // La misma capa, dimensionada para leer cuando hace falta.
+  const bedsideSpec = reads ? Math.max(BEDROOM_READING_LM, bedsidePer) : bedsidePer;
 
-  // El redondeo se hace en la PIEZA, no en la capa: así "2 x 200 = 400" cuadra
-  // a la vista. Redondear el total de la capa dejaba sumas que no salían.
-  let live = wanted;
-  let split = {};
-  for (let pass = 0; pass <= wanted.length; pass++) {
-    const sum = live.reduce((acc, l) => acc + l.w, 0) || 1;
-    split = {};
-    let dropped = null;
-    for (const layer of live) {
-      const share = (total * layer.w) / sum;
-      if (layer.id === "techo") {
-        split.techo = { lm: roundLm(share, 100), pieces: 1, per: roundLm(share, 100) };
-        continue;
-      }
-      const pieces = bedroomPieces(layer.id, area);
-      const per = roundLm(share / pieces, 50);
-      if (per < BEDROOM_MIN_PIECE_LM) { dropped = layer.id; break; }
-      split[layer.id] = { lm: per * pieces, pieces, per };
-    }
-    if (!dropped) break;
-    live = live.filter((l) => l.id !== dropped);
+  const local = [];
+  if (activities.includes("makeup")) {
+    local.push({
+      id: "maquillaje",
+      pieces: 2,
+      per: BEDROOM_MAKEUP_LM,
+      lm: BEDROOM_MAKEUP_LM * 2,
+      detail: "dos apliques a los lados del espejo, a la altura de los ojos — nunca un único punto cenital, que hunde en sombra los ojos y la nariz",
+    });
+  }
+  const closet = BEDROOM_CLOSET_LM[answers.closetLight];
+  if (closet) {
+    local.push({
+      id: "armario",
+      pieces: 1,
+      per: closet,
+      lm: closet,
+      detail: answers.closetLight === "dentro"
+        ? "una tira LED continua dentro del armario, con los puntos de led muy juntos para que no se note el punteado"
+        : "luminarias delante de las puertas, a unos 15-20 cm, para que la luz no quede detrás de ti al vestirte",
+    });
   }
 
-  if (singleCeiling && split.techo && split.techo.lm > BEDROOM_SINGLE_CEILING_CAP && split.pie) {
-    const extra = split.techo.lm - BEDROOM_SINGLE_CEILING_CAP;
-    split.techo = { lm: BEDROOM_SINGLE_CEILING_CAP, pieces: 1, per: BEDROOM_SINGLE_CEILING_CAP };
-    const per = roundLm((split.pie.lm + extra) / split.pie.pieces, 50);
-    split.pie = { lm: per * split.pie.pieces, pieces: split.pie.pieces, per };
-  }
-
-  // Red de seguridad: si el mínimo por pieza se hubiera llevado todas las
-  // capas, el informe se quedaría sin luz general. No pasa con los tamaños
-  // reales, pero un informe vacío no es una opción.
-  if (!Object.keys(split).length && wanted.length) {
-    const first = wanted[0];
-    const pieces = bedroomPieces(first.id, area);
-    const per = roundLm(total / pieces, 50);
-    split[first.id] = { lm: per * pieces, pieces, per };
-  }
-
-  const tasks = [];
-  const bedsidePer = split.cabecera ? split.cabecera.per : 0;
-  if (activities.includes("readBed") || answers.problem === "reading") {
-    const lm = bedsidePer ? Math.max(0, BEDSIDE_READING_LM - bedsidePer) * 2 : BEDSIDE_READING_LM * 2;
-    if (lm > 0) {
-      tasks.push({
-        id: "lectura",
-        lm,
-        detail: bedsidePer
-          ? `sube cada luz de la cabecera hasta unos ${BEDSIDE_READING_LM} lm`
-          : `dos luces de lectura de unos ${BEDSIDE_READING_LM} lm`,
-      });
-    }
-  }
-  if (answers.closetLight === "dentro") tasks.push({ id: "armario", lm: BEDROOM_TASK_LM.closetIn, detail: "una tira LED continua dentro del armario" });
-  else if (answers.closetLight === "delante") tasks.push({ id: "armario", lm: BEDROOM_TASK_LM.closetFront, detail: "un punto orientable delante del armario" });
-  if (activities.includes("makeup")) tasks.push({ id: "espejo", lm: BEDROOM_TASK_LM.mirror, detail: "dos apliques a los lados del espejo, nunca uno encima" });
-  if (activities.includes("work")) tasks.push({ id: "escritorio", lm: BEDROOM_TASK_LM.desk, detail: "una lámpara de escritorio orientable y regulable" });
-
-  const order = ["techo", "pie", "cabecera", "acento"];
-  const ambient = order.filter((id) => split[id]).map((id) => ({ id, ...split[id] }));
   return {
-    mode,
-    ambient,
-    tasks,
-    ceilingLm: split.techo ? split.techo.lm : 0,
-    ambientTotal: ambient.reduce((acc, l) => acc + l.lm, 0),
+    mode, need, generalLm, bedsidePer, bedsideAmbient, bedsideSpec, reads, local,
+    // Un plafón solo no puede con la luz general de un dormitorio grande.
+    singlePointStrained: mode === "uno" && generalLm > BEDROOM_SINGLE_POINT_LIMIT,
   };
 }
 
-/* La retícula del techo no tiene por qué dar toda la luz de un dormitorio, y
- * conviene decirlo siempre. El cálculo reparte el total entre downlights
- * porque es lo único que sabe dibujar, pero una mesita, un aplique a la
- * cabecera o la luz de dentro del armario cubren parte de ese total y dejan el
- * techo más despejado.
- *
- * Antes esta frase solo salía a partir de 15 m², como si en un cuarto pequeño
- * el techo sí tuviera que resolverlo todo — y es al revés: cuanto más pequeño,
- * más peso tienen la mesita y el armario. Además es el argumento que sostiene
- * los topes anchos de BEDROOM_GRID_LIMITS, así que enseñar los cuatro puntos
- * sin explicar de dónde sale el resto de la luz dejaba el reparto a medias. */
+/* La frase que sostiene todo lo demás: el techo de un dormitorio no tiene que
+ * dar toda la luz, y por eso puede ir más suelto que el de un salón. Se dice
+ * siempre, en dormitorios de 7 y de 24 m², porque cuanto más pequeño es el
+ * cuarto más peso tienen la mesita y el armario. */
 function bedroomLayerTips(layers, grid) {
   const tips = [
-    "En un dormitorio no hace falta que toda la luz salga del techo: lámparas de mesita, apliques a la cabecera, luz dentro del armario o una tira LED oculta cubren buena parte del total y dan un ambiente mucho más cálido para descansar.",
+    "En un dormitorio no hace falta que toda la luz salga del techo: la cabecera hace buena parte del trabajo y da un ambiente mucho más cálido para descansar.",
   ];
   if (layers.mode === "varios") {
-    tips.push("Nemul no sabe cuántos puntos tienes en el techo ni dónde están, así que no te dibuja una retícula: te dice cuánta luz debería salir de ahí arriba y tú la repartes entre los puntos que ya existen.");
+    tips.push("Nemul no sabe cuántos puntos tienes en el techo ni dónde están, así que no te dibuja una retícula: te dice cuánta luz debería salir de ahí arriba en conjunto y tú la repartes entre los puntos que ya existen.");
   }
   if (layers.mode === "uno") {
-    tips.push("Con un único punto de techo, evita concentrar ahí toda la luz de la habitación: una luminaria muy potente justo encima deslumbra estando tumbado. Es mejor que ese punto aporte una parte y el resto venga de la lámpara de pie y de la cabecera.");
-  }
-  if (layers.mode === "sin") {
-    tips.push("Sin punto de luz en el techo, la luz general la hacen la lámpara de pie y los apliques. No es un apaño: en un dormitorio suele dar mejor resultado que un techo lleno de focos, porque la luz llega rebotada y no cae a plomo sobre la cama.");
+    tips.push(layers.singlePointStrained
+      ? `Un único punto de techo se queda corto para los ${layers.generalLm.toLocaleString("es-ES")} lm que pide esta habitación: una luminaria sola de ese flujo deslumbra al mirar hacia arriba desde la cama. Sin obra, la salida es aprovechar ese mismo punto con un carril, una suspensión de varios brazos o un plafón de varios focos, que reparten el flujo en vez de concentrarlo.`
+      : "Con un solo punto de techo, elige una luminaria que reparta la luz en vez de concentrarla —difusor opaco, varios focos o luz indirecta hacia el techo— para no tener un foco intenso justo en el campo de visión desde la cama.");
   }
   if (grid && grid.n >= 9) {
-    tips.push(`Los ${grid.n} downlights son la retícula más despejada que cabe respetando las distancias entre focos, no la única solución posible: si sumas esas otras capas de luz, puedes poner menos focos en el techo y dejar que el resto del flujo venga de ellas.`);
+    tips.push(`Los ${grid.n} downlights son la retícula más despejada que cabe respetando las distancias entre focos, no la única solución posible: con la cabecera y las capas localizadas puedes poner menos focos y dejar que el resto del flujo venga de ellas.`);
   }
   return tips;
-}
-
-/* Lo que el número de arriba ya no dice.
- *
- * Al bajar la luz general del despacho a 200-250 lm/m², el informe deja de
- * prometer por sí solo que se puede trabajar en esa mesa — y es verdad que no
- * se puede, con la luz del techo sola. La que faltaba no era una cifra más
- * alta, era esta frase: la mesa es otra capa. */
-function officeTaskTips(lux) {
-  const { lm } = deskTaskLamp(lux);
-  return [
-    `La luz del techo resuelve el ambiente del despacho (${lux} lm/m²), no la mesa. Para trabajar se busca alrededor de ${TASK_LUX_TARGET} lux sobre la superficie del escritorio, y eso lo da una lámpara de escritorio de unos ${lm} lm: no hace falta añadir focos al techo para llegar a esa cifra.`,
-    "Conviene poder encender la luz de la mesa y la del techo por separado. Trabajar solo con el flexo, con el resto de la habitación a oscuras, crea un contraste fuerte con la pantalla que es justo lo que cansa la vista en jornadas largas.",
-  ];
 }
 
 function generateGenericTechnicalReport(roomId, answers = {}) {
@@ -1502,7 +1446,7 @@ function generateGenericTechnicalReport(roomId, answers = {}) {
       // Posiciones y distancias solo con reforma: en los demás casos Nemul no
       // sabe dónde están los puntos, y un plano se lee como si lo supiera.
       ? (layers.mode === "reforma"
-          ? openPlanLayout(area, layers.ceilingLm, cfg.minDownlights, cfg.minLmPerPoint, cfg.limits)
+          ? openPlanLayout(area, layers.generalLm, cfg.minDownlights, cfg.minLmPerPoint, cfg.limits)
           : null)
       : cfg.openGrid
         ? openPlanLayout(area, lumens, cfg.minDownlights, cfg.minLmPerPoint, cfg.limits)
@@ -1578,23 +1522,27 @@ const ROOM_FLOWS = {
     { key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: KITCHEN_PROBLEM_OPTIONS, reactions: KITCHEN_PROBLEM_REACTIONS },
     renovationStep,
   ],
+  /* El dormitorio pregunta primero qué se va a hacer, porque de eso depende
+   * todo lo demás: si solo se cambian luminarias, la pregunta de cuántos
+   * puntos hay es decisiva y el informe no dibujará ninguna retícula; si hay
+   * reforma, esa pregunta sobra. Ver bedroomLayers. */
   bedroom: (answers = {}) => [
+    { key: "renovationStatus", title: "¿Qué quieres hacer?", subtitle: "Esto decide si nos adaptamos a lo que ya hay o podemos diseñar de cero.", type: "single", layout: "list", options: BEDROOM_PROJECT_OPTIONS, reactions: {
+      onlyLights: "Perfecto: respetaremos los puntos de luz que ya tienes y completaremos con luminarias que no necesiten obra.",
+      renovation: "Entonces podemos diseñar la distribución desde cero, sin depender de dónde estén los puntos actuales.",
+    } },
+    { key: "size", title: "¿Cuántos metros cuadrados tiene el dormitorio?", subtitle: "Un cálculo aproximado está bien.", info: "En un dormitorio suelen bastar entre 130 y 170 lm/m² de luz general. Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: BEDROOM_SIZE_OPTIONS },
     lightStep,
-    { key: "ceiling", title: "¿Qué tipo de techo tienes?", subtitle: "Esto determina qué soluciones de instalación son posibles.", type: "single", layout: "list", options: CEILING_OPTIONS },
-    { key: "ceilingPoints", title: "¿Tienes puntos de luz en el techo?", subtitle: "Miramos qué hay antes de proponer nada.", type: "single", layout: "list", options: CEILING_POINTS_OPTIONS, reactions: {
-      no: "Sin punto en el techo, la luz general la resolveremos con lámpara de pie, apliques y la cabecera. Es una solución de diseño, no un apaño.",
-      uno: "Con un punto, ese será una capa más: dará parte de la luz general y el resto vendrá de las otras capas, para no concentrarlo todo sobre la cama.",
-      varios: "Con varios puntos, te diremos cuánta luz debe salir del techo y la repartes entre los que ya tienes.",
-    } },
-    { key: "size", title: "¿Cuántos metros cuadrados tiene el dormitorio?", subtitle: "Un cálculo aproximado está bien.", info: "En un dormitorio suelen bastar entre 100 y 150 lm/m². Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: BEDROOM_SIZE_OPTIONS },
+    { key: "ceiling", title: "¿Qué tipo de techo tienes?", subtitle: "Esto determina qué soluciones de instalación son posibles.", type: "single", layout: "list", options: BEDROOM_CEILING_OPTIONS },
+    // Condicional: con reforma no hay nada que respetar, así que no se pregunta.
+    ...(answers.renovationStatus === "renovation" ? [] : [
+      { key: "ceilingPoints", title: "¿Cuántos puntos de luz tienes actualmente en el techo?", subtitle: "Nos adaptaremos a los que ya existen.", type: "single", layout: "list", options: BEDROOM_CEILING_POINTS_OPTIONS, reactions: {
+        uno: "Con un solo punto, esa luminaria dará la luz general y la cabecera hará el resto del trabajo.",
+        varios: "Con varios puntos, te diremos cuánta luz debe salir del techo en conjunto y la repartes entre los que tienes.",
+      } },
+    ]),
     activityStep("bedroom", "Puedes elegir varias opciones."),
-    { key: "closetType", title: "¿Tienes armario empotrado o independiente?", subtitle: "Si tienes vestidor, hazlo aparte como su propia habitación en Nemul, para un cálculo completo de ese espacio.", type: "single", layout: "list", options: BEDROOM_CLOSET_TYPE_OPTIONS, reactions: {
-      empotrado: "Con armario empotrado, una luz continua arriba evitará que el interior quede en sombra.",
-      independiente: "Con un armario independiente, un punto de luz cercano evitará que el propio mueble haga sombra.",
-    } },
-    { key: "closetLight", title: "¿Quieres iluminación dentro o delante del armario?", subtitle: "Ideal si te vistes ahí mismo.", type: "single", layout: "list", options: CLOSET_LIGHT_OPTIONS },
-    problemStep("bedroom"),
-    renovationStep,
+    { key: "closetLight", title: "¿Quieres iluminar especialmente el armario?", subtitle: "Ideal si te vistes ahí mismo.", type: "single", layout: "list", options: CLOSET_LIGHT_OPTIONS },
   ],
   bathroom: (answers = {}) => [
     { key: "type", title: "¿Qué tipo de baño es?", subtitle: "Esto cambia cuántas zonas de luz necesitas.", type: "single", layout: "list", options: BATHROOM_TYPE_OPTIONS, reactions: {
@@ -1710,7 +1658,8 @@ function getReport(roomId, answers = {}) {
   }
   const problemDict = PROBLEM_INSIGHT[roomId] || {};
   if (problemDict[answers.problem]) parts.push(problemDict[answers.problem]);
-  if (RENOVATION_INSIGHT[answers.renovationStatus]) parts.push(RENOVATION_INSIGHT[answers.renovationStatus]);
+  const renovationDict = roomId === "bedroom" ? BEDROOM_RENOVATION_INSIGHT : RENOVATION_INSIGHT;
+  if (renovationDict[answers.renovationStatus]) parts.push(renovationDict[answers.renovationStatus]);
   if (parts.length === 0) parts.push("Con lo que nos cuentes de este espacio, Nemul preparará un estudio de iluminación a medida.");
   return parts;
 }
@@ -3045,93 +2994,116 @@ function marginText(grid) {
  * conociera.
  * ------------------------------------------------------------------------- */
 
-const BEDROOM_LAYER_META = {
-  techo: { label: "Techo", Icon: Lightbulb, unit: "luminaria" },
-  pie: { label: "Lámpara de pie y apliques", Icon: Lamp, unit: "lámpara" },
-  cabecera: { label: "Cabecera", Icon: BedDouble, unit: "luz" },
-  acento: { label: "Acento", Icon: Moon, unit: "tira o punto" },
-};
-const BEDROOM_TASK_META = {
-  lectura: { label: "Lectura en la cama", Icon: BookOpen },
+const BEDROOM_LOCAL_META = {
+  maquillaje: { label: "Maquillaje", Icon: Sparkles },
   armario: { label: "Armario", Icon: Shirt },
-  espejo: { label: "Espejo", Icon: Sparkles },
-  escritorio: { label: "Escritorio", Icon: Laptop },
 };
 
-// El flujo de cada capa, en proporción. Es una barra, no una planta: dice
-// cuánta luz pone cada capa y no insinúa dónde va ninguna.
-function LayerBar({ ambient }) {
-  const total = ambient.reduce((acc, l) => acc + l.lm, 0) || 1;
+// Cuánta luz pone cada capa de la necesidad general, en proporción. Es una
+// barra, no una planta: no insinúa dónde va nada.
+function LayerBar({ parts }) {
+  const total = parts.reduce((acc, p) => acc + p.lm, 0) || 1;
   return (
     <div className="flex w-full rounded-full overflow-hidden" style={{ height: 10, backgroundColor: COLORS.border }}>
-      {ambient.map((l, i) => (
-        <div key={l.id} style={{
-          width: `${(l.lm / total) * 100}%`,
+      {parts.map((p, i) => (
+        <div key={i} style={{
+          width: `${(p.lm / total) * 100}%`,
           backgroundColor: COLORS.bulb,
-          opacity: 1 - i * 0.22,
-          borderRight: i < ambient.length - 1 ? `1.5px solid ${COLORS.bg}` : "none",
+          opacity: 1 - i * 0.3,
+          borderRight: i < parts.length - 1 ? `1.5px solid ${COLORS.bg}` : "none",
         }} />
       ))}
     </div>
   );
 }
 
-function BedroomLayerBlock({ area, lux, lumens, layers }) {
-  const { ambient, tasks, ambientTotal } = layers;
+/* El bloque de cálculo del dormitorio.
+ *
+ * Separa dos cosas que antes se mezclaban y se contradecían: cuánta luz pide
+ * la habitación, y con qué capas se consigue. La necesidad se enseña una vez;
+ * las capas que la cubren suman exactamente esa cifra; y lo localizado va
+ * debajo, con su propio flujo y sin entrar en la suma.
+ */
+function BedroomLayerBlock({ area, lux, layers, grid }) {
+  const { need, generalLm, bedsidePer, bedsideAmbient, bedsideSpec, reads, local, mode, singlePointStrained } = layers;
+  const generalTitle = mode === "reforma" ? "Nueva distribución" : mode === "uno" ? "Tu punto de techo" : "Tus puntos de techo";
+  const generalValue = mode === "reforma" && grid
+    ? `${grid.n} downlights de ${grid.lmPer} lm`
+    : `${generalLm.toLocaleString("es-ES")} lm`;
   return (
     <div>
-      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Cálculo realizado</p>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Necesidad general del dormitorio</p>
       <div className="flex flex-col gap-3 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
         <StatRow label="Superficie" value={`${area} m²`} />
+        <StatRow label="Nivel recomendado" value={`${lux} lm/m²`} />
         <div>
-          <StatRow label="Luz general recomendada" value={`${lux} lm/m²`} />
-          <p className="font-body t-small italic mt-1 ml-9" style={{ color: COLORS.subtext }}>{describeLux(lux)}</p>
+          <StatRow label="Luz general necesaria" value={`≈ ${need.toLocaleString("es-ES")} lm`} />
+          <p className="font-body t-small italic mt-1 ml-9" style={{ color: COLORS.subtext }}>
+            Es la luz que tiene que bañar la habitación entera. Las luces de tarea —el armario, el espejo— van aparte y no se descuentan de aquí.
+          </p>
         </div>
-        <StatRow label="Iluminación total necesaria" value={`${lumens.toLocaleString("es-ES")} lúmenes`} />
       </div>
 
-      <p className="font-body t-eyebrow mt-4 mb-2.5" style={{ color: COLORS.accent }}>Reparto por capas</p>
-      <div className="flex flex-col gap-3 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
-        <LayerBar ambient={ambient} />
-        <div className="flex flex-col gap-2.5">
-          {ambient.map((l, i) => {
-            const meta = BEDROOM_LAYER_META[l.id];
-            return (
-              <div key={l.id} className="flex items-start gap-3">
-                <span className="rounded-full shrink-0 mt-1" style={{ width: 11, height: 11, backgroundColor: COLORS.bulb, opacity: 1 - i * 0.22, boxShadow: `inset 0 0 0 1.2px ${COLORS.text}` }} />
-                <p className="font-body t-small" style={{ color: COLORS.text }}>
-                  <span style={{ color: COLORS.subtext }}>{meta.label}: </span>
-                  <span className="font-medium">{l.pieces > 1 ? `${l.pieces} × ${l.per} lm` : `${l.lm.toLocaleString("es-ES")} lm`}</span>
-                </p>
-              </div>
-            );
-          })}
+      <p className="font-body t-eyebrow mt-4 mb-2.5" style={{ color: COLORS.accent }}>Cómo se resuelve</p>
+      <div className="flex flex-col gap-3.5 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
+        <LayerBar parts={[{ lm: generalLm }, { lm: bedsideAmbient }]} />
+
+        <div className="flex items-start gap-3">
+          <span className="rounded-full shrink-0 mt-1" style={{ width: 11, height: 11, backgroundColor: COLORS.bulb, boxShadow: `inset 0 0 0 1.2px ${COLORS.text}` }} />
+          <div>
+            <p className="font-body t-small" style={{ color: COLORS.text }}>
+              <span style={{ color: COLORS.subtext }}>1 · Luz general — {generalTitle}: </span>
+              <span className="font-medium">{generalValue}</span>
+            </p>
+            <p className="font-body t-small italic mt-0.5" style={{ color: COLORS.subtext }}>
+              {mode === "reforma"
+                ? `Reparto nuevo, con la separación y las distancias del plano de abajo.`
+                : mode === "uno"
+                  ? `En la luminaria del punto que ya tienes.${singlePointStrained ? " Es mucho para un solo punto: mira la recomendación de abajo." : ""}`
+                  : `En conjunto, repartidos entre los puntos que ya tienes.`}
+            </p>
+          </div>
         </div>
+
+        <div className="flex items-start gap-3">
+          <span className="rounded-full shrink-0 mt-1" style={{ width: 11, height: 11, backgroundColor: COLORS.bulb, opacity: 0.7, boxShadow: `inset 0 0 0 1.2px ${COLORS.text}` }} />
+          <div>
+            <p className="font-body t-small" style={{ color: COLORS.text }}>
+              <span style={{ color: COLORS.subtext }}>2 · Cabecera: </span>
+              <span className="font-medium">2 × {bedsideSpec} lm{reads ? ", regulables" : ""}</span>
+            </p>
+            <p className="font-body t-small italic mt-0.5" style={{ color: COLORS.subtext }}>
+              Lámparas de sobremesa, apliques o colgantes junto a la cama: tres formas de resolver la misma capa, elige la que encaje con tu mesita.
+              {reads && ` Como lees en la cama, van dimensionadas para leer: atenuadas aportan los ${bedsideAmbient} lm que esta capa pone en la luz general, y a plena potencia iluminan el libro.`}
+            </p>
+          </div>
+        </div>
+
         <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
-          Estas capas se reparten los {lumens.toLocaleString("es-ES")} lm: suman {ambientTotal.toLocaleString("es-ES")} lm entre todas.
+          Estas dos capas se reparten los {need.toLocaleString("es-ES")} lm: {generalLm.toLocaleString("es-ES")} + {bedsideAmbient} lm.
         </p>
       </div>
 
-      {tasks.length > 0 && (
+      {local.length > 0 && (
         <>
-          <p className="font-body t-eyebrow mt-4 mb-2.5" style={{ color: COLORS.accent }}>Se suman aparte</p>
+          <p className="font-body t-eyebrow mt-4 mb-2.5" style={{ color: COLORS.accent }}>Luz localizada</p>
           <div className="flex flex-col gap-2.5 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
-            {tasks.map((t) => {
-              const meta = BEDROOM_TASK_META[t.id];
+            {local.map((l) => {
+              const meta = BEDROOM_LOCAL_META[l.id];
               return (
-                <div key={t.id} className="flex items-start gap-3">
+                <div key={l.id} className="flex items-start gap-3">
                   <meta.Icon size={15} color={COLORS.accent} strokeWidth={1.8} className="shrink-0 mt-0.5" />
                   <p className="font-body t-small" style={{ color: COLORS.text }}>
                     <span style={{ color: COLORS.subtext }}>{meta.label}: </span>
-                    <span className="font-medium">+{t.lm} lm</span>
-                    <span style={{ color: COLORS.subtext }}> — {t.detail}</span>
+                    <span className="font-medium">{l.pieces > 1 ? `${l.pieces} × ${l.per} lm` : `${l.lm} lm`}</span>
+                    <span style={{ color: COLORS.subtext }}> — {l.detail}</span>
                   </p>
                 </div>
               );
             })}
           </div>
           <p className="font-body t-caption mt-2.5" style={{ color: COLORS.subtext }}>
-            Estas iluminan una superficie concreta, no la habitación: no se le restan a las capas de arriba, se añaden. Restárselas dejaría el dormitorio más oscuro de lo calculado.
+            Ilumina una superficie concreta, no la habitación, así que va aparte de la luz general y no se le resta a nada.
           </p>
         </>
       )}
@@ -3140,22 +3112,22 @@ function BedroomLayerBlock({ area, lux, lumens, layers }) {
 }
 
 /* Varios puntos y solo cambio de luminarias: el único caso sin representación
- * espacial de ningún tipo, y es deliberado. Nemul no sabe cuántos puntos hay
- * ni dónde están; dibujar cuatro círculos repartidos "idealmente" se lee como
- * el sitio donde deberían ir los suyos. El dato útil es el flujo. */
-function CeilingFluxNote({ ceilingLm }) {
+ * espacial, y es deliberado. Nemul no sabe cuántos puntos hay ni dónde están;
+ * dibujar unos cuantos círculos repartidos "idealmente" se lee como el sitio
+ * donde deberían ir los suyos. El dato útil es el flujo. */
+function CeilingFluxNote({ generalLm }) {
   return (
     <div data-pdf-keep>
-      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>La capa de techo</p>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>La capa de luz general</p>
       <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
         <div className="flex items-center gap-3">
           <Lightbulb size={18} color={COLORS.bulb} strokeWidth={1.8} className="shrink-0" />
           <p className="font-display" style={{ color: COLORS.text, fontSize: 26, lineHeight: 1.1 }}>
-            {ceilingLm.toLocaleString("es-ES")} lm
+            {generalLm.toLocaleString("es-ES")} lm
           </p>
         </div>
         <p className="font-body t-body mt-3" style={{ color: COLORS.text }}>
-          Reparte estos {ceilingLm.toLocaleString("es-ES")} lm aproximadamente entre los puntos de techo que ya tienes. No es necesario que todos aporten exactamente el mismo flujo; lo importante es acercarse al total recomendado para esta capa.
+          Reparte estos {generalLm.toLocaleString("es-ES")} lm aproximadamente entre los puntos de techo que ya tienes. No es necesario que todos aporten exactamente el mismo flujo; lo importante es acercarse al total recomendado para esta capa.
         </p>
         <p className="font-body t-small italic mt-2.5" style={{ color: COLORS.subtext }}>
           No verás aquí un plano con distancias: dijiste que solo vas a cambiar las luminarias, así que tus puntos ya están donde están. Dibujar una retícula sería proponerte agujeros nuevos.
@@ -3165,22 +3137,15 @@ function CeilingFluxNote({ ceilingLm }) {
   );
 }
 
-/* Un punto, o ninguno: aquí sí hay algo que enseñar, pero son zonas, no
- * posiciones. Sin contorno de habitación y sin una sola cota, como la terraza:
- * qué tiene que estar iluminado, no dónde cuelga cada cosa. */
+/* Un solo punto: hay algo que enseñar, pero son zonas, no posiciones. Sin
+ * contorno de habitación y sin una sola cota. */
 function BedroomZoneScheme({ layers }) {
   const zones = [
-    ...layers.ambient.map((l) => {
-      const meta = BEDROOM_LAYER_META[l.id];
-      return {
-        Icon: meta.Icon,
-        label: l.id === "techo" ? "Tu punto de techo" : meta.label,
-        value: l.pieces > 1 ? `${l.pieces} × ${l.per} lm` : `${l.lm.toLocaleString("es-ES")} lm`,
-      };
-    }),
-    ...layers.tasks.map((t) => {
-      const meta = BEDROOM_TASK_META[t.id];
-      return { Icon: meta.Icon, label: meta.label, value: `+${t.lm} lm` };
+    { Icon: Lightbulb, label: "Tu punto de techo", value: `${layers.generalLm.toLocaleString("es-ES")} lm` },
+    { Icon: BedDouble, label: "Cabecera", value: `2 × ${layers.bedsideSpec} lm` },
+    ...layers.local.map((l) => {
+      const meta = BEDROOM_LOCAL_META[l.id];
+      return { Icon: meta.Icon, label: meta.label, value: l.pieces > 1 ? `${l.pieces} × ${l.per} lm` : `${l.lm} lm` };
     }),
   ];
   return (
@@ -3199,9 +3164,7 @@ function BedroomZoneScheme({ layers }) {
           ))}
         </div>
         <p className="font-body t-small italic text-center mt-3" style={{ color: COLORS.subtext }}>
-          {layers.mode === "sin"
-            ? "Sin plano ni retícula: en este dormitorio la luz general no sale del techo, así que no hay focos que colocar. Estas son las zonas que tienen que quedar iluminadas y con cuánta luz cada una."
-            : "Sin plano ni retícula: tu punto de techo ya está donde está. Estas son las zonas que tienen que quedar iluminadas y con cuánta luz cada una."}
+          Sin plano ni retícula: tu punto de techo ya está donde está. Estas son las zonas que tienen que quedar iluminadas y con cuánta luz cada una.
         </p>
       </div>
     </div>
@@ -3569,7 +3532,7 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameTon
           <ColorTempBlock roomId={room.id} tempK={tempK} sameToneAs={sameToneAs} />
 
           {layers ? (
-            <BedroomLayerBlock area={area} lux={lux} lumens={lumens} layers={layers} />
+            <BedroomLayerBlock area={area} lux={lux} layers={layers} grid={grid} />
           ) : (
             <CalculationBlock
               area={area} lux={lux} lumens={lumens} grid={grid}
@@ -3587,7 +3550,7 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameTon
               en su techo; ver BEDROOM: LAS CUATRO CARAS DEL INFORME. */}
           {layers ? (
             layers.mode === "reforma" ? <CeilingPlan grid={grid} />
-            : layers.mode === "varios" ? <CeilingFluxNote ceilingLm={layers.ceilingLm} />
+            : layers.mode === "varios" ? <CeilingFluxNote generalLm={layers.generalLm} />
             : <BedroomZoneScheme layers={layers} />
           ) : room.id === "terrace" ? (
             <div data-pdf-keep>
@@ -4947,7 +4910,16 @@ export default function NemulApp() {
       let value;
       if (currentStep.type === "multi") {
         const arr = roomAnswers[currentStep.key] || [];
-        value = arr.includes(optionId) ? arr.filter((x) => x !== optionId) : [...arr, optionId];
+        // "Ninguna de estas" no convive con las demás: marcarla las apaga, y
+        // marcar cualquier otra la apaga a ella. Sin esto se podía responder
+        // "Leo en la cama" y "Ninguna de estas" a la vez.
+        const exclusiveIds = currentStep.options.filter((o) => o.exclusive).map((o) => o.id);
+        if (exclusiveIds.includes(optionId)) {
+          value = arr.includes(optionId) ? [] : [optionId];
+        } else {
+          const next = arr.includes(optionId) ? arr.filter((x) => x !== optionId) : [...arr, optionId];
+          value = next.filter((x) => !exclusiveIds.includes(x));
+        }
       } else {
         value = optionId;
       }
