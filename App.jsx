@@ -3019,70 +3019,85 @@ function LayerBar({ parts }) {
 
 /* El bloque de cálculo del dormitorio.
  *
- * Separa dos cosas que antes se mezclaban y se contradecían: cuánta luz pide
- * la habitación, y con qué capas se consigue. La necesidad se enseña una vez;
- * las capas que la cubren suman exactamente esa cifra; y lo localizado va
- * debajo, con su propio flujo y sin entrar en la suma.
+ * La regla que manda aquí: NUNCA se enseña un número por pieza que no
+ * multiplique exactamente lo que aporta su capa. Antes la cabecera decía
+ * "2 x 350 lm" y aportaba 300 —la diferencia era que las lámparas van
+ * reguladas—, así que en pantalla quedaba 1.400 + 700 = 1.700 y había que
+ * leerse un párrafo para entender por qué no era un error. Ahora el flujo de
+ * lectura sale del reparto y se explica en su propio bloque: lo que se suma
+ * es lo que aporta cada capa, y la suma se ve sin leer nada.
  */
 function BedroomLayerBlock({ area, lux, layers, grid }) {
   const { need, generalLm, bedsidePer, bedsideAmbient, bedsideSpec, reads, local, mode, singlePointStrained } = layers;
-  const generalTitle = mode === "reforma" ? "Nueva distribución" : mode === "uno" ? "Tu punto de techo" : "Tus puntos de techo";
-  const generalValue = mode === "reforma" && grid
-    ? `${grid.n} downlights de ${grid.lmPer} lm`
-    : `${generalLm.toLocaleString("es-ES")} lm`;
+
+  // En reforma el techo aporta lo que dan los focos elegidos, que es lo que
+  // se instala de verdad; en los demás modos, su parte del reparto.
+  const ceilingLm = mode === "reforma" && grid ? grid.totalLm : generalLm;
+  const ceilingLabel = mode === "reforma" && grid
+    ? `Techo — ${grid.n} downlights de ${grid.lmPer} lm`
+    : mode === "uno" ? "Techo — tu punto actual" : "Techo — tus puntos actuales";
+
+  // El "2 x 150" solo se enseña cuando multiplica los 300 que aporta. Si leer
+  // pide lámparas más potentes, esa cifra se va al bloque de lectura.
+  const showPerPiece = !reads || bedsideSpec === bedsidePer;
+  const bedsideLabel = showPerPiece ? `Cabecera — 2 × ${bedsidePer} lm` : "Cabecera — 2 luminarias";
+
+  const total = ceilingLm + bedsideAmbient;
+  const drift = Math.abs(total / need - 1) > 0.1;
+
+  const Row = ({ label, value, bold }) => (
+    <div className="flex items-baseline justify-between gap-3">
+      <p className="font-body t-small" style={{ color: bold ? COLORS.text : COLORS.subtext, fontWeight: bold ? 600 : 400 }}>{label}</p>
+      <p className="font-body t-small font-medium shrink-0" style={{ color: COLORS.text, fontWeight: bold ? 600 : 500 }}>{value}</p>
+    </div>
+  );
+
   return (
     <div>
-      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Necesidad general del dormitorio</p>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Necesidad general</p>
       <div className="flex flex-col gap-3 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
         <StatRow label="Superficie" value={`${area} m²`} />
         <StatRow label="Nivel recomendado" value={`${lux} lm/m²`} />
-        <div>
-          <StatRow label="Luz general necesaria" value={`≈ ${need.toLocaleString("es-ES")} lm`} />
-          <p className="font-body t-small italic mt-1 ml-9" style={{ color: COLORS.subtext }}>
-            Es la luz que tiene que bañar la habitación entera. Las luces de tarea —el armario, el espejo— van aparte y no se descuentan de aquí.
-          </p>
-        </div>
+        <StatRow label="Luz general" value={`≈ ${need.toLocaleString("es-ES")} lm`} />
+        {local.length > 0 && (
+          <p className="font-body t-small italic ml-9" style={{ color: COLORS.subtext }}>Las luces localizadas van aparte.</p>
+        )}
       </div>
 
-      <p className="font-body t-eyebrow mt-4 mb-2.5" style={{ color: COLORS.accent }}>Cómo se resuelve</p>
-      <div className="flex flex-col gap-3.5 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
-        <LayerBar parts={[{ lm: generalLm }, { lm: bedsideAmbient }]} />
-
-        <div className="flex items-start gap-3">
-          <span className="rounded-full shrink-0 mt-1" style={{ width: 11, height: 11, backgroundColor: COLORS.bulb, boxShadow: `inset 0 0 0 1.2px ${COLORS.text}` }} />
-          <div>
-            <p className="font-body t-small" style={{ color: COLORS.text }}>
-              <span style={{ color: COLORS.subtext }}>1 · Luz general — {generalTitle}: </span>
-              <span className="font-medium">{generalValue}</span>
-            </p>
-            <p className="font-body t-small italic mt-0.5" style={{ color: COLORS.subtext }}>
-              {mode === "reforma"
-                ? `Reparto nuevo, con la separación y las distancias del plano de abajo.`
-                : mode === "uno"
-                  ? `En la luminaria del punto que ya tienes.${singlePointStrained ? " Es mucho para un solo punto: mira la recomendación de abajo." : ""}`
-                  : `En conjunto, repartidos entre los puntos que ya tienes.`}
-            </p>
-          </div>
+      <p className="font-body t-eyebrow mt-4 mb-2.5" style={{ color: COLORS.accent }}>De dónde sale esa luz</p>
+      <div className="flex flex-col gap-2.5 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
+        <LayerBar parts={[{ lm: ceilingLm }, { lm: bedsideAmbient }]} />
+        <Row label={ceilingLabel} value={`${ceilingLm.toLocaleString("es-ES")} lm`} />
+        <Row label={bedsideLabel} value={`${bedsideAmbient.toLocaleString("es-ES")} lm`} />
+        <div style={{ borderTop: `1px solid ${COLORS.border}`, paddingTop: 10 }}>
+          <Row label="Total" value={`${total.toLocaleString("es-ES")} lm`} bold />
         </div>
-
-        <div className="flex items-start gap-3">
-          <span className="rounded-full shrink-0 mt-1" style={{ width: 11, height: 11, backgroundColor: COLORS.bulb, opacity: 0.7, boxShadow: `inset 0 0 0 1.2px ${COLORS.text}` }} />
-          <div>
-            <p className="font-body t-small" style={{ color: COLORS.text }}>
-              <span style={{ color: COLORS.subtext }}>2 · Cabecera: </span>
-              <span className="font-medium">2 × {bedsideSpec} lm{reads ? ", regulables" : ""}</span>
-            </p>
-            <p className="font-body t-small italic mt-0.5" style={{ color: COLORS.subtext }}>
-              Lámparas de sobremesa, apliques o colgantes junto a la cama: tres formas de resolver la misma capa, elige la que encaje con tu mesita.
-              {reads && ` Como lees en la cama, van dimensionadas para leer: atenuadas aportan los ${bedsideAmbient} lm que esta capa pone en la luz general, y a plena potencia iluminan el libro.`}
-            </p>
-          </div>
-        </div>
-
-        <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
-          Estas dos capas se reparten los {need.toLocaleString("es-ES")} lm: {generalLm.toLocaleString("es-ES")} + {bedsideAmbient} lm.
+        <p className="font-body t-small italic" style={{ color: COLORS.subtext }}>
+          {mode === "reforma"
+            ? "Lámparas de mesita, apliques o colgantes junto a la cama."
+            : mode === "uno"
+              ? `En la luminaria del punto que ya tienes.${singlePointStrained ? " Es mucho para un solo punto: mira las recomendaciones." : ""} La cabecera, con lámparas de mesita, apliques o colgantes.`
+              : "Reparte la cifra del techo entre los puntos que ya tienes. La cabecera, con lámparas de mesita, apliques o colgantes."}
         </p>
+        {drift && (
+          <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
+            El total no cae justo en los {need.toLocaleString("es-ES")} lm calculados porque las luminarias vienen en escalones de flujo: este es el reparto real más cercano.
+          </p>
+        )}
       </div>
+
+      {reads && (
+        <>
+          <p className="font-body t-eyebrow mt-4 mb-2.5" style={{ color: COLORS.accent }}>Para leer en la cama</p>
+          <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
+            <p className="font-body t-body" style={{ color: COLORS.text }}>
+              {bedsideSpec > bedsidePer
+                ? `Que las luminarias de la cabecera sean regulables y de ${bedsideSpec} lm o más cada una.`
+                : "Que las luminarias de la cabecera sean regulables: atenuadas por la noche, a plena potencia para leer."}
+            </p>
+          </div>
+        </>
+      )}
 
       {local.length > 0 && (
         <>
@@ -3094,17 +3109,13 @@ function BedroomLayerBlock({ area, lux, layers, grid }) {
                 <div key={l.id} className="flex items-start gap-3">
                   <meta.Icon size={15} color={COLORS.accent} strokeWidth={1.8} className="shrink-0 mt-0.5" />
                   <p className="font-body t-small" style={{ color: COLORS.text }}>
-                    <span style={{ color: COLORS.subtext }}>{meta.label}: </span>
-                    <span className="font-medium">{l.pieces > 1 ? `${l.pieces} × ${l.per} lm` : `${l.lm} lm`}</span>
-                    <span style={{ color: COLORS.subtext }}> — {l.detail}</span>
+                    <span className="font-medium">{meta.label} — {l.pieces > 1 ? `${l.pieces} × ${l.per} lm` : `${l.lm} lm`}</span>
+                    <span style={{ color: COLORS.subtext }}>, {l.detail}</span>
                   </p>
                 </div>
               );
             })}
           </div>
-          <p className="font-body t-caption mt-2.5" style={{ color: COLORS.subtext }}>
-            Ilumina una superficie concreta, no la habitación, así que va aparte de la luz general y no se le resta a nada.
-          </p>
         </>
       )}
     </div>
@@ -3142,7 +3153,7 @@ function CeilingFluxNote({ generalLm }) {
 function BedroomZoneScheme({ layers }) {
   const zones = [
     { Icon: Lightbulb, label: "Tu punto de techo", value: `${layers.generalLm.toLocaleString("es-ES")} lm` },
-    { Icon: BedDouble, label: "Cabecera", value: `2 × ${layers.bedsideSpec} lm` },
+    { Icon: BedDouble, label: "Cabecera", value: `${layers.bedsideAmbient.toLocaleString("es-ES")} lm` },
     ...layers.local.map((l) => {
       const meta = BEDROOM_LOCAL_META[l.id];
       return { Icon: meta.Icon, label: meta.label, value: l.pieces > 1 ? `${l.pieces} × ${l.per} lm` : `${l.lm} lm` };
