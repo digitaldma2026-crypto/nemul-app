@@ -2033,13 +2033,12 @@ function CalculationBlock({ area, lux, lumens, grid, onlyLights = false, ambient
  * downlight situado detrás de quien trabaja.
  */
 function TaskLightingBlock({ lux }) {
-  const { fromAmbient, lm } = deskTaskLamp(lux);
+  const { lm } = deskTaskLamp(lux);
   return (
     <div data-pdf-keep>
       <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Luz de tarea: la zona del escritorio</p>
       <div className="flex flex-col gap-3 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
         <StatRow label="Objetivo sobre la mesa" value={`unos ${TASK_LUX_TARGET} lux`} />
-        <StatRow label="Aporta la luz general" value={`del orden de ${fromAmbient} lux`} />
         <div>
           <StatRow label="Lámpara de escritorio" value={`unos ${lm} lm, regulable`} />
           <p className="font-body t-small italic mt-1 ml-9" style={{ color: COLORS.subtext }}>
