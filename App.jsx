@@ -453,8 +453,11 @@ function generateLivingReport(answers = {}) {
   const grid = openPlanLayout(area, lumens, 4);
 
   const tips = [];
-  tips.push(`Coloca los downlights siguiendo la retícula del plano: unos ${spacingText(grid)}, y a unos ${marginText(grid)} de las paredes.`);
-  tips.push("Ajusta esa retícula a la planta real y a los muebles: es una referencia de partida, no una plantilla que haya que respetar punto por punto.");
+  const onlyLights = renovationStatus === "onlyLights";
+  tips.push(onlyLights
+    ? `Reparte la luz siguiendo el esquema del plano: unos ${spacingText(grid, true)}, y a unos ${marginText(grid)} de las paredes. Las lámparas de pie y de sobremesa que ya tienes cuentan como parte de ese reparto.`
+    : `Coloca los downlights siguiendo la retícula del plano: unos ${spacingText(grid)}, y a unos ${marginText(grid)} de las paredes.`);
+  tips.push(`Ajusta ${onlyLights ? "ese reparto" : "esa retícula"} a la planta real y a los muebles: es una referencia de partida, no una plantilla que haya que respetar punto por punto.`);
   tips.push("Evita colocar focos justo encima del sofá o de donde os sentéis: desde ahí el foco queda en el campo de visión y deslumbra.");
   tips.push("Al ser una zona de relax, prioriza lámparas de pared, de pie o de sobremesa sobre la luz general de techo; mejor varios puntos suaves repartidos que pocos focos potentes.");
 
@@ -1985,7 +1988,7 @@ function MistakesList({ mistakes }) {
 // uno. Un rango es honesto en la cabeza de quien calcula; en la de quien
 // compra bombillas es una pregunta sin responder.
 function CalculationBlock({ area, lux, lumens, grid, onlyLights = false, ambientOnly = false }) {
-  const { n, lmPer, totalLm, watts } = grid;
+  const { n, lmPer, totalLm } = grid;
   return (
     <div>
       <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Cálculo realizado</p>
@@ -2009,14 +2012,7 @@ function CalculationBlock({ area, lux, lumens, grid, onlyLights = false, ambient
           label={onlyLights ? "Reparto orientativo" : "Propuesta"}
           value={onlyLights ? `${n} zonas de luz de unos ${lmPer} lm` : `${n} downlights de ${lmPer} lm`}
         />
-        <div>
-          <StatRow label="Flujo total aproximado" value={`${totalLm.toLocaleString("es-ES")} lm`} />
-          <p className="font-body t-small italic mt-1 ml-9" style={{ color: COLORS.subtext }}>
-            {onlyLights
-              ? `Equivale a unos ${watts} W de LED por zona.`
-              : `Equivale a downlights LED de unos ${watts} W cada uno.`}
-          </p>
-        </div>
+        <StatRow label="Flujo total aproximado" value={`${totalLm.toLocaleString("es-ES")} lm`} />
       </div>
       <p className="font-body t-caption mt-2.5" style={{ color: COLORS.subtext }}>
         {onlyLights
@@ -2646,7 +2642,7 @@ function ambientLayout(area, lumens, minCount = 1) {
   return {
     area, w: 0, d: 0, n, cols: n, rows: 1,
     sx: 0, sy: 0, mx: 0, my: 0,
-    lmPer, totalLm: lmPer * n, watts: Math.max(3, Math.round(lmPer / 100)),
+    lmPer, totalLm: lmPer * n,
   };
 }
 
@@ -2741,7 +2737,6 @@ function openPlanLayout(area, lumens, minCount = 1, minLmPer = 0) {
     mx: x.margin, my: y.margin,
     lmPer,
     totalLm: lmPer * n,
-    watts: Math.max(3, Math.round(lmPer / 100)),
   };
 }
 
@@ -2778,7 +2773,6 @@ function planLayout(area, lumens, minCount = 1) {
     mx: x.margin, my: y.margin,
     lmPer,
     totalLm: lmPer * n,
-    watts: Math.max(3, Math.round(lmPer / 100)),
   };
 }
 
@@ -2947,7 +2941,7 @@ function CeilingPlan({ grid, onlyLights = false }) {
             necesita abrir seis puntos nuevos. */}
         {onlyLights && (
           <p className="font-body t-small mt-2.5 rounded-lg p-3" style={{ color: COLORS.text, backgroundColor: COLORS.bgAlt }}>
-            <span className="font-medium">No hace falta que crees estos puntos.</span> Dijiste que solo vas a cambiar las luminarias, así que esto no es un plano de instalación: es dónde debería llegar la luz. Con {n === 1 ? "el punto que ya tienes" : "los puntos que ya tienes"}, acércate a este reparto usando luminarias que abran el haz en varias direcciones —un carril, una suspensión de varios brazos, un foco orientable— y cubre con lámparas de pie o de mesa las zonas que el plano marca y tu instalación no alcanza.
+            <span className="font-medium">No necesitas crear estos puntos.</span> El esquema representa cómo conviene repartir la luz, no una nueva instalación. Utiliza los puntos existentes y completa las zonas que lo necesiten con luminarias orientables o lámparas de mesa o de pie.
           </p>
         )}
       </div>
