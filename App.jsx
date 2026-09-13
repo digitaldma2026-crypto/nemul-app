@@ -411,8 +411,22 @@ function describeLux(lux) {
 // El estilo, las prioridades o el problema deciden el tono (Kelvin) y los consejos,
 // nunca el número de lúmenes. Así cada pregunta tiene un único trabajo claro.
 const ROOM_LUX_BY_LIGHT = {
-  living: { bright: 150, moderate: 175, low: 200 },
-  livingDining: { bright: 150, moderate: 175, low: 200 },
+  /* El salón bajó de 150-200 a 130-170 cuando la luz general dejó de ser toda
+   * la luz de la estancia.
+   *
+   * Los 175 lm/m² de antes son el valor correcto para un salón cuyo techo hace
+   * todo el trabajo: rondan los 74 lux medios en el suelo, el techo de la
+   * banda ambiental. Con el pie de lectura, la lámpara de ambiente y el acento
+   * como capas propias, el techo solo tiene que resolver el fondo —entrar,
+   * cruzar, estar—, y eso son 55-65 lux.
+   *
+   * No es un número inventado: es la misma escala que ya usa el dormitorio,
+   * que resolvió esto antes por la misma razón (la cabecera hace su parte).
+   * El despacho hizo lo propio al separar la luz de la mesa. En el informe
+   * sigue llamándose "Iluminación general" y nunca "ambiental": esa palabra
+   * ya es de la capa "Lámpara de ambiente" y confundiría las dos. */
+  living: { bright: 130, moderate: 150, low: 170 },
+  livingDining: { bright: 130, moderate: 150, low: 170 },
   kitchen: { bright: 300, moderate: 350, low: 400 },
   kitchenOpen: { bright: 300, moderate: 350, low: 400 },
   bedroom: { bright: 130, moderate: 150, low: 170 },
@@ -562,10 +576,7 @@ const LIVING_ACCENT_LM = 350;         // tira LED en el mueble de televisión
 const LIVING_AMBIENT_PIECE_LM = 300;  // una lámpara de pie o de sobremesa
 const LIVING_READING_LM = 450;        // el pie de lectura, regulable
 
-// Y el contrapeso: por muchas capas que se activen, la general nunca baja de
-// la mitad de lo que pide la zona. Sin este suelo, una zona de estar pequeña
-// con televisión, lectura y relax se quedaba con la luz general en negativo.
-const LIVING_GENERAL_MIN_SHARE = 0.5;
+
 
 // El colgante resuelve la mesa; el resto de la zona necesita un relleno en el
 // borde, o al encender solo el colgante la mesa flota en un pozo negro.
@@ -650,59 +661,27 @@ function livingLayers(area, answers = {}, roomId = "living") {
     ? { lm: LIVING_ACCENT_LM, label: "Acento", detail: "una tira LED en el mueble de la televisión, oculta tras el canto: da profundidad y evita el contraste duro entre la pantalla y la pared" }
     : null;
 
-  /* ---------- Simplificación de capas en estancias pequeñas ----------
+  /* ---------- General y complementarias son dos cosas distintas ----------
    *
-   * En 7 m² de zona de estar, cuatro capas encendidas piden más luz de la que
-   * cabe: una lámpara de lectura da 450 lm tenga la estancia los metros que
-   * tenga, así que en una pequeña las piezas concretas se comen la cuenta.
+   * Aquí hubo dos intentos anteriores, los dos equivocados por el mismo motivo:
+   * daban por hecho que todas las capas se encienden a la vez. Primero se
+   * fundían capas en estancias pequeñas; después se atenuaban para que la suma
+   * cupiera. Las dos cosas partían de sumar la general con el pie de lectura,
+   * la tira de la tele y el colgante de la mesa, como si eso fuera "la luz que
+   * necesita la habitación".
    *
-   * El orden en que se recorta es de menos a más funcional:
-   *   1. general  — nunca se quita, tiene suelo propio
-   *   2. mesa     — nunca se quita en un salón-comedor: es la razón de la estancia
-   *   3. lectura  — nunca se quita ni se baja de LIVING_READING_LM si lo ha pedido
-   *   4. ambiental — se funde con otra capa cuando se puede
-   *   5. acento   — lo primero que sale
+   * No lo es. La general es lo que pide la estancia por sus metros: la luz de
+   * fondo, la que se enciende al entrar. Las complementarias son escenas —se
+   * lee con el pie, se cena con el colgante, se ve la tele con la tira— y cada
+   * una vale lo que vale para su función, tenga la estancia 12 m² o 40.
    *
-   * "Quitar" no significa prohibir: significa que deja de ocupar un hueco en el
-   * reparto de lúmenes. La tira LED se sigue pudiendo poner, y se dice. Lo que
-   * no se hace nunca es recortar la lámpara de lectura para que cuadre la suma:
-   * una lámpara de lectura de 380 lm no lee. */
-  const softBudget = roundLm(estarNeed * (1 - LIVING_GENERAL_MIN_SHARE), 50);
-  const softLm = () => ambient.reduce((acc, a) => acc + a.lm, 0) + (accent ? accent.lm : 0);
-  const simplified = [];
-
-  if (softLm() > softBudget && accent) {
-    simplified.push({
-      id: "acento",
-      text: "El acento deja de contar como capa: aquí la luz general y las lámparas ya cubren lo que pide la estancia. La tira LED del mueble de la televisión la puedes poner igual, pero como detalle y regulada baja, no como una capa más de luz.",
-    });
-    accent = null;
-  }
-  if (softLm() > softBudget && ambient.some((a) => a.id === "relax")) {
-    simplified.push({
-      id: "relax",
-      text: "Las dos lámparas de ambiente se juntan en una sola: en estos metros, dos puntos de relax además de la general sobran, y con una regulable consigues lo mismo.",
-    });
-    ambient = ambient.filter((a) => a.id !== "relax");
-  }
-  if (softLm() > softBudget && ambient.some((a) => a.id === "lectura") && ambient.some((a) => a.id === "ambiente")) {
-    simplified.push({
-      id: "ambiente",
-      text: "El pie de lectura hace también de lámpara de ambiente: al ser regulable, a plena potencia sirve para leer y atenuado da el ambiente de la tarde. No hace falta una segunda lámpara.",
-    });
-    ambient = ambient.filter((a) => a.id !== "ambiente");
-  }
-  // Y aquí se para. Si lo que queda es solo el pie de lectura y aun así pasa
-  // del presupuesto, se queda: es una necesidad que el usuario ha declarado.
-
+   * Así que ni se recortan ni se suman. Cada cifra es la suya. */
+  // Se suman solo para poder enseñarlas agrupadas, nunca para restarlas de la
+  // general: la general es la que pide la estancia por sus metros, entera.
   const ambientLm = ambient.reduce((acc, a) => acc + a.lm, 0);
   const accentLm = accent ? accent.lm : 0;
-
-  const generalLm = Math.max(
-    roundLm(estarNeed * LIVING_GENERAL_MIN_SHARE, 50),
-    roundLm(estarNeed - ambientLm - accentLm, 50),
-  );
-  const estarTotal = generalLm + ambientLm + accentLm;
+  const generalLm = estarNeed;
+  const complementaryLm = ambientLm + accentLm;
 
   /* La retícula se calcula sobre los m² de la zona de estar y con los lúmenes
    * de la general, nunca sobre la estancia entera ni con el total. Y con las
@@ -738,13 +717,11 @@ function livingLayers(area, answers = {}, roomId = "living") {
     };
   }
 
-  const total = estarTotal + (dining ? dining.pendantTotal + dining.fillTotal : 0);
-
   return {
     zones, isDining, onlyLights,
     plan: { roomW, roomD, diningDepth, estarW: estarDims.w },
-    estar: { area: zones.estar, lux: estarLux, need: estarNeed, generalLm, ambient, ambientLm, accent, accentLm, total: estarTotal, simplified },
-    grid, dining, total,
+    estar: { area: zones.estar, lux: estarLux, need: estarNeed, generalLm, ambient, ambientLm, accent, accentLm, complementaryLm },
+    grid, dining,
   };
 }
 
@@ -760,10 +737,11 @@ function generateLivingReport(answers = {}, roomId = "living") {
   // El total ya no es area x lux: cada zona tiene su nivel y cada capa su
   // flujo. Se sigue devolviendo `lumens` porque el resto del informe —el
   // glosario, el PDF— lo lee, pero ahora es la suma real de las capas.
-  const lumens = layers.total;
+  // Para el resto del informe, "los lúmenes de la estancia" son los de la luz
+  // general. Las complementarias no se suman aquí: son escenas, no fondo.
+  const lumens = layers.estar.generalLm;
   const onlyLights = renovationStatus === "onlyLights";
   const room = dining ? "salón-comedor" : "salón";
-  const cut = (id) => estar.simplified.some((c) => c.id === id);
 
   const tips = [];
 
@@ -779,20 +757,14 @@ function generateLivingReport(answers = {}, roomId = "living") {
       : `Coloca los downlights siguiendo la retícula del plano: unos ${spacingText(grid)}, y a unos ${marginText(grid)} de las paredes.`);
   }
   tips.push(`Ajusta ${onlyLights ? "ese reparto" : "esa retícula"} a la planta real y a los muebles: es una referencia de partida, no una plantilla que haya que respetar punto por punto.`);
-  tips.push(`En un ${room} no hace falta que toda la luz salga del techo. Aquí la general pone ${estar.generalLm.toLocaleString("es-ES")} de los ${estar.total.toLocaleString("es-ES")} lm de la zona de estar; el resto lo ponen las lámparas y el acento, que es lo que hace que el techo pueda ir despejado.`);
+  tips.push(`Las luces complementarias no se suman a la general: son escenas. Con todo encendido a la vez sobraría luz, así que ponlas reguladas y enciende cada una cuando toque.`);
   tips.push("Evita colocar focos justo encima del sofá o de donde os sentéis: desde ahí el foco queda en el campo de visión y deslumbra.");
 
   // ---------- capas de la zona de estar ----------
   if (activities.includes("read")) tips.push(`El pie de lectura pide unos ${LIVING_READING_LM} lm y un regulador: a plena potencia para leer, atenuado el resto del tiempo. Colócalo junto al sofá y por detrás del hombro, no enfrente.`);
   if (activities.includes("tv")) tips.push("Dirige la luz general lejos de la pantalla del televisor para evitar reflejos molestos.");
-  if (activities.includes("tv")) tips.push(cut("acento")
-    ? "La tira LED del mueble de televisión sigue mereciendo la pena por lo que hace —suavizar el contraste entre la pantalla encendida y la pared oscura—, pero en estos metros no la contamos como capa de luz: ponla regulada baja, como detalle."
-    : `Una tira LED de unos ${LIVING_ACCENT_LM} lm en el mueble de televisión, oculta tras el canto, aporta profundidad y suaviza el contraste entre la pantalla encendida y la pared oscura.`);
+  if (estar.accent) tips.push(`Una tira LED de unos ${estar.accent.lm} lm en el mueble de televisión, oculta tras el canto, aporta profundidad y suaviza el contraste entre la pantalla encendida y la pared oscura.`);
   if (activities.includes("relax")) tips.push("Que la luz de ambiente sea regulable: es lo que permite pasar de un salón luminoso a uno de sobremesa sin cambiar ninguna bombilla.");
-
-  // Lo que se ha simplificado se dice, y se dice por qué. Una capa que
-  // desaparece sin explicación se lee como un olvido.
-  estar.simplified.forEach((c) => tips.push(c.text));
 
   // ---------- la mesa ----------
   if (dining) {
@@ -1778,7 +1750,7 @@ const livingFlow = (roomId) => (answers = {}) => {
       onlyLights: "Perfecto: respetaremos los puntos de luz que ya tienes y completaremos con luminarias que no necesiten obra.",
       renovation: "Entonces podemos diseñar la distribución desde cero, sin depender de dónde estén los puntos actuales.",
     } },
-    { key: "dims", title: `¿Cuánto mide aproximadamente tu ${room}?`, subtitle: "A ojo está bien: no hace falta sacar el metro.", info: `Con el largo y el ancho, Nemul calcula la superficie y también la forma de la estancia, que es lo que decide cómo se reparten los puntos de luz. En un ${room} suelen recomendarse entre 150 y 200 lm/m² según la luz natural que entre.`, type: "dims" },
+    { key: "dims", title: `¿Cuánto mide aproximadamente tu ${room}?`, subtitle: "A ojo está bien: no hace falta sacar el metro.", info: `Con el largo y el ancho, Nemul calcula la superficie y también la forma de la estancia, que es lo que decide cómo se reparten los puntos de luz. En un ${room}, la luz general suele moverse entre 130 y 170 lm/m² según la luz natural que entre; las lámparas de lectura o de ambiente van aparte.`, type: "dims" },
     { key: "light", title: "¿Cuánta luz natural entra?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
     { key: "ceiling", title: "¿Qué tipo de techo tienes?", subtitle: "Esto determina qué soluciones de instalación son posibles.", type: "single", layout: "list", options: LIVING_CEILING_OPTIONS },
     // Con reforma no hay instalación que respetar, así que no se pregunta.
@@ -3568,52 +3540,44 @@ function BedroomZoneScheme({ layers }) {
  * multiplicar los metros por los lm/m².
  */
 
-/* Zona de estar y zona de comedor, con el aviso delante y no en letra
- * pequeña al final: el corte lo ha estimado Nemul, no lo ha medido nadie. */
+/* Zona de estar y zona de comedor: solo los metros y de dónde salen.
+ *
+ * Los lúmenes se fueron de aquí cuando la general y las complementarias se
+ * separaron: el número de la zona de comedor no era una luz general —esa zona
+ * no la tiene, la resuelve el colgante— y repetirlo aquí confundía. */
 function LivingZonesBlock({ layers, measured }) {
-  const { zones, estar, dining } = layers;
+  const { zones } = layers;
   return (
     <div data-pdf-keep>
       <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Las dos zonas de tu salón-comedor</p>
-      <div className="flex flex-col gap-3 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
-        <div className="flex gap-3">
-          {[
-            { Icon: Sofa, name: "Zona de estar", area: zones.estar, lux: estar.lux, lm: estar.need },
-            { Icon: UtensilsCrossed, name: "Zona de comedor", area: zones.comedor, lux: dining.lux, lm: dining.need },
-          ].map((z) => (
-            <div key={z.name} className="flex-1 rounded-xl p-3.5" style={{ backgroundColor: COLORS.bgAlt }}>
-              <z.Icon size={18} color={COLORS.accent} strokeWidth={1.6} />
-              <p className="font-body t-small font-medium mt-2" style={{ color: COLORS.text }}>{z.name}</p>
-              <p className="font-body t-caption mt-0.5" style={{ color: COLORS.subtext }}>unos {fmtArea(z.area)} m² · {z.lux} lm/m²</p>
-              <p className="font-display mt-1.5" style={{ color: COLORS.text, fontSize: 22, lineHeight: 1.1 }}>{z.lm.toLocaleString("es-ES")} lm</p>
-            </div>
-          ))}
-        </div>
-        <p className="font-body t-body" style={{ color: COLORS.text }}>
-          Cada zona se calcula con su propio nivel: la de estar pide una luz cómoda para estar y moverse, y la mesa pide algo más de luz sobre una superficie mucho más pequeña. Por eso el total no sale de multiplicar tus metros por un único número.
-        </p>
+      <div className="flex gap-3">
+        {[
+          { Icon: Sofa, name: "Zona de estar", area: zones.estar },
+          { Icon: UtensilsCrossed, name: "Zona de comedor", area: zones.comedor },
+        ].map((z) => (
+          <div key={z.name} className="flex-1 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
+            <z.Icon size={18} color={COLORS.accent} strokeWidth={1.6} />
+            <p className="font-body t-small font-medium mt-2" style={{ color: COLORS.text }}>{z.name}</p>
+            <p className="font-display mt-0.5" style={{ color: COLORS.text, fontSize: 22, lineHeight: 1.1 }}>{fmtArea(z.area)} m²</p>
+          </div>
+        ))}
       </div>
       <p className="font-body t-small mt-2.5 rounded-lg p-3" style={{ color: COLORS.text, backgroundColor: COLORS.bgAlt }}>
-        <span className="font-medium">El corte entre las dos zonas lo ha estimado Nemul.</span> {measured ? "Los metros de la estancia son los tuyos, pero" : "No"} no te hemos preguntado el tamaño de tu mesa ni dónde está, así que hemos supuesto que el comedor ocupa alrededor de una tercera parte, que es lo que suele ocupar una mesa con las sillas retiradas y paso alrededor. Lo que sí sabemos de tu mesa es la forma, y eso es lo que decide la solución de luz sobre ella.
+        <span className="font-medium">El corte entre las dos zonas lo ha estimado Nemul.</span> {measured ? "Los metros de la estancia son los tuyos, pero no" : "No"} te hemos preguntado el tamaño de tu mesa ni dónde está, así que hemos supuesto que el comedor ocupa alrededor de una tercera parte. Lo que sí sabemos de tu mesa es la forma, y eso es lo que decide la luz sobre ella.
       </p>
     </div>
   );
 }
 
-/* Qué capas de luz necesita cada zona.
+/* La luz general y las complementarias, separadas.
  *
- * Un esquema conceptual, no una planta. La pregunta que responde es "¿qué
- * luces hacen falta y cuánto da cada una?", y para eso no hace falta saber
- * dónde está el sofá.
+ * Separadas de verdad, en dos bloques, y sin una fila de total debajo. Sumarlas
+ * diría que todas se encienden a la vez, y no es así: se lee con el pie, se
+ * cena con el colgante, se ve la tele con la tira encendida y el techo bajo.
  *
- * Aquí hubo un intento anterior de dibujar la zona de estar con su sofá, su
- * mueble de televisión y las lámparas colocadas, y estaba mal: cuando el
- * usuario solo va a cambiar luminarias, Nemul no sabe dónde está su mobiliario.
- * Un sofá dibujado en una esquina se lee como "tu sofá va ahí". Dibujar la
- * distribución solo tiene sentido cuando hay obra y Nemul propone puntos
- * nuevos de verdad: eso es LivingZonePlan, y solo aparece en reforma.
- *
- * Dónde va cada luminaria se cuenta en las recomendaciones, con palabras. */
+ * La general responde a "¿cuánta luz de fondo pide esta estancia por sus
+ * metros?". Las complementarias, a "¿qué más necesito según lo que hago aquí?".
+ * Son dos preguntas distintas y no se restan la una a la otra. */
 const LIVING_LAYER_ICON = {
   general: Lightbulb,
   lectura: BookOpen,
@@ -3624,109 +3588,73 @@ const LIVING_LAYER_ICON = {
   apoyo: Lamp,
 };
 
+function LayerRow({ id, label, hint, lm, first }) {
+  const Icon = LIVING_LAYER_ICON[id] || Lightbulb;
+  return (
+    <div className="flex items-start gap-3 px-4 py-3"
+      style={{ borderTop: first ? "none" : `1px solid ${COLORS.border}` }}>
+      <Icon size={16} color={COLORS.bulb} strokeWidth={1.9} className="shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <p className="font-body t-body" style={{ color: COLORS.text }}>{label}</p>
+        <p className="font-body t-caption" style={{ color: COLORS.subtext }}>{hint}</p>
+      </div>
+      <p className="font-body t-body font-medium shrink-0" style={{ color: COLORS.text }}>{lm.toLocaleString("es-ES")} lm</p>
+    </div>
+  );
+}
+
 function LivingLayerBlock({ layers }) {
   const { estar, dining, grid, onlyLights, isDining } = layers;
 
-  const ceilingLm = onlyLights ? estar.generalLm : grid.totalLm;
-  const estarRows = [
-    {
-      id: "general", label: "Luz general", lm: ceilingLm,
-      hint: onlyLights ? "repartida entre los puntos de techo que ya tienes" : `${grid.n} downlights de ${grid.lmPer} lm`,
-    },
+  const generalLm = onlyLights ? estar.generalLm : grid.totalLm;
+
+  const extras = [
     ...estar.ambient.map((a) => ({
       id: a.id,
       label: a.id === "lectura" ? "Pie de lectura" : a.label,
       lm: a.lm,
-      hint: "regulable",
+      hint: { lectura: "junto al sofá, regulable", relax: "un punto bajo y cálido, regulable" }[a.id] || "en el extremo opuesto del sofá, regulable",
     })),
-    ...(estar.accent ? [{ id: "acento", label: "Luz de acento TV", lm: estar.accent.lm, hint: "tira LED en el mueble de la televisión" }] : []),
+    ...(estar.accent ? [{ id: "acento", label: "Luz de acento TV", lm: estar.accent.lm, hint: "tira LED oculta tras el canto del mueble" }] : []),
+    ...(dining ? [{ id: "mesa", label: "Luz sobre la mesa", lm: dining.pendantTotal, hint: `${dining.pieces > 1 ? `${dining.pieces} colgantes de ${dining.pendantPer} lm` : `un colgante de ${dining.pendantPer} lm`}, a ${PENDANT_H_TEXT} del tablero` }] : []),
+    ...(dining && dining.fillPieces ? [{ id: "apoyo", label: "Luz de apoyo del comedor", lm: dining.fillTotal, hint: `${dining.fillPieces} puntos en el borde, fuera de la mesa` }] : []),
   ];
-
-  const diningRows = dining
-    ? [
-        { id: "mesa", label: "Luz sobre la mesa", lm: dining.pendantTotal, hint: dining.pieces > 1 ? `${dining.pieces} colgantes de ${dining.pendantPer} lm` : `un colgante de ${dining.pendantPer} lm` },
-        ...(dining.fillPieces ? [{ id: "apoyo", label: "Luz de apoyo", lm: dining.fillTotal, hint: `${dining.fillPieces} puntos en el borde de la zona` }] : []),
-      ]
-    : [];
-
-  const sum = (rows) => rows.reduce((acc, r) => acc + r.lm, 0);
-  const total = sum(estarRows) + sum(diningRows);
-
-  /* El total de las capas casi nunca cae clavado en lo que pedían las zonas,
-   * y cuando se aleja de verdad hay que decir por qué. Pasa sobre todo en
-   * estancias pequeñas: una lámpara de lectura da 450 lm tenga el salón 12 o
-   * 40 m², así que en una pequeña esas piezas se comen la cuenta. */
-  const need = estar.need + (dining ? dining.need : 0);
-  const drift = Math.abs(total / need - 1) > 0.1;
-
-  const Zone = ({ Icon, name, rows }) => (
-    <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
-      <div className="flex items-center gap-2.5 px-4 py-3" style={{ backgroundColor: COLORS.bgAlt }}>
-        <Icon size={17} color={COLORS.accent} strokeWidth={1.7} className="shrink-0" />
-        <p className="font-body t-small font-semibold flex-1" style={{ color: COLORS.text, letterSpacing: "0.04em" }}>{name}</p>
-        <p className="font-body t-small font-semibold shrink-0" style={{ color: COLORS.text }}>{sum(rows).toLocaleString("es-ES")} lm</p>
-      </div>
-      <div className="flex flex-col">
-        {rows.map((r, i) => {
-          const RowIcon = LIVING_LAYER_ICON[r.id] || Lightbulb;
-          return (
-            <div key={r.id} className="flex items-start gap-3 px-4 py-3"
-              style={{ borderTop: i === 0 ? "none" : `1px solid ${COLORS.border}` }}>
-              <RowIcon size={16} color={COLORS.bulb} strokeWidth={1.9} className="shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <p className="font-body t-body" style={{ color: COLORS.text }}>{r.label}</p>
-                <p className="font-body t-caption" style={{ color: COLORS.subtext }}>{r.hint}</p>
-              </div>
-              <p className="font-body t-body font-medium shrink-0" style={{ color: COLORS.text }}>{r.lm.toLocaleString("es-ES")} lm</p>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
 
   return (
     <div>
-      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>
-        {isDining ? "Qué capas de luz necesita cada zona" : "Qué capas de luz necesita tu salón"}
-      </p>
-
-      <div className="flex flex-col gap-3">
-        <Zone Icon={Sofa} name={isDining ? "ZONA DE ESTAR" : "TU SALÓN"} rows={estarRows} />
-        {isDining && <Zone Icon={UtensilsCrossed} name="ZONA DE COMEDOR" rows={diningRows} />}
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Iluminación general</p>
+      <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
+        <div className="px-4 pt-4 pb-3">
+          <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
+            {isDining ? `Zona de estar · ${fmtArea(estar.area)} m² · ${estar.lux} lm/m²` : `${fmtArea(estar.area)} m² · ${estar.lux} lm/m²`}
+          </p>
+          <p className="font-display mt-1" style={{ color: COLORS.text, fontSize: 32, lineHeight: 1.1 }}>
+            {generalLm.toLocaleString("es-ES")} lm
+          </p>
+        </div>
+        {/* Sin repetir la cifra: ya está arriba en grande. Esta línea dice
+            de dónde sale, no cuánto es. */}
+        <div className="flex items-start gap-3 px-4 py-3" style={{ borderTop: `1px solid ${COLORS.border}` }}>
+          <Lightbulb size={16} color={COLORS.bulb} strokeWidth={1.9} className="shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="font-body t-body" style={{ color: COLORS.text }}>
+              {onlyLights ? "Repartidos entre tus puntos de techo" : `${grid.n} downlights de ${grid.lmPer} lm`}
+            </p>
+            <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
+              {isDining ? "solo por la zona de estar: la mesa tiene su propia luz" : "la luz de fondo, la que enciendes al entrar"}
+            </p>
+          </div>
+        </div>
       </div>
 
-      {isDining && (
-        <div className="flex items-baseline justify-between gap-3 mt-3 px-1">
-          <p className="font-body t-small font-semibold" style={{ color: COLORS.text }}>Total del salón-comedor</p>
-          <p className="font-body t-small font-semibold shrink-0" style={{ color: COLORS.text }}>{total.toLocaleString("es-ES")} lm</p>
-        </div>
-      )}
-
-      <p className="font-body t-caption mt-2.5" style={{ color: COLORS.subtext }}>
-        La luz general no es toda la luz de la estancia. Se dimensionan primero las capas que existen de verdad según lo que has contestado —las lámparas, el acento{isDining ? ", la mesa" : ""}— y la general se queda con el resto. Es lo que permite que el techo vaya despejado{onlyLights ? "" : `: aquí, ${grid.n} downlights en vez de llenarlo de agujeros`}. Dónde colocar cada luminaria lo tienes en las recomendaciones.
-      </p>
-      {drift && (
-        <p className="font-body t-caption mt-2" style={{ color: COLORS.subtext }}>
-          {total > need
-            ? `La suma pasa de los ${need.toLocaleString("es-ES")} lm que pedían las zonas. Ya hemos simplificado lo que se podía simplificar; lo que queda es lo que has pedido, y una lámpara de lectura da ${LIVING_READING_LM} lm tenga tu salón los metros que tenga. Bajarla para cuadrar la cifra sería dejarte sin poder leer. Va regulada: solo estará a plena potencia cuando la uses.`
-            : `La suma se queda algo por debajo de los ${need.toLocaleString("es-ES")} lm de referencia porque las luminarias vienen en escalones de flujo: este es el reparto real más cercano.`}
-        </p>
-      )}
-
-      {estar.simplified.length > 0 && (
+      {extras.length > 0 && (
         <>
-          <p className="font-body t-eyebrow mt-4 mb-2.5" style={{ color: COLORS.accent }}>Capas que hemos simplificado</p>
-          <div className="flex flex-col gap-2.5 rounded-xl p-4" style={{ backgroundColor: COLORS.bgAlt }}>
-            <p className="font-body t-small" style={{ color: COLORS.text }}>
-              Por los metros que tiene la estancia, hemos juntado capas en vez de amontonarlas. Lo que has pedido sigue estando: la luz general{isDining ? ", la mesa" : ""} y, si lees aquí, la lámpara de lectura no se tocan.
-            </p>
-            {estar.simplified.map((c) => (
-              <div key={c.id} className="flex items-start gap-3">
-                <div className="w-1.5 h-1.5 rounded-full mt-2 shrink-0" style={{ backgroundColor: COLORS.accent }} />
-                <p className="font-body t-small" style={{ color: COLORS.subtext }}>{c.text}</p>
-              </div>
-            ))}
+          <p className="font-body t-eyebrow mt-4 mb-1" style={{ color: COLORS.accent }}>Luces complementarias</p>
+          <p className="font-body t-caption mb-2.5" style={{ color: COLORS.subtext }}>
+            Según lo que haces aquí. No se suman a la general: cada una se enciende cuando hace falta.
+          </p>
+          <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
+            {extras.map((e, i) => <LayerRow key={e.id} {...e} first={i === 0} />)}
           </div>
         </>
       )}
