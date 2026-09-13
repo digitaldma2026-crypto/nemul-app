@@ -430,7 +430,15 @@ const ROOM_LUX_BY_LIGHT = {
   kitchen: { bright: 300, moderate: 350, low: 400 },
   kitchenOpen: { bright: 300, moderate: 350, low: 400 },
   bedroom: { bright: 130, moderate: 150, low: 170 },
-  bathroom: { bright: 225, moderate: 250, low: 300 },
+  /* El baño bajó de 225-300 a 180-230 al separar la capa del espejo.
+   *
+   * El número viejo no estaba mal como cifra: un baño refleja mucho —azulejo,
+   * espejo, sanitarios blancos— y 250 lm/m² dan unos 135 lux, dentro de la
+   * banda. Lo que estaba mal es que TODO salía del techo, incluida la luz de
+   * la cara. Y un downlight cenital no ilumina una cara: la ilumina desde
+   * arriba, que es justo lo que la propia lista de errores del baño desaconseja.
+   * Ahora el techo hace de fondo y el espejo tiene sus apliques. */
+  bathroom: { bright: 180, moderate: 200, low: 230 },
   dining: { bright: 175, moderate: 200, low: 225 },
   closet: { bright: 225, moderate: 250, low: 275 },
   terrace: { bright: 80, moderate: 100, low: 120 },
@@ -1845,6 +1853,80 @@ function bedroomLayerTips(layers, grid) {
   return tips;
 }
 
+/* ---------------------------------------------------------------------------
+ * CAPAS DEL BAÑO
+ *
+ * El baño ya preguntaba todo lo necesario y no usaba casi nada: el tipo, lo que
+ * se hace ante el espejo y la luz nocturna no movían ni un lumen —solo
+ * generaban párrafos— y la ducha o bañera solo movía los kelvin. Los 250 lm/m²
+ * se convertían íntegros en downlights.
+ *
+ * Cuatro capas, cada una activada por una respuesta que ya existe. Ninguna se
+ * inventa para completar lúmenes, y ninguna se suma a los lm/m² de la general:
+ * el espejo ilumina un plano vertical, no el suelo.
+ *
+ * El beneficio menos evidente es la temperatura. Antes, elegir bañera bajaba
+ * TODO el baño a 3000 K, espejo incluido, y maquillarse a 3000 K falsea el
+ * tono de piel. Ahora cada capa lleva la suya. */
+const BATHROOM_MIRROR_TEMP_K = 4000;
+const BATHROOM_NIGHT_TEMP_K = 2200;
+const BATHROOM_NIGHT_LM = 60;
+
+/* El flujo del espejo sale de lo que se hace delante de él; el CRI es 90 de
+ * base y sube a 95 para maquillarse, que es el único uso donde el color del
+ * producto sobre la piel tiene que verse tal cual. */
+const BATHROOM_MIRROR_BY_USE = {
+  maquillarme:  { per: 400, cri: 95 },
+  rutinaFacial: { per: 400, cri: 90 },
+  afeitarme:    { per: 350, cri: 90 },
+  basico:       { per: 300, cri: 90 },
+};
+
+/* Zona húmeda. Deliberadamente NO se propone un downlight centrado sobre la
+ * ducha: es lo que la propia lista de errores desaconseja, porque queda en la
+ * vertical del vapor y encima deja la cara a contraluz. Se propone luz
+ * indirecta o desplazada, con su grado de protección.
+ *
+ * Los grados salen de las zonas del baño: dentro del plato o la bañera, IP67;
+ * en su vertical hasta 2,25 m, IP65; en los 60 cm de alrededor, IP44. */
+const BATHROOM_WET_BY_FIXTURE = {
+  ducha: [{
+    id: "ducha", label: "Zona de ducha", lm: 400, ip: "IP65", tempK: 4000, dimmable: false,
+    detail: "tira estanca IP67 en un foseado o en la hornacina de la ducha, o una luminaria IP65 desplazada hacia la entrada. Nunca un foco en la vertical de la cabeza: queda en el camino del vapor y te deja la cara a contraluz",
+  }],
+  banera: [{
+    id: "banera", label: "Zona de bañera", lm: 300, ip: "IP65", tempK: 3000, dimmable: true,
+    detail: "luz indirecta y regulable: un aplique de pared a media altura o una tira oculta en el faldón. Cálida y baja, que es lo que convierte el baño en un rato de relax y no en una revisión médica",
+  }],
+};
+BATHROOM_WET_BY_FIXTURE.ambas = [...BATHROOM_WET_BY_FIXTURE.ducha, ...BATHROOM_WET_BY_FIXTURE.banera];
+
+function bathroomLayers(area, answers = {}, generalTempK = 4000) {
+  const { type, mirrorUse, fixture, nightlight } = answers;
+
+  // ---------- espejo: siempre, hasta en un aseo ----------
+  const m = BATHROOM_MIRROR_BY_USE[mirrorUse] || BATHROOM_MIRROR_BY_USE.basico;
+  const mirror = {
+    pieces: 2, per: m.per, lm: m.per * 2, cri: m.cri, tempK: BATHROOM_MIRROR_TEMP_K,
+    detail: `dos apliques a los lados del espejo, a la altura de los ojos — nunca un único punto encima, que hunde en sombra las cuencas y la nariz`,
+  };
+
+  /* ---------- zona húmeda: solo en baño completo y si hay respuesta ----------
+   * En un aseo la pregunta ni se hace, así que la capa no existe. No se
+   * sustituye por nada: si no hay ducha ni bañera, no hay que iluminar. */
+  const wet = type === "aseo" ? [] : (BATHROOM_WET_BY_FIXTURE[fixture] || []);
+
+  // ---------- nocturna: solo si la ha pedido ----------
+  const night = nightlight === "si"
+    ? {
+        lm: BATHROOM_NIGHT_LM, tempK: BATHROOM_NIGHT_TEMP_K,
+        detail: "a 30-40 cm del suelo, con sensor de presencia y en circuito propio: lo justo para ver el suelo sin despertarte del todo",
+      }
+    : null;
+
+  return { mirror, wet, night, generalTempK };
+}
+
 function generateGenericTechnicalReport(roomId, answers = {}) {
   const cfg = ROOM_TECH_CONFIG[roomId];
   // Las medidas cuando las hay; el tramo, para los planes ya guardados.
@@ -1856,7 +1938,11 @@ function generateGenericTechnicalReport(roomId, answers = {}) {
   // El dormitorio no reparte el total entre downlights: lo reparte entre las
   // capas que el cuestionario dice que existen, y la retícula —cuando la hay—
   // se traza solo con lo que le toca al techo.
+  const tempK = cfg.getTempK(answers);
   const layers = roomId === "bedroom" ? bedroomLayers(area, lumens, answers) : null;
+  // El baño tiene sus propias capas y no comparte la maquinaria del dormitorio:
+  // van en su propio campo para no tocar el reparto de la retícula.
+  const bath = roomId === "bathroom" ? bathroomLayers(area, answers, tempK) : null;
   const grid = cfg.ambient
     ? ambientLayout(area, lumens, cfg.minDownlights)
     : layers
@@ -1869,12 +1955,11 @@ function generateGenericTechnicalReport(roomId, answers = {}) {
         ? openPlanLayout(area, lumens, cfg.minDownlights, cfg.minLmPerPoint, cfg.limits, dm)
         : planLayout(area, lumens, cfg.minDownlights, dm);
 
-  const tempK = cfg.getTempK(answers);
   const tips = getReport(roomId, answers);
   if (layers) tips.push(...bedroomLayerTips(layers, grid));
   if (roomId === "office") tips.push(...officeTaskTips(lux));
   const mistakes = ROOM_TECH_MISTAKES[roomId] || [];
-  return { tempK, lumens, grid, area, lux, tips, mistakes, layers };
+  return { tempK, lumens, grid, area, lux, tips, mistakes, layers, bath };
 }
 
 /* Salón y salón-comedor comparten las mismas preguntas, no el mismo recorrido.
@@ -1985,7 +2070,7 @@ const ROOM_FLOWS = {
       aseo: "Al ser un aseo, con un buen punto sobre el espejo y otro general bastará.",
       completo: "En un baño completo, vamos a diferenciar la luz del espejo, la ducha o bañera, y la general.",
     } },
-    { key: "dims", title: "¿Cuánto mide aproximadamente el baño?", subtitle: "A ojo está bien: no hace falta sacar el metro.", info: "Con el largo y el ancho, Nemul calcula la superficie y también la forma del baño, que es lo que decide cómo se reparten los focos. En un baño suelen recomendarse entre 200 y 300 lm/m².", type: "dims" },
+    { key: "dims", title: "¿Cuánto mide aproximadamente el baño?", subtitle: "A ojo está bien: no hace falta sacar el metro.", info: "Con el largo y el ancho, Nemul calcula la superficie y también la forma del baño, que es lo que decide cómo se reparten los focos. En un baño, la luz general suele moverse entre 180 y 230 lm/m²; el espejo y la zona húmeda se calculan aparte.", type: "dims" },
     { key: "mirrorUse", title: "¿Qué haces habitualmente delante del espejo?", subtitle: "Elige la opción principal.", type: "single", layout: "list", options: BATHROOM_MIRROR_OPTIONS },
     ...(answers.type === "aseo" ? [] : [{ key: "fixture", title: "¿Tienes ducha o bañera?", subtitle: "Cada una pide un tipo de luz distinto.", type: "single", layout: "list", options: BATHROOM_FIXTURE_OPTIONS }]),
     { key: "nightlight", title: "¿Te gustaría una luz nocturna automática?", subtitle: "Para las visitas nocturnas al baño.", type: "single", layout: "list", options: YES_NO_OPTIONS },
@@ -4392,8 +4477,81 @@ function RoomReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
   );
 }
 
+/* El baño, en dos bloques: la general y las capas funcionales. Sin total: el
+ * espejo ilumina una cara y la general un suelo, así que sumarlos no da una
+ * cifra que signifique nada. */
+function BathroomLayerBlock({ bath, area, lux, grid, onlyLights }) {
+  const { mirror, wet, night, generalTempK } = bath;
+  const needLm = Math.round((lux * area) / 100) * 100;
+  const proposalLm = grid.totalLm;
+  const showProposal = !onlyLights && proposalLm !== needLm;
+
+  const rows = [
+    {
+      id: "espejo", Icon: Sparkles, label: `Espejo — ${mirror.pieces} × ${mirror.per} lm`, lm: mirror.lm,
+      hint: `${mirror.detail}. CRI ≥ ${mirror.cri} y ${mirror.tempK} K${generalTempK !== mirror.tempK ? `, aunque la general vaya a ${generalTempK} K: a ${generalTempK} K el tono de piel se falsea` : ""}`,
+    },
+    ...wet.map((w) => ({
+      id: w.id, Icon: Droplets, label: `${w.label} — ${w.lm} lm`, lm: w.lm,
+      hint: `${w.detail}. ${w.ip} en la vertical de la zona e IP44 en los 60 cm de alrededor${w.dimmable ? ", y regulable" : ""}`,
+    })),
+    ...(night ? [{
+      id: "nocturna", Icon: Moon, label: `Luz nocturna — ${night.lm} lm`, lm: night.lm,
+      hint: `${night.detail}. ${night.tempK} K, lo más cálida posible`,
+    }] : []),
+  ];
+
+  return (
+    <div>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Iluminación general</p>
+      <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
+        <div className="px-4 pt-4 pb-3">
+          <p className="font-body t-caption" style={{ color: COLORS.subtext }}>{fmtArea(area)} m² × {lux} lm/m²</p>
+          <p className="font-display mt-1" style={{ color: COLORS.text, fontSize: 32, lineHeight: 1.1 }}>
+            {needLm.toLocaleString("es-ES")} lm
+          </p>
+          <p className="font-body t-caption" style={{ color: COLORS.subtext }}>necesidad calculada</p>
+        </div>
+        <div className="flex items-start gap-3 px-4 py-3" style={{ borderTop: `1px solid ${COLORS.border}` }}>
+          <Lightbulb size={16} color={COLORS.bulb} strokeWidth={1.9} className="shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="font-body t-body" style={{ color: COLORS.text }}>
+              {onlyLights ? "Repartidos entre tus puntos de techo" : `Propuesta: ${grid.n} downlights de ${grid.lmPer} lm`}
+            </p>
+            <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
+              la luz de fondo: moverse y ver el conjunto. La cara no depende de esto
+              {showProposal ? " · los focos vienen en escalones de flujo, así que la propuesta no cae clavada" : ""}
+            </p>
+          </div>
+          {showProposal && (
+            <p className="font-body t-body font-medium shrink-0" style={{ color: COLORS.text }}>{proposalLm.toLocaleString("es-ES")} lm</p>
+          )}
+        </div>
+      </div>
+
+      <p className="font-body t-eyebrow mt-4 mb-1" style={{ color: COLORS.accent }}>Capas funcionales</p>
+      <p className="font-body t-caption mb-2.5" style={{ color: COLORS.subtext }}>
+        No se suman a la general: cada una se enciende cuando hace falta.
+      </p>
+      <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
+        {rows.map((r, i) => (
+          <div key={r.id} className="flex items-start gap-3 px-4 py-3"
+            style={{ borderTop: i === 0 ? "none" : `1px solid ${COLORS.border}` }}>
+            <r.Icon size={16} color={COLORS.bulb} strokeWidth={1.9} className="shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="font-body t-body" style={{ color: COLORS.text }}>{r.label}</p>
+              <p className="font-body t-caption" style={{ color: COLORS.subtext }}>{r.hint}</p>
+            </div>
+            <p className="font-body t-body font-medium shrink-0" style={{ color: COLORS.text }}>{r.lm.toLocaleString("es-ES")} lm</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
-  const { tempK, lumens, grid, area, lux, tips, mistakes, layers } = generateGenericTechnicalReport(room.id, answers);
+  const { tempK, lumens, grid, area, lux, tips, mistakes, layers, bath } = generateGenericTechnicalReport(room.id, answers);
   const { Icon } = room;
   return (
     <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
@@ -4411,6 +4569,8 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameTon
 
           {layers ? (
             <BedroomLayerBlock area={area} lux={lux} layers={layers} grid={grid} />
+          ) : bath ? (
+            <BathroomLayerBlock bath={bath} area={area} lux={lux} grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} />
           ) : (
             <CalculationBlock
               area={area} lux={lux} lumens={lumens} grid={grid}
