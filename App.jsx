@@ -1486,7 +1486,7 @@ const EXTRA_INSIGHT = {
       basico: "Para un uso básico del espejo, con un buen punto de luz a cada lado es más que suficiente.",
     },
     fixture: {
-      ducha: "Con ducha, usa una luz resistente a la humedad y bien centrada, sin dejar las esquinas en sombra.",
+      ducha: "Con ducha, usa una luz resistente a la humedad y desplazada hacia la entrada o indirecta, no en la vertical de la cabeza: ahí queda en el camino del vapor y te deja la cara a contraluz.",
       banera: "Con bañera, una luz regulable y cálida cerca convierte el baño en un momento de relax, no solo de higiene.",
       ambas: "Al tener ducha y bañera, diferencia la luz de cada zona: más funcional en la ducha, más cálida y regulable junto a la bañera.",
     },
@@ -1646,7 +1646,16 @@ const ROOM_TECH_CONFIG = {
     areaMap: BATHROOM_AREA_BY_SIZE,
     defaultArea: 6,
     minDownlights: 2,
-    getTempK: (a) => (a.fixture === "banera" || a.problem === "spa" || a.problem === "cold" ? 3000 : 4000),
+    /* 3000 K siempre. Antes salía a 4000 K salvo con bañera, spa o "la luz es
+     * demasiado fría", que es tanto como decir que el baño por defecto es un
+     * quirófano y que hay que pedir que no lo sea.
+     *
+     * Un baño doméstico no es un espacio de trabajo: es donde te despiertas y
+     * donde te acuestas. Los 4000 K se colaron por confundir "ver bien la cara"
+     * con "enfriar toda la estancia", y ver bien la cara es un problema de
+     * CRI y de dónde pones la luz, no de kelvin. Eso lo resuelve el espejo,
+     * que tiene los suyos. */
+    getTempK: () => 3000,
   },
   dining: {
     areaMap: DINING_AREA_BY_SIZE,
@@ -1868,7 +1877,6 @@ function bedroomLayerTips(layers, grid) {
  * El beneficio menos evidente es la temperatura. Antes, elegir bañera bajaba
  * TODO el baño a 3000 K, espejo incluido, y maquillarse a 3000 K falsea el
  * tono de piel. Ahora cada capa lleva la suya. */
-const BATHROOM_MIRROR_TEMP_K = 4000;
 const BATHROOM_NIGHT_TEMP_K = 2200;
 const BATHROOM_NIGHT_LM = 60;
 
@@ -1876,10 +1884,13 @@ const BATHROOM_NIGHT_LM = 60;
  * base y sube a 95 para maquillarse, que es el único uso donde el color del
  * producto sobre la piel tiene que verse tal cual. */
 const BATHROOM_MIRROR_BY_USE = {
-  maquillarme:  { per: 400, cri: 95 },
-  rutinaFacial: { per: 400, cri: 90 },
-  afeitarme:    { per: 350, cri: 90 },
-  basico:       { per: 300, cri: 90 },
+  // 3500 K donde hay que juzgar color sobre la piel; 3000 K donde lo que pesa
+  // es la uniformidad. Ninguno llega a 4000: a esa temperatura la piel se ve
+  // más apagada de lo que es y el maquillaje se corrige de más.
+  maquillarme:  { per: 400, cri: 95, tempK: 3500 },
+  rutinaFacial: { per: 400, cri: 90, tempK: 3500 },
+  afeitarme:    { per: 350, cri: 90, tempK: 3000 },
+  basico:       { per: 300, cri: 90, tempK: 3000 },
 };
 
 /* Zona húmeda. Deliberadamente NO se propone un downlight centrado sobre la
@@ -1891,11 +1902,11 @@ const BATHROOM_MIRROR_BY_USE = {
  * en su vertical hasta 2,25 m, IP65; en los 60 cm de alrededor, IP44. */
 const BATHROOM_WET_BY_FIXTURE = {
   ducha: [{
-    id: "ducha", label: "Zona de ducha", lm: 400, ip: "IP65", tempK: 4000, dimmable: false,
+    id: "ducha", label: "Zona de ducha", lm: 400, ip: "IP65", tempText: "3000 K", dimmable: false,
     detail: "tira estanca IP67 en un foseado o en la hornacina de la ducha, o una luminaria IP65 desplazada hacia la entrada. Nunca un foco en la vertical de la cabeza: queda en el camino del vapor y te deja la cara a contraluz",
   }],
   banera: [{
-    id: "banera", label: "Zona de bañera", lm: 300, ip: "IP65", tempK: 3000, dimmable: true,
+    id: "banera", label: "Zona de bañera", lm: 300, ip: "IP65", tempText: "2700–3000 K", dimmable: true,
     detail: "luz indirecta y regulable: un aplique de pared a media altura o una tira oculta en el faldón. Cálida y baja, que es lo que convierte el baño en un rato de relax y no en una revisión médica",
   }],
 };
@@ -1907,7 +1918,7 @@ function bathroomLayers(area, answers = {}, generalTempK = 4000) {
   // ---------- espejo: siempre, hasta en un aseo ----------
   const m = BATHROOM_MIRROR_BY_USE[mirrorUse] || BATHROOM_MIRROR_BY_USE.basico;
   const mirror = {
-    pieces: 2, per: m.per, lm: m.per * 2, cri: m.cri, tempK: BATHROOM_MIRROR_TEMP_K,
+    pieces: 2, per: m.per, lm: m.per * 2, cri: m.cri, tempK: m.tempK,
     detail: `dos apliques a los lados del espejo, a la altura de los ojos — nunca un único punto encima, que hunde en sombra las cuencas y la nariz`,
   };
 
@@ -4489,11 +4500,11 @@ function BathroomLayerBlock({ bath, area, lux, grid, onlyLights }) {
   const rows = [
     {
       id: "espejo", Icon: Sparkles, label: `Espejo — ${mirror.pieces} × ${mirror.per} lm`, lm: mirror.lm,
-      hint: `${mirror.detail}. CRI ≥ ${mirror.cri} y ${mirror.tempK} K${generalTempK !== mirror.tempK ? `, aunque la general vaya a ${generalTempK} K: a ${generalTempK} K el tono de piel se falsea` : ""}`,
+      hint: `${mirror.detail}. CRI ≥ ${mirror.cri} y ${mirror.tempK} K${mirror.tempK !== generalTempK ? `, un punto más neutra que la general de ${generalTempK} K para juzgar bien el color sobre la piel` : ""}`,
     },
     ...wet.map((w) => ({
       id: w.id, Icon: Droplets, label: `${w.label} — ${w.lm} lm`, lm: w.lm,
-      hint: `${w.detail}. ${w.ip} en la vertical de la zona e IP44 en los 60 cm de alrededor${w.dimmable ? ", y regulable" : ""}`,
+      hint: `${w.detail}. ${w.tempText}, ${w.ip} en la vertical de la zona e IP44 en los 60 cm de alrededor${w.dimmable ? ", y regulable" : ""}`,
     })),
     ...(night ? [{
       id: "nocturna", Icon: Moon, label: `Luz nocturna — ${night.lm} lm`, lm: night.lm,
