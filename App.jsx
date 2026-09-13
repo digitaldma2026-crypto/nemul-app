@@ -129,8 +129,13 @@ const FONT_STYLE = `
 `;
 
 const ROOMS = [
-  { id: "living", label: "Salón", Icon: Sofa },
-  { id: "livingDining", label: "Salón-Comedor abierto", Icon: Sofa },
+  { id: "living", label: "Salón / Salón-comedor", Icon: Sofa },
+  /* El salón-comedor deja de ser una habitación aparte: ahora lo identifica
+   * la opción "Tengo zona de comedor" dentro del cuestionario del salón. Se
+   * queda aquí, oculto del selector, porque los planes que ya estén guardados
+   * lo tienen apuntado y loadSavedPlans() descarta con .filter(Boolean) todo
+   * id que no encuentre: quitarlo del todo les borraría la habitación. */
+  { id: "livingDining", label: "Salón-Comedor abierto", Icon: Sofa, hidden: true },
   { id: "kitchen", label: "Cocina", Icon: ChefHat },
   { id: "kitchenOpen", label: "Cocina abierta al salón", Icon: ChefHat },
   { id: "bedroom", label: "Dormitorio", Icon: BedDouble },
@@ -265,7 +270,11 @@ const STYLE_OPTIONS = [
   { id: "luminoso", label: "Muy luminoso", hint: "Luz blanca y clara, como de pleno día", Icon: Sun },
 ];
 
-const TEMP_BY_STYLE = { acogedor: 2700, equilibrado: 3000, luminoso: 4000 };
+/* TEMP_BY_STYLE se retiró con la pregunta de objetivos del salón: era la
+ * tabla que convertía "acogedor/equilibrado/luminoso" en kelvin, y el salón
+ * era su único cliente. STYLE_OPTIONS sigue vivo porque la cocina abierta lo
+ * usa para preguntar por el ambiente del salón contiguo, pero eso solo
+ * produce consejos, no temperatura. */
 // La bombilla de toda la vida, que sirve para explicar qué es un lumen. No es
 // la luminaria del proyecto: esa la decide la retícula (ver planLayout).
 const REFERENCE_BULB_LM = 800;
@@ -425,13 +434,18 @@ function getLux(roomId, light) {
 }
 
 // ---------- Salón ----------
+/* Antes la pregunta era "¿Cómo utilizas principalmente el salón?" con seis
+ * opciones, y al lado había otras dos preguntas —objetivos y problema— que
+ * pedían lo mismo por otro camino. Ahora se pregunta una sola vez y en el
+ * idioma de quien contesta: cómo vive el salón, no qué luminaria quiere.
+ *
+ * "Tengo zona de comedor" es además lo que identifica un salón-comedor: por
+ * eso ya no hay dos habitaciones distintas en la lista. */
 const LIVING_ACTIVITY_OPTIONS = [
-  { id: "tv", label: "Ver la televisión", Icon: Tv },
-  { id: "read", label: "Leer", Icon: BookOpen },
-  { id: "guests", label: "Recibir visitas", Icon: Users },
-  { id: "dine", label: "Comer", Icon: UtensilsCrossed },
-  { id: "laptop", label: "Trabajar con el portátil", Icon: Laptop },
-  { id: "relax", label: "Relajarte", Icon: Moon },
+  { id: "dining", label: "Tengo zona de comedor", Icon: UtensilsCrossed },
+  { id: "tv", label: "Tengo zona de televisión", Icon: Tv },
+  { id: "read", label: "Me gusta leer en el salón", Icon: BookOpen },
+  { id: "relax", label: "Principalmente para descansar", Icon: Sofa },
 ];
 
 const SALON_SIZE_OPTIONS = [
@@ -442,45 +456,23 @@ const SALON_SIZE_OPTIONS = [
 ];
 const SALON_AREA_BY_SIZE = Object.fromEntries(SALON_SIZE_OPTIONS.map((o) => [o.id, o.area]));
 
-const LIVING_GOAL_OPTIONS = [
-  { id: "cozy", label: "Crear un ambiente acogedor", Icon: Moon },
-  { id: "reading", label: "Tener buena luz para leer", Icon: BookOpen },
-  { id: "decor", label: "Resaltar la decoración", Icon: Sparkles },
-  { id: "tvFurniture", label: "Iluminar el mueble de TV", Icon: Zap },
-  { id: "scenes", label: "Crear distintas escenas de luz", Icon: Lightbulb },
-];
-
-const LIVING_PROBLEM_OPTIONS = [
-  { id: "dark", label: "El salón se ve oscuro" },
-  { id: "glare", label: "Hay reflejos en la televisión" },
-  { id: "reading", label: "Me falta luz para leer" },
-  { id: "cozy", label: "Quiero un ambiente más acogedor" },
-  { id: "renovating", label: "Estoy reformando desde cero", Icon: Hammer },
-];
-
-function inferLivingStyle(activities = [], goals = [], problem) {
-  let style = "equilibrado";
-  if (activities.includes("laptop")) style = "luminoso";
-  else if (activities.includes("relax")) style = "acogedor";
-  if (goals.includes("cozy")) style = "acogedor";
-  if (problem === "cozy") style = "acogedor";
-  // "El salón se ve oscuro" ya no enfría la luz. Es una queja de cantidad de
-  // luz, no de color: se responde con lúmenes, no con kelvin. Antes esta línea
-  // pisaba el objetivo de quien había pedido un ambiente acogedor y le
-  // devolvía 4000 K, mientras el propio informe decía debajo que en un salón
-  // se busca luz cálida. El dormitorio ya lo trataba así (PROBLEM_INSIGHT.
-  // bedroom.dark: refuerza la luz "sin perder la calidez"); el salón era la
-  // excepción. La respuesta a "está oscuro" sigue estando, en el consejo de
-  // subir los lúmenes generales y reforzar las esquinas.
-  return style;
-}
+/* El salón ya no deduce su temperatura de las respuestas.
+ *
+ * Antes la sacaba de tres preguntas —actividades, objetivos y problema— que
+ * se pisaban entre sí: "Trabajar con el portátil" lo llevaba a 4000 K y
+ * "Relajarte" a 2700, así que el tono de toda la estancia dependía de cuál
+ * marcases primero. Y 4000 K en un salón casi nunca es la respuesta.
+ *
+ * Ahora la recomendación general es 3000 K siempre, y la calidez de 2700 se
+ * reserva para las capas de ambiente cuando lleguen: así se puede tener un
+ * rincón cálido sin enfriar ni calentar la habitación entera. */
+const LIVING_TEMP_K = 3000;
 
 function generateLivingReport(answers = {}) {
-  const { activities = [], size, light, ceiling, goals = [], problem, renovationStatus, diningShape } = answers;
+  const { activities = [], size, light, ceiling, renovationStatus, diningShape } = answers;
 
   const area = SALON_AREA_BY_SIZE[size] || 20;
-  const style = inferLivingStyle(activities, goals, problem);
-  const tempK = TEMP_BY_STYLE[style];
+  const tempK = LIVING_TEMP_K;
   const lux = getLux("living", light);
   const lumens = Math.round((lux * area) / 100) * 100;
   // Un salón se reparte con el criterio abierto: aquí un techo despejado vale
@@ -497,19 +489,19 @@ function generateLivingReport(answers = {}) {
   tips.push("Evita colocar focos justo encima del sofá o de donde os sentéis: desde ahí el foco queda en el campo de visión y deslumbra.");
   tips.push("Al ser una zona de relax, prioriza lámparas de pared, de pie o de sobremesa sobre la luz general de techo; mejor varios puntos suaves repartidos que pocos focos potentes.");
 
-  if (activities.includes("read") || goals.includes("reading") || problem === "reading") tips.push("Añade una lámpara de pie regulable junto al sofá, pensada para leer sin depender de la luz general.");
-  if (goals.includes("tvFurniture")) tips.push("Una tira LED en el mueble de televisión aportará profundidad y hará el ambiente más acogedor.");
-  if (goals.includes("decor")) tips.push("Si tienes cuadros u objetos decorativos, utiliza luz de acento para resaltarlos.");
-  if (goals.includes("scenes")) tips.push("Instala un sistema regulable o varios circuitos para pasar de un ambiente luminoso de día a uno más íntimo por la noche.");
-  if (activities.includes("tv") || problem === "glare") tips.push("Dirige la luz general lejos de la pantalla del televisor para evitar reflejos molestos.");
-  if (activities.includes("guests")) tips.push("Instala reguladores (dimmers) para pasar de un ambiente luminoso a uno más íntimo según la ocasión.");
-  if (activities.includes("dine")) tips.push("Si comes en el salón, añade un punto de luz más cálido sobre esa zona para diferenciarla del área de estar.");
-  if (activities.includes("laptop")) tips.push("Añade una luz blanca y neutra dirigida a la zona de trabajo, distinta de la calidez general.");
-  if (activities.includes("relax") || goals.includes("cozy") || problem === "cozy") tips.push("Prioriza tonos cálidos y añade la posibilidad de atenuar la luz para las noches de relax.");
+  // Los consejos que dependían de "objetivos" y "problema" se reconducen a
+  // las cuatro formas de usar el salón, que es lo único que se pregunta ya.
+  // Los que no tienen equivalente —resaltar decoración, escenas de luz— se
+  // retiran: volverán cuando Nemul los deduzca en la fase de capas, no como
+  // respuesta a una pregunta.
+  if (activities.includes("read")) tips.push("Añade una lámpara de pie regulable junto al sofá, pensada para leer sin depender de la luz general.");
+  if (activities.includes("tv")) tips.push("Dirige la luz general lejos de la pantalla del televisor para evitar reflejos molestos.");
+  if (activities.includes("tv")) tips.push("Una tira LED en el mueble de televisión aportará profundidad y hará el ambiente más acogedor.");
+  if (activities.includes("relax")) tips.push("Prioriza tonos cálidos y añade la posibilidad de atenuar la luz para las noches de relax: un regulador es lo que permite pasar de un salón luminoso a uno de sobremesa.");
 
-  // Comedor integrado (Salón-Comedor abierto): reutiliza el mismo criterio que en un comedor independiente.
+  // Zona de comedor dentro del salón: mismo criterio que en un comedor aparte.
   if (EXTRA_INSIGHT.dining?.shape?.[diningShape]) tips.push(EXTRA_INSIGHT.dining.shape[diningShape]);
-  if (diningShape) {
+  if (activities.includes("dining")) {
     // El número de comensales y el "¿quieres colgante?" eran dos preguntas
     // para dos consejos sueltos. El primero ya se deduce del tamaño y la
     // forma de la mesa; el segundo se recomienda de oficio, porque en un
@@ -525,9 +517,9 @@ function generateLivingReport(answers = {}) {
 
   if (light === "bright") tips.push("Como el salón recibe mucha luz natural de día, reserva la calidez de la luz artificial sobre todo para la noche.");
   if (light === "moderate") tips.push("Con una entrada de luz natural media, la zona del salón más alejada de la ventana puede recibir menos iluminación durante buena parte del día. Refuerza esa zona con luz artificial en lugar de aumentar la intensidad general de toda la estancia.");
-  if (light === "low" || problem === "dark") tips.push("Como el salón necesita más luz, sube ligeramente los lúmenes generales calculados y refuerza también las esquinas.");
+  if (light === "low") tips.push("Como el salón necesita más luz, sube ligeramente los lúmenes generales calculados y refuerza también las esquinas.");
 
-  if (renovationStatus === "renovation" || problem === "renovating") tips.push("Como vas a reformar desde cero, aprovecha para dejar previstos varios circuitos independientes y reguladores de intensidad.");
+  if (renovationStatus === "renovation") tips.push("Como vas a reformar desde cero, aprovecha para dejar previstos varios circuitos independientes y reguladores de intensidad.");
   if (renovationStatus === "onlyLights") tips.push("Como solo vas a cambiar las luminarias, prioriza soluciones que aprovechen los puntos de luz ya existentes, como sustituir un plafón por un foco orientable en el mismo lugar.");
 
   // Los errores se redactan siempre igual: qué evitar y por qué. Antes eran
@@ -538,7 +530,7 @@ function generateLivingReport(answers = {}) {
     "Evita mezclar temperaturas de color muy diferentes en la misma estancia, ya que el contraste hace que el conjunto se perciba desordenado.",
     "Evita colocar todos los focos pegados a las paredes, ya que iluminan más el muro que la zona donde realmente se hace vida.",
   ];
-  if (activities.includes("tv") || problem === "glare") mistakes.push("Evita dirigir la luz directamente hacia la pantalla del televisor, ya que produce reflejos que obligan a forzar la vista.");
+  if (activities.includes("tv")) mistakes.push("Evita dirigir la luz directamente hacia la pantalla del televisor, ya que produce reflejos que obligan a forzar la vista.");
   if (ceiling === "vigas") mistakes.push("No es recomendable empotrar focos en las vigas de madera sin consultarlo antes con un instalador, ya que son elementos estructurales y no siempre admiten perforaciones.");
 
   return { tempK, lumens, grid, area, lux, tips: [...new Set(tips)], mistakes: [...new Set(mistakes)] };
@@ -777,6 +769,24 @@ const BEDROOM_ACTIVITY_OPTIONS = [
  * puede diseñar puntos nuevos. La clave sigue siendo `renovationStatus`, la
  * misma que el resto de la casa, para no duplicar la lógica de los consejos.
  * Lo que cambia son los textos, que aquí hablan del dormitorio. */
+const LIVING_PROJECT_OPTIONS = [
+  { id: "onlyLights", label: "Solo mejorar o cambiar la iluminación", Icon: Lightbulb },
+  { id: "renovation", label: "Estoy reformando el salón", Icon: Hammer },
+];
+
+// Igual que en el dormitorio: sin "con vigas", que se resuelve como un techo
+// liso y solo añadía una opción más que decidir.
+const LIVING_CEILING_OPTIONS = [
+  { id: "liso", label: "Techo liso" },
+  { id: "pladur", label: "Falso techo / pladur" },
+  { id: "noSe", label: "No lo sé" },
+];
+
+const LIVING_CEILING_POINTS_OPTIONS = [
+  { id: "uno", label: "Uno" },
+  { id: "varios", label: "Varios" },
+];
+
 const BEDROOM_PROJECT_OPTIONS = [
   { id: "onlyLights", label: "Solo mejorar o cambiar la iluminación", Icon: Lightbulb },
   { id: "renovation", label: "Estoy reformando el dormitorio", Icon: Hammer },
@@ -940,13 +950,6 @@ function activityStep(roomId, subtitle) {
 // "problema a resolver" en cada habitación — el mismo guiño de razonamiento
 // que ya se probó y validó en Cocina.
 const PROBLEM_REACTIONS = {
-  living: {
-    dark: "Entendido, vamos a reforzar la luz general y las esquinas.",
-    glare: "Vamos a alejar la luz de la línea de visión hacia la televisión.",
-    reading: "Anotado: un buen rincón de lectura va a ser prioridad.",
-    cozy: "Vamos a priorizar tonos cálidos y luz regulable.",
-    renovating: "Con reforma desde cero, podemos dejar varios circuitos independientes preparados.",
-  },
   bathroom: {
     shadows: "Vamos a iluminar el espejo desde ambos lados, no solo desde arriba.",
     cold: "Bajaremos el tono general hacia un blanco más cálido.",
@@ -1461,34 +1464,39 @@ function generateGenericTechnicalReport(roomId, answers = {}) {
 }
 
 const ROOM_FLOWS = {
-  living: [
-    { key: "activities", title: "¿Cómo utilizas principalmente el salón?", subtitle: "Puedes elegir varias opciones.", type: "multi", layout: "list", options: LIVING_ACTIVITY_OPTIONS },
-    { key: "size", title: "¿Cuántos metros cuadrados tiene el salón?", subtitle: "Un cálculo aproximado está bien.", info: "En un salón suelen recomendarse entre 150 y 225 lm/m² según el ambiente que busques. Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: SALON_SIZE_OPTIONS },
-    { key: "light", title: "¿Cuánta luz natural recibe?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
-    { key: "ceiling", title: "¿Qué tipo de techo tienes?", subtitle: "Esto determina qué soluciones de instalación son posibles.", type: "single", layout: "list", options: CEILING_OPTIONS, reactions: {
-      liso: "Un techo liso no tiene cámara para empotrar focos: sin reforma iremos a soluciones de superficie; con reforma, se puede crear un falso techo.",
-      pladur: "Con falso techo de pladur, podemos integrar tiras LED perimetrales sin ninguna obra extra.",
-      vigas: "Con vigas vistas, vamos a evitar empotrar nada en la madera y usar soluciones de superficie.",
-      noSe: "Sin problema, lo confirmamos con un instalador antes de decidir si se puede empotrar algo.",
+  /* Un solo recorrido para salón y salón-comedor: lo que antes eran dos
+   * habitaciones distintas ahora lo distingue la opción "Tengo zona de
+   * comedor", que además activa la pregunta de la forma de la mesa. */
+  living: (answers = {}) => [
+    { key: "renovationStatus", title: "¿Qué quieres hacer?", subtitle: "Esto decide si nos adaptamos a lo que ya hay o podemos diseñar de cero.", type: "single", layout: "list", options: LIVING_PROJECT_OPTIONS, reactions: {
+      onlyLights: "Perfecto: respetaremos los puntos de luz que ya tienes y completaremos con luminarias que no necesiten obra.",
+      renovation: "Entonces podemos diseñar la distribución desde cero, sin depender de dónde estén los puntos actuales.",
     } },
-    { key: "goals", title: "¿Qué te gustaría conseguir con la iluminación?", subtitle: "Puedes elegir varias opciones.", type: "multi", layout: "list", options: LIVING_GOAL_OPTIONS },
-    { key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: LIVING_PROBLEM_OPTIONS, reactions: PROBLEM_REACTIONS.living },
-    renovationStep,
+    { key: "size", title: "¿Cuántos metros cuadrados tiene aproximadamente tu salón?", subtitle: "Un cálculo aproximado está bien.", info: "En un salón suelen recomendarse entre 150 y 200 lm/m² según la luz natural que entre. Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: SALON_SIZE_OPTIONS },
+    { key: "light", title: "¿Cuánta luz natural entra?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
+    { key: "ceiling", title: "¿Qué tipo de techo tienes?", subtitle: "Esto determina qué soluciones de instalación son posibles.", type: "single", layout: "list", options: LIVING_CEILING_OPTIONS },
+    // Con reforma no hay instalación que respetar, así que no se pregunta.
+    ...(answers.renovationStatus === "renovation" ? [] : [
+      { key: "ceilingPoints", title: "¿Cuántos puntos de luz tienes actualmente en el techo?", subtitle: "Nos adaptaremos a los que ya existen.", type: "single", layout: "list", options: LIVING_CEILING_POINTS_OPTIONS, reactions: {
+        uno: "Con un solo punto, esa luminaria dará la luz general y el resto lo repartiremos en otras capas.",
+        varios: "Con varios puntos, te diremos cuánta luz debe salir del techo en conjunto y la repartes entre los que tienes.",
+      } },
+    ]),
+    { key: "activities", title: "¿Cómo usas tu salón?", subtitle: "Puedes elegir varias opciones.", type: "multi", layout: "list", options: LIVING_ACTIVITY_OPTIONS },
+    // La forma de la mesa sí cambia la propuesta: redonda pide un punto
+    // centrado y rectangular dos o tres en línea. Por eso sobrevive, y solo
+    // se pregunta a quien ha dicho que tiene comedor.
+    ...((answers.activities || []).includes("dining") ? [
+      { key: "diningShape", title: "¿La mesa del comedor es redonda, rectangular o cuadrada?", subtitle: "La forma cambia cómo repartimos la luz sobre ella.", type: "single", layout: "list", options: DINING_SHAPE_OPTIONS, reactions: {
+        redonda: "Con mesa redonda, un único punto centrado suele ser suficiente y queda muy equilibrado.",
+        rectangular: "Con mesa rectangular, dos o tres puntos en línea reparten mejor la luz.",
+        cuadrada: "Con mesa cuadrada, un colgante centrado o de varias luces cubre bien toda la superficie.",
+      } },
+    ] : []),
   ],
-  livingDining: [
-    { key: "activities", title: "¿Cómo utilizas principalmente el espacio?", subtitle: "Puedes elegir varias opciones.", type: "multi", layout: "list", options: LIVING_ACTIVITY_OPTIONS },
-    { key: "diningShape", title: "¿La mesa del comedor es redonda, rectangular o cuadrada?", subtitle: "La forma cambia cómo repartimos la luz sobre ella.", type: "single", layout: "list", options: DINING_SHAPE_OPTIONS, reactions: {
-      redonda: "Con mesa redonda, un único punto centrado suele ser suficiente y queda muy equilibrado.",
-      rectangular: "Con mesa rectangular, dos o tres puntos en línea reparten mejor la luz.",
-      cuadrada: "Con mesa cuadrada, un colgante centrado o de varias luces cubre bien toda la superficie.",
-    } },
-    { key: "size", title: "¿Cuántos metros cuadrados tiene el salón-comedor en total?", subtitle: "Un cálculo aproximado está bien.", info: "Al ser un espacio abierto, se calcula como una sola superficie. Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: SALON_SIZE_OPTIONS },
-    { key: "light", title: "¿Cuánta luz natural recibe?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
-    { key: "ceiling", title: "¿Qué tipo de techo tienes?", subtitle: "Esto determina qué soluciones de instalación son posibles.", type: "single", layout: "list", options: CEILING_OPTIONS },
-    { key: "goals", title: "¿Qué te gustaría conseguir con la iluminación?", subtitle: "Puedes elegir varias opciones.", type: "multi", layout: "list", options: LIVING_GOAL_OPTIONS },
-    { key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: LIVING_PROBLEM_OPTIONS, reactions: PROBLEM_REACTIONS.living },
-    renovationStep,
-  ],
+  // Los planes guardados como "Salón-Comedor abierto" siguen abriéndose con
+  // el mismo recorrido; ya no se puede elegir esa habitación de nuevo.
+  livingDining: (answers = {}) => getFlowForRoom("living", answers),
   kitchen: [
     {
       key: "layout", title: "¿Qué distribución tiene tu cocina?", subtitle: "Elige la forma que más se parece a la tuya.", type: "single", layout: "grid", options: KITCHEN_LAYOUT_OPTIONS,
@@ -1901,7 +1909,7 @@ function RoomsScreen({ selected, toggle, onContinue, onBack, freeRoomId }) {
       </div>
       <div className="flex-1 overflow-y-auto px-6">
         <div className="grid grid-cols-2 gap-3 pb-3">
-          {ROOMS.map(({ id, label, Icon }, i) => {
+          {ROOMS.filter((r) => !r.hidden).map(({ id, label, Icon }, i) => {
             const isSelected = selected.includes(id);
             const isLocked = freeRoomId && freeRoomId !== id;
             return (
@@ -4097,21 +4105,20 @@ function ResultScreen({ rooms, answersByRoom, onRestart, onSave, saved }) {
  */
 const SAMPLE_ROOM = ROOMS.find((r) => r.id === "living");
 const SAMPLE_ANSWERS = {
-  activities: ["tv", "read", "guests"],
+  renovationStatus: "onlyLights",
   size: "medium",
   light: "moderate",
   ceiling: "pladur",
-  goals: ["cozy", "reading"],
-  problem: "dark",
-  renovationStatus: "onlyLights",
+  ceilingPoints: "varios",
+  activities: ["tv", "read", "relax"],
 };
 const SAMPLE_ANSWER_SUMMARY = [
+  "Solo se van a cambiar las luminarias",
   "Salón de unos 20 m²",
-  "Se usa para ver la tele, leer y recibir visitas",
   "Luz natural media",
   "Falso techo de pladur",
-  "Se ve oscuro",
-  "Solo se van a cambiar las luminarias",
+  "Varios puntos de luz en el techo",
+  "Se usa para ver la tele, leer y descansar",
 ];
 
 function SampleReportScreen({ onBack, onStart }) {
