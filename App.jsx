@@ -3600,100 +3600,56 @@ function LivingLayerBlock({ layers }) {
   );
 }
 
-/* El alzado de la mesa. Es el único dibujo del informe que se mira de lado, y
- * está aquí por una medida concreta: la altura del colgante.
- *
- * Se acota DESDE EL TABLERO. Desde el suelo habría que saber lo que mide la
- * mesa y restar, y eso convierte una comprobación de treinta segundos con un
- * metro en una cuenta. Y hasta la parte inferior de la luminaria, que es el
- * borde que aparece en el campo de visión de quien se sienta enfrente. */
-function DiningPendantElevation({ dining }) {
-  const W = 300, H = 150;
-  const TABLE_Y = 118, TABLE_X0 = 52, TABLE_X1 = 268;
-  const LAMP_Y = 46;
-  const n = dining.pieces;
-  const xs = Array.from({ length: n }, (_, i) => TABLE_X0 + ((TABLE_X1 - TABLE_X0) * (2 * i + 1)) / (2 * n));
-
-  return (
-    <div data-pdf-keep>
-      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>A qué altura va el colgante</p>
-      <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
-        <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" role="img"
-          aria-label={`Alzado orientativo: ${n === 1 ? "el colgante" : `los ${n} colgantes`} a ${PENDANT_H_TEXT} sobre el tablero de la mesa, medidos hasta la parte inferior de la luminaria`}
-          style={{ display: "block", width: "100%", height: "auto" }}>
-          {/* techo */}
-          <line x1="20" y1="14" x2={W - 20} y2="14" stroke={COLORS.text} strokeWidth="2" />
-          {xs.map((x, i) => (
-            <g key={i}>
-              <line x1={x} y1="14" x2={x} y2={LAMP_Y - 10} stroke={COLORS.subtext} strokeWidth="1.2" />
-              <path d={`M${x - 17},${LAMP_Y} L${x},${LAMP_Y - 14} L${x + 17},${LAMP_Y} Z`} fill={COLORS.bulb} stroke={COLORS.text} strokeWidth="1.5" strokeLinejoin="round" />
-              <path d={`M${x - 17},${LAMP_Y} L${x - 34},${TABLE_Y} L${x + 34},${TABLE_Y} L${x + 17},${LAMP_Y} Z`} fill={COLORS.bulb} opacity="0.16" />
-            </g>
-          ))}
-
-          {/* mesa: tablero y patas */}
-          <rect x={TABLE_X0} y={TABLE_Y} width={TABLE_X1 - TABLE_X0} height="7" rx="2" fill={COLORS.bgAlt} stroke={COLORS.text} strokeWidth="1.6" />
-          <line x1={TABLE_X0 + 16} y1={TABLE_Y + 7} x2={TABLE_X0 + 16} y2={H - 8} stroke={COLORS.text} strokeWidth="1.6" />
-          <line x1={TABLE_X1 - 16} y1={TABLE_Y + 7} x2={TABLE_X1 - 16} y2={H - 8} stroke={COLORS.text} strokeWidth="1.6" />
-
-          {/* la cota: del tablero a la parte inferior de la luminaria */}
-          <g stroke={COLORS.text} strokeWidth="1.2" fill="none">
-            <line x1="30" y1={LAMP_Y} x2="30" y2={TABLE_Y} />
-            <line x1="24" y1={LAMP_Y} x2="36" y2={LAMP_Y} />
-            <line x1="24" y1={TABLE_Y} x2="36" y2={TABLE_Y} />
-          </g>
-          {/* guías finas hasta los dos extremos que se están midiendo */}
-          <g stroke={COLORS.subtext} strokeWidth="0.9" strokeDasharray="3 3">
-            <line x1="30" y1={LAMP_Y} x2={xs[0] - 17} y2={LAMP_Y} />
-            <line x1="30" y1={TABLE_Y} x2={TABLE_X0} y2={TABLE_Y} />
-          </g>
-          <g transform={`rotate(-90 44 ${(LAMP_Y + TABLE_Y) / 2})`}>
-            <rect x="14" y={(LAMP_Y + TABLE_Y) / 2 - 8} width="60" height="16" rx="8" fill={COLORS.text} />
-            <text x="44" y={(LAMP_Y + TABLE_Y) / 2 + 4} textAnchor="middle" fontFamily="Montserrat, sans-serif" fontSize="10" fontWeight="600" fill="#FFF7E8">
-              {PENDANT_H_TEXT}
-            </text>
-          </g>
-
-          <text x={(TABLE_X0 + TABLE_X1) / 2} y={H - 1} textAnchor="middle" fontFamily="Montserrat, sans-serif" fontSize="9.5" fill={COLORS.subtext}>
-            el tablero de tu mesa
-          </text>
-        </svg>
-        <p className="font-body t-body mt-3" style={{ color: COLORS.text }}>
-          <span className="font-medium">{PENDANT_H_TEXT} sobre el tablero</span>, medidos desde la superficie de la mesa hasta la parte inferior de la luminaria. No lo midas desde el suelo: cada mesa tiene una altura distinta y lo que importa es el hueco que queda libre por encima de los platos.
-        </p>
-      </div>
-    </div>
-  );
-}
-
 /* El plano de dos zonas.
  *
- * Lo que hace distinto a este plano del de cualquier otra estancia: la
- * retícula se dibuja SOLO dentro de la zona de estar, y alrededor de la mesa
- * hay una corona en la que no entra ningún foco general. Esa corona no es
- * decoración del dibujo, es la regla: si la mesa ya tiene su colgante, un
- * downlight encima le añade una segunda sombra y le quita el papel de zona.
+ * Su trabajo es que se entienda de un vistazo cómo se reparten las capas
+ * entre el salón y el comedor. No es un plano de obra: por eso aquí no hay
+ * ni una cota. Las distancias, la altura del colgante y los lúmenes de cada
+ * pieza están en el reparto y en las recomendaciones; repetirlos dentro del
+ * dibujo lo convertía en un plano técnico que nadie mira de un vistazo.
  *
- * Todo lo que aquí es geometría —el rectángulo, el corte entre zonas, el
- * tamaño de la mesa— es estimación. Se dice debajo, con esas palabras. */
+ * Las dos mitades tienen que estar dibujadas. Antes la zona de estar salía
+ * vacía —solo un rectángulo blanco— y el esquema parecía decir que en el
+ * salón no hay luz: se leía como un plano del comedor con un hueco al lado.
+ * Ahora lleva el sofá, el mueble de la televisión y las tres capas que Nemul
+ * recomienda, cada una con su símbolo.
+ *
+ * Lo único que NO se dibuja con posición es la luz general cuando el usuario
+ * solo va a cambiar luminarias: sus puntos ya están donde están, y poner
+ * cuatro círculos "ideales" se lee como el sitio donde deberían ir los suyos.
+ * En su lugar, la zona se baña de luz y se dice de dónde sale. */
 function LivingZonePlan({ layers }) {
   const { plan, grid, dining, onlyLights, estar } = layers;
   const { roomW, roomD, diningDepth, estarW } = plan;
 
-  const PAD = 22, BOX_W = 300;
-  const BOX_H = Math.max(130, Math.min(240, Math.round((BOX_W * roomD) / roomW)));
-  const vbW = PAD * 2 + BOX_W, vbH = BOX_H + PAD * 2 + 20;
-  const sx = BOX_W / roomW, sy = BOX_H / roomD;          // escala px por metro
-  const X = (m) => PAD + m * sx;
-  const Y = (m) => PAD + m * sy;
-
+  const PAD = 18, BOX_W = 320;
+  const BOX_H = Math.max(150, Math.min(250, Math.round((BOX_W * roomD) / roomW)));
+  const vbW = PAD * 2 + BOX_W, vbH = BOX_H + PAD * 2;
+  const px = BOX_W / roomW, py = BOX_H / roomD;
+  const X = (m) => PAD + m * px;
+  const Y = (m) => PAD + m * py;
   const splitX = X(estarW);
 
-  // Retícula de la zona de estar, con sus propias cotas y márgenes.
-  const gx = (c) => X(grid.cols > 1 ? grid.mx + c * grid.sx : estarW / 2);
-  const gy = (r) => Y(grid.rows > 1 ? grid.my + r * grid.sy : roomD / 2);
+  const reading = estar.ambient.find((a) => a.id === "lectura");
+  const ambientLamp = estar.ambient.find((a) => a.id !== "lectura");
+  const hasTv = !!estar.accent;
+
+  // Muebles en fracciones de la zona, para que el dibujo aguante cualquier
+  // tamaño de estancia. El sofá abajo, el mueble de la tele enfrente.
+  const EW = estarW, D = roomD;
+  const sofa = { x0: 0.10 * EW, x1: 0.68 * EW, y0: 0.79 * D, y1: 0.93 * D };
+  const tv = { x0: 0.16 * EW, x1: 0.62 * EW, y0: 0.055 * D, y1: 0.155 * D };
+
+  // Retícula de la zona de estar: solo cuando hay obra y, por tanto, posición.
   const dots = [];
-  for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) dots.push({ c, r });
+  if (!onlyLights) {
+    for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) {
+      dots.push({
+        x: grid.cols > 1 ? grid.mx + c * grid.sx : estarW / 2,
+        y: grid.rows > 1 ? grid.my + r * grid.sy : roomD / 2,
+      });
+    }
+  }
 
   /* La mesa se dibuja a escala de la zona, no de una medida que nadie nos ha
    * dado: ocupa poco más de la mitad del comedor en las dos direcciones, que
@@ -3710,111 +3666,143 @@ function LivingZonePlan({ layers }) {
 
   const n = dining.pieces;
   const pend = Array.from({ length: n }, (_, i) => tCy - tL / 2 + (tL * (2 * i + 1)) / (2 * n));
-  // El relleno va justo por fuera de la corona, y nunca pegado al muro.
   const fillOff = tL / 2 + keep + 0.2;
   const clampY = (m) => Math.min(Math.max(m, 0.35), roomD - 0.35);
   const fills = dining.fillPieces ? [clampY(tCy - fillOff), clampY(tCy + fillOff)] : [];
 
+  // Una lámpara de pie o de sobremesa: pantalla y halo. El mismo símbolo para
+  // la de lectura y la de ambiente, porque son la misma clase de luz.
+  const Lamp = ({ mx, my }) => (
+    <g>
+      <circle cx={X(mx)} cy={Y(my)} r="14" fill={COLORS.bulb} opacity="0.26" />
+      <path d={`M${X(mx) - 8},${Y(my) + 5} L${X(mx)},${Y(my) - 7} L${X(mx) + 8},${Y(my) + 5} Z`}
+        fill={COLORS.bulb} stroke={COLORS.text} strokeWidth="1.4" strokeLinejoin="round" />
+    </g>
+  );
+
+  const zoneLabel = (t) => (
+    <tspan fontFamily="Montserrat, sans-serif" fontSize="9" fontWeight="600" fill={COLORS.subtext}>{t}</tspan>
+  );
+
   return (
     <div data-pdf-keep>
-      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>
-        {onlyLights ? "Cómo se reparte la luz entre las dos zonas" : "Dónde va cada cosa"}
-      </p>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Cómo se reparte la luz entre las dos zonas</p>
       <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
         <svg viewBox={`0 0 ${vbW} ${vbH}`} xmlns="http://www.w3.org/2000/svg" role="img"
-          aria-label={`Plano orientativo visto desde arriba, con la zona de estar y la zona de comedor separadas. ${onlyLights ? "" : `${grid.n} focos generales repartidos solo por la zona de estar. `}${n === 1 ? "Un colgante" : `${n} colgantes`} sobre la mesa, y ninguna luz general dentro de la mesa ni a menos de ${Math.round(keep * 100)} cm de su borde.`}
+          aria-label={`Esquema de las dos zonas. En la de estar: ${onlyLights ? "la luz general sale de los puntos de techo que ya existen" : `${grid.n} focos generales`}${reading ? ", un pie de lectura junto al sofá" : ""}${ambientLamp ? ", una lámpara de ambiente en el extremo opuesto" : ""}${hasTv ? " y una tira de acento en el mueble de la televisión" : ""}. En la de comedor: ${n === 1 ? "un colgante" : `${n} colgantes`} sobre la mesa y luz de apoyo en el borde, sin ninguna luz general encima de la mesa.`}
           style={{ display: "block", width: "100%", height: "auto" }}>
           <defs>
             <radialGradient id="nemul-zone-pool">
               <stop offset="0" stopColor={COLORS.bulb} stopOpacity="0.42" />
               <stop offset="1" stopColor={COLORS.bulb} stopOpacity="0" />
             </radialGradient>
+            <linearGradient id="nemul-zone-wash" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor={COLORS.bulb} stopOpacity="0.20" />
+              <stop offset="1" stopColor={COLORS.bulb} stopOpacity="0.06" />
+            </linearGradient>
           </defs>
 
           <rect x={PAD} y={PAD} width={BOX_W} height={BOX_H} rx="4" fill="#FFFDF8" stroke={COLORS.text} strokeWidth="2" />
-          <rect x={splitX} y={PAD} width={PAD + BOX_W - splitX} height={BOX_H} fill={COLORS.bgAlt} opacity="0.75" />
+          <rect x={splitX} y={PAD} width={PAD + BOX_W - splitX} height={BOX_H} fill={COLORS.bgAlt} opacity="0.8" />
+
+          {/* Luz general sin posición: la zona bañada, y dicho de dónde sale. */}
+          {onlyLights && <rect x={PAD + 2} y={PAD + 2} width={splitX - PAD - 4} height={BOX_H - 4} fill="url(#nemul-zone-wash)" />}
+
           <line x1={splitX} y1={PAD} x2={splitX} y2={PAD + BOX_H} stroke={COLORS.subtext} strokeWidth="1.6" strokeDasharray="7 5" />
 
-          {/* corona sin luz general */}
+          {/* ---------- zona de estar ---------- */}
+          {hasTv && (
+            <>
+              <rect x={X(tv.x0)} y={Y(tv.y0)} width={(tv.x1 - tv.x0) * px} height={(tv.y1 - tv.y0) * py} rx="2" fill={COLORS.bgAlt} stroke={COLORS.subtext} strokeWidth="1.2" />
+              <line x1={X(tv.x0)} y1={Y(tv.y1) + 4} x2={X(tv.x1)} y2={Y(tv.y1) + 4} stroke={COLORS.bulb} strokeWidth="4" strokeLinecap="round" />
+              <text x={X((tv.x0 + tv.x1) / 2)} y={Y((tv.y0 + tv.y1) / 2) + 3.5} textAnchor="middle">{zoneLabel("TV")}</text>
+            </>
+          )}
+          <rect x={X(sofa.x0)} y={Y(sofa.y0)} width={(sofa.x1 - sofa.x0) * px} height={(sofa.y1 - sofa.y0) * py} rx="5" fill={COLORS.bgAlt} stroke={COLORS.subtext} strokeWidth="1.2" />
+          <text x={X((sofa.x0 + sofa.x1) / 2)} y={Y((sofa.y0 + sofa.y1) / 2) + 3.5} textAnchor="middle">{zoneLabel("sofá")}</text>
+
+          {reading && <Lamp mx={0.11 * EW} my={0.68 * D} />}
+          {ambientLamp && <Lamp mx={0.80 * EW} my={0.86 * D} />}
+
+          {dots.map((p, i) => (
+            <circle key={`pool${i}`} cx={X(p.x)} cy={Y(p.y)} r={Math.min(grid.cols > 1 ? grid.sx * px : BOX_W, grid.rows > 1 ? grid.sy * py : BOX_H) * 0.55} fill="url(#nemul-zone-pool)" />
+          ))}
+          {dots.map((p, i) => (
+            <circle key={`d${i}`} cx={X(p.x)} cy={Y(p.y)} r="6" fill={COLORS.bulb} stroke={COLORS.text} strokeWidth="1.5" />
+          ))}
+
+          {/* ---------- zona de comedor ---------- */}
           <rect x={kx0} y={ky0} width={kx1 - kx0} height={ky1 - ky0} rx="4" fill="none" stroke={COLORS.warning} strokeWidth="1.3" strokeDasharray="6 4" />
-
-          {/* retícula general: solo en la zona de estar, y solo si hay obra */}
-          {!onlyLights && dots.map(({ c, r }, i) => (
-            <circle key={`pool${i}`} cx={gx(c)} cy={gy(r)} r={Math.min(grid.cols > 1 ? grid.sx * sx : BOX_W, grid.rows > 1 ? grid.sy * sy : BOX_H) * 0.6} fill="url(#nemul-zone-pool)" />
-          ))}
-          {!onlyLights && dots.map(({ c, r }, i) => (
-            <circle key={`d${i}`} cx={gx(c)} cy={gy(r)} r="6.5" fill={COLORS.bulb} stroke={COLORS.text} strokeWidth="1.6" />
-          ))}
-
-          {/* la mesa */}
           {round
-            ? <circle cx={X(tCx)} cy={Y(tCy)} r={Math.min((tW / 2) * sx, (tL / 2) * sy)} fill={COLORS.bgAlt} stroke={COLORS.text} strokeWidth="1.5" />
-            : <rect x={X(tCx - tW / 2)} y={Y(tCy - tL / 2)} width={tW * sx} height={tL * sy} rx="3" fill={COLORS.bgAlt} stroke={COLORS.text} strokeWidth="1.5" />}
-
-          {/* colgantes */}
+            ? <circle cx={X(tCx)} cy={Y(tCy)} r={Math.min((tW / 2) * px, (tL / 2) * py)} fill={COLORS.bgAlt} stroke={COLORS.text} strokeWidth="1.5" />
+            : <rect x={X(tCx - tW / 2)} y={Y(tCy - tL / 2)} width={tW * px} height={tL * py} rx="3" fill={COLORS.bgAlt} stroke={COLORS.text} strokeWidth="1.5" />}
           {pend.map((m, i) => (
             <g key={`c${i}`}>
               <circle cx={X(tCx)} cy={Y(m)} r="15" fill={COLORS.bulb} opacity="0.34" />
               <circle cx={X(tCx)} cy={Y(m)} r="7.5" fill={COLORS.bulb} stroke={COLORS.text} strokeWidth="1.7" />
             </g>
           ))}
-          {/* relleno del borde, fuera de la mesa */}
           {fills.map((m, i) => (
             <circle key={`f${i}`} cx={X(tCx)} cy={Y(m)} r="4.5" fill="#FFFDF8" stroke={COLORS.subtext} strokeWidth="1.6" />
           ))}
-
-          {/* cotas de la retícula del estar */}
-          {!onlyLights && grid.cols >= 2 && (
-            <>
-              <g stroke={COLORS.text} strokeWidth="1.1" fill="none">
-                <line x1={gx(0)} y1={PAD - 9} x2={gx(1)} y2={PAD - 9} strokeDasharray="3 2" />
-                <line x1={gx(0)} y1={PAD - 13} x2={gx(0)} y2={PAD - 5} />
-                <line x1={gx(1)} y1={PAD - 13} x2={gx(1)} y2={PAD - 5} />
-              </g>
-              <rect x={(gx(0) + gx(1)) / 2 - 27} y={PAD - 20} width="54" height="15" rx="7" fill={COLORS.text} />
-              <text x={(gx(0) + gx(1)) / 2} y={PAD - 9} textAnchor="middle" fontFamily="Montserrat, sans-serif" fontSize="9.5" fontWeight="600" fill="#FFF7E8">{fmtM(grid.sx)} m</text>
-            </>
-          )}
-
-          <text x={PAD + BOX_W / 2} y={vbH - 4} textAnchor="middle" fontFamily="Montserrat, sans-serif" fontSize="9.5" fill={COLORS.subtext}>
-            {layers.zones.estar + layers.zones.comedor} m² · unos {fmtM(roomW)} × {fmtM(roomD)} m
-          </text>
         </svg>
 
-        <p className="font-body t-caption text-center mt-1" style={{ color: COLORS.subtext }}>
+        <p className="font-body t-caption text-center mt-1.5" style={{ color: COLORS.subtext }}>
           A la izquierda, la zona de estar ({fmtArea(estar.area)} m²). A la derecha, la de comedor ({fmtArea(dining.area)} m²).
         </p>
 
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
-          {!onlyLights && (
+          <div className="flex items-center gap-2">
+            {onlyLights
+              ? <span className="rounded" style={{ width: 14, height: 11, background: `linear-gradient(${COLORS.bulb}88, ${COLORS.bulb}22)`, border: `1px solid ${COLORS.bulb}` }} />
+              : <span className="rounded-full" style={{ width: 11, height: 11, backgroundColor: COLORS.bulb, boxShadow: `inset 0 0 0 1.4px ${COLORS.text}` }} />}
+            <span className="font-body t-caption" style={{ color: COLORS.subtext }}>
+              {onlyLights
+                ? `Luz general — tus puntos de techo, ${estar.generalLm.toLocaleString("es-ES")} lm`
+                : `Luz general — ${grid.n} focos de ${grid.lmPer} lm`}
+            </span>
+          </div>
+          {reading && (
             <div className="flex items-center gap-2">
-              <span className="rounded-full" style={{ width: 11, height: 11, backgroundColor: COLORS.bulb, boxShadow: `inset 0 0 0 1.4px ${COLORS.text}` }} />
-              <span className="font-body t-caption" style={{ color: COLORS.subtext }}>{grid.n} focos de {grid.lmPer} lm · solo en la zona de estar</span>
+              <span style={{ width: 0, height: 0, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderBottom: `10px solid ${COLORS.bulb}` }} />
+              <span className="font-body t-caption" style={{ color: COLORS.subtext }}>Pie de lectura — {reading.lm} lm</span>
+            </div>
+          )}
+          {ambientLamp && (
+            <div className="flex items-center gap-2">
+              <span style={{ width: 0, height: 0, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderBottom: `10px solid ${COLORS.bulb}` }} />
+              <span className="font-body t-caption" style={{ color: COLORS.subtext }}>{ambientLamp.label} — {ambientLamp.lm} lm</span>
+            </div>
+          )}
+          {hasTv && (
+            <div className="flex items-center gap-2">
+              <span className="rounded-full" style={{ width: 14, height: 4, backgroundColor: COLORS.bulb }} />
+              <span className="font-body t-caption" style={{ color: COLORS.subtext }}>Acento en el mueble de TV — {estar.accent.lm} lm</span>
             </div>
           )}
           <div className="flex items-center gap-2">
             <span className="rounded-full" style={{ width: 13, height: 13, backgroundColor: COLORS.bulb, boxShadow: `inset 0 0 0 1.6px ${COLORS.text}` }} />
-            <span className="font-body t-caption" style={{ color: COLORS.subtext }}>{n === 1 ? `1 colgante de ${dining.pendantPer} lm` : `${n} colgantes de ${dining.pendantPer} lm`}</span>
+            <span className="font-body t-caption" style={{ color: COLORS.subtext }}>{n === 1 ? `Colgante de ${dining.pendantPer} lm` : `${n} colgantes de ${dining.pendantPer} lm`}</span>
           </div>
           {dining.fillPieces > 0 && (
             <div className="flex items-center gap-2">
               <span className="rounded-full" style={{ width: 11, height: 11, backgroundColor: "#FFFDF8", boxShadow: `inset 0 0 0 1.6px ${COLORS.subtext}` }} />
-              <span className="font-body t-caption" style={{ color: COLORS.subtext }}>{dining.fillPieces} puntos de borde de {dining.fillPer} lm</span>
+              <span className="font-body t-caption" style={{ color: COLORS.subtext }}>Luz de apoyo — {dining.fillPieces} × {dining.fillPer} lm</span>
             </div>
           )}
           <div className="flex items-center gap-2">
             <span style={{ width: 13, height: 11, border: `1.3px dashed ${COLORS.warning}`, borderRadius: 2 }} />
-            <span className="font-body t-caption" style={{ color: COLORS.subtext }}>sin luz general: la mesa y {Math.round(keep * 100)} cm alrededor</span>
+            <span className="font-body t-caption" style={{ color: COLORS.subtext }}>sin luz general sobre la mesa</span>
           </div>
         </div>
 
         <p className="font-body t-small italic mt-2.5" style={{ color: COLORS.subtext }}>
           {onlyLights
-            ? `Aquí no hay retícula dibujada a propósito: dijiste que solo vas a cambiar las luminarias, así que tus puntos ya están donde están. Lo que sí dice el plano es que los ${estar.generalLm.toLocaleString("es-ES")} lm de luz general son de la zona de estar, y que la mesa se resuelve aparte.`
-            : `Los focos generales se reparten solo por la zona de estar, a unos ${spacingText(grid)} y a unos ${marginText(grid)} de las paredes. Ninguno entra en el recuadro discontinuo.`}
+            ? "La luz general de la zona de estar aparece como un baño de luz y no como una serie de focos: dijiste que solo vas a cambiar las luminarias, así que tus puntos de techo ya están donde están y Nemul no va a inventarte posiciones nuevas."
+            : "Los focos generales se reparten solo por la zona de estar. Ninguno entra en el recuadro discontinuo de la mesa."}
         </p>
         <p className="font-body t-small mt-2.5 rounded-lg p-3" style={{ color: COLORS.text, backgroundColor: COLORS.bgAlt }}>
-          <span className="font-medium">El dibujo es orientativo.</span> El rectángulo, el corte entre las dos zonas y el tamaño de la mesa los ha estimado Nemul a partir de tus metros cuadrados: no sabemos la forma real de tu salón-comedor ni dónde tienes puesta la mesa. Lo que sí puedes llevarte tal cual es el criterio: la luz general por la zona de estar, la mesa con su propia luminaria, y nada de la general encima de la mesa.
+          <span className="font-medium">El dibujo es orientativo.</span> La forma de la estancia, el corte entre las dos zonas y dónde hemos puesto la mesa y el sofá los ha supuesto Nemul: no sabemos cómo es tu salón-comedor por dentro. Lo que sí puedes llevarte tal cual es el criterio: la luz general por la zona de estar, las lámparas donde de verdad te sientas, la mesa con su propia luminaria, y nada de la general encima de la mesa.
         </p>
       </div>
     </div>
@@ -4078,8 +4066,6 @@ function TechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) 
           {layers.isDining
             ? <LivingZonePlan layers={layers} />
             : <CeilingPlan grid={grid} onlyLights={onlyLights} />}
-
-          {layers.isDining && <DiningPendantElevation dining={layers.dining} />}
 
           <TipsList tips={tips} />
 
