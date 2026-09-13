@@ -909,6 +909,148 @@ function joinNatural(items) {
   return `${items.slice(0, -1).join(", ")} y ${items[items.length - 1]}`;
 }
 
+/* ---------------------------------------------------------------------------
+ * CAPAS DE LA COCINA
+ *
+ * El problema no era el número de focos, era pedirle al techo algo que el
+ * techo no sabe hacer. Un downlight no ilumina bien una encimera: te colocas
+ * entre el foco y la encimera y trabajas sobre tu propia sombra. Añadir focos
+ * lo empeora, porque cada uno añade una sombra más.
+ *
+ * Los 300-400 lm/m² de la tabla vieja son un nivel de TAREA —300-500 lux sobre
+ * la encimera— aplicado a los metros del suelo. Es el mismo error que tenía el
+ * despacho, donde los 500 lux del escritorio aplicados a 9 m² pedían seis
+ * focos, y que se arregló separando la capa de la mesa.
+ *
+ * Ahora la cocina se resuelve en capas:
+ *   1. general de techo    — moverse, ver el conjunto, abrir un armario
+ *   2. trabajo             — la encimera, con tira bajo mueble
+ *   3. refuerzos           — fregadero, placa, rincón interior
+ *   4. isla o península    — zona propia, como la mesa del comedor
+ *
+ * Ninguna se resta de otra. La referencia global de 300-400 lm/m² se mantiene
+ * como comprobación —general 180 + trabajo ~120 = 300—, nunca como divisor
+ * para sacar downlights. */
+
+// La general de la cocina, con la encimera resuelta aparte: unos 90 lux medios,
+// que es lo que pide circular y ver el conjunto. Con 20 m² salen 3.600 lm, que
+// la retícula abierta reparte en 6 puntos de 600 lm — un downlight corriente,
+// no una bomba de 800.
+const KITCHEN_GENERAL_LUX = { bright: 160, moderate: 180, low: 200 };
+
+/* La cocina reparte con la geometría relajada, la misma del salón y el
+ * dormitorio: su techo ya no es la única luz, la encimera tiene la suya.
+ *
+ * Con los topes por defecto —los estrictos— una cocina de 5,3 x 3,8 m pedía
+ * 3 x 3 = nueve focos, que es volver al problema por otro camino. Con estos,
+ * 3 x 2 = seis de 600 lm. */
+const KITCHEN_GRID_LIMITS = BEDROOM_GRID_LIMITS;
+
+/* Metros lineales de encimera, estimados con la forma y las medidas. Nemul no
+ * los pregunta —el cuestionario ya es largo— así que sale de la distribución
+ * cruzada con el largo y el ancho. Va declarado como estimación en el informe.
+ * Fracciones del lado largo (w) y del corto (d) de la estancia. */
+const KITCHEN_RUN_BY_LAYOUT = {
+  lineal:     (w, d) => 0.70 * w,
+  L:          (w, d) => 0.70 * w + 0.60 * d,
+  U:          (w, d) => 0.70 * w + 1.20 * d,
+  paralela:   (w, d) => 1.40 * w,
+  /* Isla y península cuentan solo el frente de PARED. Su propio frente lo
+   * resuelve la capa de colgantes, y sumarlo aquí lo iluminaba dos veces:
+   * una península de 20 m² pedía 5 focos orientables además de sus 2
+   * colgantes, más luz sobre ese metro y medio que sobre toda la cocina. */
+  isla:       (w, d) => 0.70 * w,
+  peninsula:  (w, d) => 0.70 * w,
+};
+
+/* Qué parte del frente lleva tira. No es un porcentaje fijo: depende de en
+ * cuántas paredes hay encimera y en cuántas hay mueble alto. En una cocina en U
+ * con muebles altos en dos paredes, la tira cubre dos de los tres frentes; en
+ * una lineal, con una pared ya está todo. El resto se queda con los focos
+ * orientables del techo, y el informe lo dice. */
+const KITCHEN_WALL_RUNS = { lineal: 1, L: 2, U: 3, paralela: 2, isla: 1, peninsula: 1 };
+const KITCHEN_CABINET_WALLS = { unaPared: 1, dosParedes: 2 };
+function kitchenRunShare(layout, upperCabinets) {
+  const walls = KITCHEN_CABINET_WALLS[upperCabinets];
+  if (!walls) return 1; // sin muebles altos, el frente entero va con focos
+  return Math.min(1, walls / (KITCHEN_WALL_RUNS[layout] || 1));
+}
+
+/* 400 lm por metro lineal de tira: sobre una encimera de 60 cm de fondo son
+ * unos 500 lux, justo la banda de tarea. Más que eso deslumbra en el azulejo. */
+const KITCHEN_TASK_LM_PER_M = 400;
+// Sin muebles altos no hay dónde ponerla, y hace falta más flujo desde el techo
+// para compensar el peor ángulo.
+const KITCHEN_TASK_SPOT_LM = 500;
+const KITCHEN_TASK_SPOT_SPACING_M = 1.1;
+
+const KITCHEN_SINK_LM = 400;
+const KITCHEN_HOB_LM = 400;
+const KITCHEN_CORNER_LM = 300;
+const KITCHEN_ISLAND_PIECE_LM = 500;
+
+function kitchenLayers(area, answers = {}, tempK = 3000) {
+  const { layout, upperCabinets, light, multiZone } = answers;
+  const dm = roomDims(answers);
+  const w = dm ? dm.w : Math.sqrt(area * PLAN_ASPECT);
+  const d = dm ? dm.d : area / w;
+
+  // ---------- 1. general ----------
+  const generalLux = KITCHEN_GENERAL_LUX[light] || KITCHEN_GENERAL_LUX.moderate;
+  const heightFactor = answers.tallCeiling ? TALL_CEILING_FACTOR : 1;
+  const generalLm = Math.round((generalLux * area * heightFactor) / 100) * 100;
+  const grid = openPlanLayout(area, generalLm, 4, 200, KITCHEN_GRID_LIMITS, dm);
+
+  // ---------- 2. trabajo ----------
+  const runFn = KITCHEN_RUN_BY_LAYOUT[layout] || KITCHEN_RUN_BY_LAYOUT.lineal;
+  const runTotalM = Math.round(runFn(w, d) * 10) / 10;
+  const runM = Math.round(runTotalM * kitchenRunShare(layout, upperCabinets) * 10) / 10;
+  // Lo que queda sin mueble alto y sigue siendo encimera: se resuelve desde el
+  // techo, y conviene decirlo en vez de dejar ese tramo sin mencionar.
+  const uncoveredM = Math.round((runTotalM - runM) * 10) / 10;
+  const hasUpper = upperCabinets && upperCabinets !== "no";
+  const task = hasUpper
+    ? {
+        mode: "underCabinet", runM, runTotalM, uncoveredM,
+        lmPerM: KITCHEN_TASK_LM_PER_M,
+        lm: roundLm(runM * KITCHEN_TASK_LM_PER_M, 50),
+      }
+    : {
+        // Sin mueble alto: focos orientables adelantados. Peor solución, y se
+        // dice. El haz llega en diagonal y sigue habiendo algo de sombra propia.
+        mode: "ceilingSpots",
+        runM, runTotalM, uncoveredM: 0,
+        pieces: Math.max(2, Math.round(runM / KITCHEN_TASK_SPOT_SPACING_M)),
+        lmPer: KITCHEN_TASK_SPOT_LM,
+        lm: Math.max(2, Math.round(runM / KITCHEN_TASK_SPOT_SPACING_M)) * KITCHEN_TASK_SPOT_LM,
+      };
+
+  // ---------- 3. refuerzos ----------
+  const reinforcements = [
+    { id: "fregadero", label: "Sobre el fregadero", lm: KITCHEN_SINK_LM,
+      hint: "un punto adelantado hacia el borde de la encimera: encima de la cabeza deja el seno en sombra" },
+    { id: "placa", label: "Sobre la placa", lm: KITCHEN_HOB_LM,
+      hint: "solo si tu campana no lleva luz propia; si la lleva, ya está resuelto" },
+  ];
+  if (layout === "L" || layout === "U") {
+    reinforcements.push({ id: "rincon", label: "Rincón interior", lm: KITCHEN_CORNER_LM,
+      hint: "el punto más oscuro de una cocina en " + (layout === "L" ? "L" : "U") + ": un foco orientable lo resuelve" });
+  }
+
+  // ---------- 4. isla o península ----------
+  let island = null;
+  if (layout === "isla" || layout === "peninsula") {
+    const pieces = layout === "isla" ? 2 : (w * 0.45 < 1.2 ? 1 : 2);
+    island = {
+      kind: layout, pieces,
+      lmPer: KITCHEN_ISLAND_PIECE_LM,
+      lm: pieces * KITCHEN_ISLAND_PIECE_LM,
+    };
+  }
+
+  return { generalLux, generalLm, grid, task, reinforcements, island, hasUpper, multiZone: !!multiZone, tempK };
+}
+
 function generateKitchenReport(answers = {}) {
   const { layout, priorities = [], upperCabinets, multiZone, size, tallCeiling, light, problem, renovationStatus, adjoiningStyle } = answers;
 
@@ -917,20 +1059,20 @@ function generateKitchenReport(answers = {}) {
   else if (priorities.includes("elegant")) tempK = 2700;
   if (problem === "shadows" || problem === "visibility" || problem === "modern") tempK = 4000;
 
-  const lux = getLux("kitchen", light);
-
   const area = roomArea(answers, KITCHEN_AREA_BY_SIZE[size] || 11);
-  const heightFactor = tallCeiling ? TALL_CEILING_FACTOR : 1;
-  const lumens = Math.round((lux * area * heightFactor) / 100) * 100;
-  const grid = planLayout(area, lumens, 4, roomDims(answers));
+  const layers = kitchenLayers(area, answers, tempK);
+  const { task, grid } = layers;
+  // `lux` y `lumens` son los de la luz GENERAL. Las capas de trabajo y los
+  // refuerzos van aparte y no se suman aquí: no se encienden todas a la vez.
+  const lux = layers.generalLux;
+  const lumens = layers.generalLm;
 
   const distribution = [];
-  // Misma decisión que en el bloque de cálculo: un número, no un rango.
-  distribution.push(`${grid.n} downlights recomendados, de ${grid.lmPer} lm cada uno.`);
+  distribution.push(`${grid.n} downlights de luz general, de ${grid.lmPer} lm cada uno. La encimera no depende de ellos: tiene su propia capa.`);
   distribution.push(`Sepáralos siguiendo la retícula del plano: unos ${spacingText(grid)}, dejando unos ${marginText(grid)} hasta las paredes.`);
-  if (upperCabinets && upperCabinets !== "no") {
-    distribution.push("Coloca la línea de focos entre 30 y 40 cm por delante de los muebles altos, para iluminar bien el centro de la encimera y evitar sombras al cocinar.");
-    distribution.push("Añade iluminación LED bajo los muebles altos.");
+  if (task.mode === "underCabinet") {
+    distribution.push("Coloca la línea de focos generales entre 30 y 40 cm por delante de los muebles altos: así la luz cae sobre el centro de la encimera y no sobre las puertas.");
+    distribution.push("Si tienes muebles altos, la tira LED bajo mueble es la solución recomendada para iluminar correctamente la encimera: es la única que llega por delante de ti y no proyecta tu propia sombra sobre lo que cortas.");
   } else {
     distribution.push("Centra la línea de focos sobre la zona de trabajo principal para evitar sombras al cocinar.");
   }
@@ -976,11 +1118,14 @@ function generateKitchenReport(answers = {}) {
   }
 
   if (upperCabinets === "unaPared") {
-    sentences.push("Añade iluminación LED bajo los muebles altos de esa pared para evitar sombras sobre la encimera.");
+    sentences.push("Tienes muebles altos en una pared: ahí la tira LED bajo mueble es la solución recomendada para iluminar correctamente la encimera. El tramo que se queda sin mueble alto necesita focos orientables adelantados hacia el borde.");
   } else if (upperCabinets === "dosParedes") {
-    sentences.push("Como tienes muebles altos en dos paredes, ilumina ambas por separado: si solo iluminas una, la otra encimera quedará en sombra.");
+    sentences.push("Como tienes muebles altos en dos paredes, lleva la tira LED a las dos: si solo iluminas una, la otra encimera se queda en sombra. Van en circuito propio, para poder encender solo la encimera mientras cocinas.");
   } else if (upperCabinets === "no") {
-    sentences.push("Al no tener muebles altos, la luz general y los puntos sobre la zona de trabajo serán tu principal fuente de luz: conviene reforzarlos algo más de lo habitual.");
+    sentences.push("Sin muebles altos no hay dónde poner la tira, así que la encimera se resuelve con focos orientables adelantados hacia su borde. Es una alternativa menos eficaz: la luz llega en diagonal y sigues proyectando algo de sombra sobre la zona de corte. Si en algún momento pones muebles altos, la tira bajo mueble es la mejor solución.");
+  }
+  if (task.mode === "underCabinet") {
+    sentences.push(`Para la tira, unos ${task.lmPerM} lm por metro lineal, con CRI ≥ 90 y montada en el borde delantero del bajo del mueble: al fondo ilumina el azulejo y deja la encimera en sombra.`);
   }
 
   if (KITCHEN_PROBLEM_SENTENCE[problem]) sentences.push(KITCHEN_PROBLEM_SENTENCE[problem]);
@@ -1007,7 +1152,7 @@ function generateKitchenReport(answers = {}) {
   if (problem === "onlyLighting") mistakes.push("No conviene elegir soluciones que requieran romper alicatado o encimera, ya que encarecen mucho una intervención pensada sin obra.");
   if (adjoiningStyle) mistakes.push("Evita una temperatura de luz muy distinta entre la cocina y el salón, ya que en un espacio abierto el contraste se percibe con mucha más fuerza que entre habitaciones separadas.");
 
-  return { tempK, lumens, grid, area, lux, distribution, narrative: sentences.join(" "), mistakes: [...new Set(mistakes)] };
+  return { tempK, lumens, grid, area, lux, layers, distribution, narrative: sentences.join(" "), mistakes: [...new Set(mistakes)] };
 }
 
 // ---------- Dormitorio, baño, comedor, pasillo, vestidor y terraza ----------
@@ -4064,8 +4209,83 @@ function TechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) 
   );
 }
 
+/* La cocina, en dos bloques como el salón: la general por un lado y el trabajo
+ * y los refuerzos por otro. Sin fila de total: la tira de la encimera y los
+ * focos del techo no se encienden a la vez ni suman una cifra útil. */
+function KitchenLayerBlock({ layers, area, onlyLights }) {
+  const { generalLux, generalLm, grid, task, reinforcements, island } = layers;
+  const ceilingLm = onlyLights ? generalLm : grid.totalLm;
+
+  const work = [];
+  if (task.mode === "underCabinet") {
+    work.push({
+      id: "encimera", label: "Encimera — tira LED bajo mueble", lm: task.lm,
+      hint: `unos ${fmtDim(task.runM)} m de frente × ${task.lmPerM} lm/m, CRI ≥ 90, en el borde delantero del mueble${task.uncoveredM > 0.4 ? `. Los otros ${fmtDim(task.uncoveredM)} m de encimera no tienen mueble alto: van con focos orientables adelantados` : ""}`,
+    });
+  } else {
+    work.push({
+      id: "encimera", label: "Encimera — focos orientables", lm: task.lm,
+      hint: `${task.pieces} puntos de ${task.lmPer} lm adelantados hacia el borde. Sin muebles altos no hay dónde poner tira, y esta solución es menos eficaz`,
+    });
+  }
+  if (island) {
+    work.push({
+      id: "isla", label: island.kind === "isla" ? "Isla" : "Península", lm: island.lm,
+      hint: `${island.pieces} colgantes de ${island.lmPer} lm, a ${PENDANT_H_TEXT} de la encimera`,
+    });
+  }
+  reinforcements.forEach((r) => work.push({ id: r.id, label: r.label, lm: r.lm, hint: r.hint }));
+
+  return (
+    <div>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Iluminación general</p>
+      <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
+        <div className="px-4 pt-4 pb-3">
+          <p className="font-body t-caption" style={{ color: COLORS.subtext }}>{fmtArea(area)} m² · {generalLux} lm/m²</p>
+          <p className="font-display mt-1" style={{ color: COLORS.text, fontSize: 32, lineHeight: 1.1 }}>
+            {ceilingLm.toLocaleString("es-ES")} lm
+          </p>
+        </div>
+        <div className="flex items-start gap-3 px-4 py-3" style={{ borderTop: `1px solid ${COLORS.border}` }}>
+          <Lightbulb size={16} color={COLORS.bulb} strokeWidth={1.9} className="shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="font-body t-body" style={{ color: COLORS.text }}>
+              {onlyLights ? "Repartidos entre tus puntos de techo" : `${grid.n} downlights de ${grid.lmPer} lm`}
+            </p>
+            <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
+              moverse, ver el conjunto y abrir un armario: la encimera no depende de esto
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <p className="font-body t-eyebrow mt-4 mb-1" style={{ color: COLORS.accent }}>Luz de trabajo y refuerzos</p>
+      <p className="font-body t-caption mb-2.5" style={{ color: COLORS.subtext }}>
+        No se suman a la general: cada una se enciende cuando hace falta.
+      </p>
+      <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
+        {work.map((wk, i) => (
+          <div key={wk.id} className="flex items-start gap-3 px-4 py-3"
+            style={{ borderTop: i === 0 ? "none" : `1px solid ${COLORS.border}` }}>
+            <ChefHat size={16} color={COLORS.bulb} strokeWidth={1.9} className="shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="font-body t-body" style={{ color: COLORS.text }}>{wk.label}</p>
+              <p className="font-body t-caption" style={{ color: COLORS.subtext }}>{wk.hint}</p>
+            </div>
+            <p className="font-body t-body font-medium shrink-0" style={{ color: COLORS.text }}>{wk.lm.toLocaleString("es-ES")} lm</p>
+          </div>
+        ))}
+      </div>
+      <p className="font-body t-small mt-2.5 rounded-lg p-3" style={{ color: COLORS.text, backgroundColor: COLORS.bgAlt }}>
+        <span className="font-medium">Los {fmtDim(task.runM)} m de encimera son una estimación de Nemul.</span> Salen de la forma que has elegido y de las medidas de la estancia; no te hemos preguntado cuánto mide tu frente de trabajo. Ajusta los metros de tira a lo que tengas de verdad, manteniendo los {task.lmPerM ?? KITCHEN_TASK_LM_PER_M} lm por metro.
+      </p>
+    </div>
+  );
+}
+
 function KitchenReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
-  const { tempK, lumens, grid, area, lux, distribution, narrative, mistakes } = generateKitchenReport(answers);
+  const { tempK, grid, area, layers, distribution, narrative, mistakes } = generateKitchenReport(answers);
+  const onlyLights = answers.renovationStatus === "onlyLights";
   const { Icon } = room;
   return (
     <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
@@ -4086,9 +4306,9 @@ function KitchenReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
             extra={<StatRow label="Separación entre downlights" value={spacingShort(grid)} />}
           />
 
-          <CalculationBlock area={area} lux={lux} lumens={lumens} grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} />
+          <KitchenLayerBlock layers={layers} area={area} onlyLights={onlyLights} />
 
-          <CeilingPlan grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} measured={!!roomDims(answers)} />
+          <CeilingPlan grid={grid} onlyLights={onlyLights} measured={!!roomDims(answers)} />
 
           <div>
             <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Distribución recomendada de los focos</p>
