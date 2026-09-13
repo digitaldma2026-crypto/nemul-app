@@ -433,6 +433,59 @@ function getLux(roomId, light) {
   return table[light] ?? table.moderate ?? 200;
 }
 
+/* ---------------------------------------------------------------------------
+ * LAS MEDIDAS DE LA ESTANCIA
+ *
+ * Antes se preguntaba el tamaño por tramos —pequeño, mediano, grande— y de ahí
+ * salían unos m² de tabla. Con los m² solos, la FORMA había que inventarla:
+ * PLAN_ASPECT daba por hecho que toda estancia es un rectángulo de proporción
+ * 1,4, y sobre ese rectángulo inventado se calculaba la retícula, el corte
+ * entre zonas y el plano. Un salón de 20 m² que en realidad es un pasillo de
+ * 8 x 2,5 m recibía la retícula de uno de 5,3 x 3,8.
+ *
+ * Ahora se piden las dos medidas. Cuestan un poco más de teclear que tocar un
+ * botón, y a cambio el cálculo deja de suponer nada sobre la forma.
+ *
+ * Los tramos siguen en el código porque los planes ya guardados los tienen
+ * apuntados: si no hay medidas, se usa el área del tramo y la forma vuelve a
+ * estimarse como siempre. Ver roomDims y roomArea. */
+const DIM_MIN_M = 1;
+const DIM_MAX_M = 30;
+
+// Quien escribe en español teclea "4,5", no "4.5". Las dos valen.
+function parseDim(v) {
+  if (typeof v === "number") return Number.isFinite(v) ? v : NaN;
+  if (typeof v !== "string") return NaN;
+  const n = parseFloat(v.replace(",", ".").trim());
+  return Number.isFinite(n) ? n : NaN;
+}
+
+function dimIsValid(v) {
+  const n = parseDim(v);
+  return n >= DIM_MIN_M && n <= DIM_MAX_M;
+}
+
+/* Las dos medidas, ordenadas: `w` es siempre el lado largo y `d` el corto.
+ * Los planos dibujan `w` en horizontal, así que una estancia alargada sale
+ * apaisada mire por donde se mire, que es como se lee un plano.
+ *
+ * Devuelve null si faltan o no son creíbles: ahí manda el camino de siempre. */
+function roomDims(answers = {}) {
+  const d = answers.dims;
+  if (!d || !dimIsValid(d.length) || !dimIsValid(d.width)) return null;
+  const a = parseDim(d.length), b = parseDim(d.width);
+  return { w: Math.max(a, b), d: Math.min(a, b), length: a, width: b };
+}
+
+// La superficie sale de las medidas cuando las hay. `fallback` es el área del
+// tramo, para los planes guardados antes de este cambio.
+function roomArea(answers = {}, fallback) {
+  const dm = roomDims(answers);
+  return dm ? Math.round(dm.w * dm.d * 10) / 10 : fallback;
+}
+
+const fmtDim = (n) => (Math.round(n * 100) / 100).toString().replace(".", ",");
+
 // ---------- Salón ----------
 /* Antes la pregunta era "¿Cómo utilizas principalmente el salón?" con seis
  * opciones, y al lado había otras dos preguntas —objetivos y problema— que
@@ -656,11 +709,15 @@ function livingLayers(area, answers = {}, roomId = "living") {
    * dimensiones reales de la zona: el comedor se lleva una franja de la
    * estancia, así que lo que le queda al estar no es un rectángulo corriente
    * de 14 m², es 3,7 x 3,8 m. */
-  const roomW = Math.sqrt(area * PLAN_ASPECT);
-  const roomD = area / roomW;
+  /* La forma de la estancia sale de las medidas cuando el usuario las ha
+   * dado. Solo se estima con PLAN_ASPECT en los planes guardados antes de que
+   * se preguntaran. */
+  const dm = roomDims(answers);
+  const roomW = dm ? dm.w : Math.sqrt(area * PLAN_ASPECT);
+  const roomD = dm ? dm.d : area / roomW;
   const diningDepth = isDining ? zones.comedor / roomD : 0;
   const estarDims = { w: roomW - diningDepth, d: roomD };
-  const grid = openPlanLayout(zones.estar, generalLm, 1, 200, LIVING_GRID_LIMITS, isDining ? estarDims : null);
+  const grid = openPlanLayout(zones.estar, generalLm, 1, 200, LIVING_GRID_LIMITS, isDining || dm ? estarDims : null);
 
   // ---------- zona de comedor ----------
   let dining = null;
@@ -695,7 +752,7 @@ function generateLivingReport(answers = {}, roomId = "living") {
   const { size, light, ceiling, renovationStatus } = answers;
   const activities = answers.activities || [];
 
-  const area = SALON_AREA_BY_SIZE[size] || 20;
+  const area = roomArea(answers, SALON_AREA_BY_SIZE[size] || 20);
   const tempK = LIVING_TEMP_K;
   const lux = getLux("living", light);
   const layers = livingLayers(area, answers, roomId);
@@ -890,10 +947,10 @@ function generateKitchenReport(answers = {}) {
 
   const lux = getLux("kitchen", light);
 
-  const area = KITCHEN_AREA_BY_SIZE[size] || 11;
+  const area = roomArea(answers, KITCHEN_AREA_BY_SIZE[size] || 11);
   const heightFactor = tallCeiling ? TALL_CEILING_FACTOR : 1;
   const lumens = Math.round((lux * area * heightFactor) / 100) * 100;
-  const grid = planLayout(area, lumens, 4);
+  const grid = planLayout(area, lumens, 4, roomDims(answers));
 
   const distribution = [];
   // Misma decisión que en el bloque de cálculo: un número, no un rango.
@@ -1673,7 +1730,9 @@ function bedroomLayerTips(layers, grid) {
 
 function generateGenericTechnicalReport(roomId, answers = {}) {
   const cfg = ROOM_TECH_CONFIG[roomId];
-  const area = cfg.areaMap[answers.size] ?? cfg.defaultArea;
+  // Las medidas cuando las hay; el tramo, para los planes ya guardados.
+  const area = roomArea(answers, cfg.areaMap[answers.size] ?? cfg.defaultArea);
+  const dm = roomDims(answers);
   const lux = getLux(roomId, answers.light);
   const lumens = Math.round((lux * area) / 100) * 100;
 
@@ -1687,11 +1746,11 @@ function generateGenericTechnicalReport(roomId, answers = {}) {
       // Posiciones y distancias solo con reforma: en los demás casos Nemul no
       // sabe dónde están los puntos, y un plano se lee como si lo supiera.
       ? (layers.mode === "reforma"
-          ? openPlanLayout(area, layers.generalLm, cfg.minDownlights, cfg.minLmPerPoint, cfg.limits)
+          ? openPlanLayout(area, layers.generalLm, cfg.minDownlights, cfg.minLmPerPoint, cfg.limits, dm)
           : null)
       : cfg.openGrid
-        ? openPlanLayout(area, lumens, cfg.minDownlights, cfg.minLmPerPoint, cfg.limits)
-        : planLayout(area, lumens, cfg.minDownlights);
+        ? openPlanLayout(area, lumens, cfg.minDownlights, cfg.minLmPerPoint, cfg.limits, dm)
+        : planLayout(area, lumens, cfg.minDownlights, dm);
 
   const tempK = cfg.getTempK(answers);
   const tips = getReport(roomId, answers);
@@ -1719,7 +1778,7 @@ const livingFlow = (roomId) => (answers = {}) => {
       onlyLights: "Perfecto: respetaremos los puntos de luz que ya tienes y completaremos con luminarias que no necesiten obra.",
       renovation: "Entonces podemos diseñar la distribución desde cero, sin depender de dónde estén los puntos actuales.",
     } },
-    { key: "size", title: `¿Cuántos metros cuadrados tiene aproximadamente tu ${room}?`, subtitle: "Un cálculo aproximado está bien.", info: `En un ${room} suelen recomendarse entre 150 y 200 lm/m² según la luz natural que entre. Nemul hará el cálculo automáticamente.`, type: "single", layout: "grid", options: SALON_SIZE_OPTIONS },
+    { key: "dims", title: `¿Cuánto mide aproximadamente tu ${room}?`, subtitle: "A ojo está bien: no hace falta sacar el metro.", info: `Con el largo y el ancho, Nemul calcula la superficie y también la forma de la estancia, que es lo que decide cómo se reparten los puntos de luz. En un ${room} suelen recomendarse entre 150 y 200 lm/m² según la luz natural que entre.`, type: "dims" },
     { key: "light", title: "¿Cuánta luz natural entra?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
     { key: "ceiling", title: "¿Qué tipo de techo tienes?", subtitle: "Esto determina qué soluciones de instalación son posibles.", type: "single", layout: "list", options: LIVING_CEILING_OPTIONS },
     // Con reforma no hay instalación que respetar, así que no se pregunta.
@@ -1755,7 +1814,7 @@ const ROOM_FLOWS = {
       reactions: KITCHEN_LAYOUT_REACTIONS,
       extra: KITCHEN_MULTI_ZONE_EXTRA,
     },
-    { key: "size", title: "¿Cuántos metros cuadrados tiene la cocina?", subtitle: "Un cálculo aproximado está bien.", info: "Para una cocina suelen recomendarse entre 300 y 400 lm/m². Nemul hará el cálculo automáticamente según el tamaño y la luz natural.", type: "single", layout: "grid", options: KITCHEN_SIZE_OPTIONS, extra: TALL_CEILING_EXTRA },
+    { key: "dims", title: "¿Cuánto mide aproximadamente la cocina?", subtitle: "A ojo está bien: no hace falta sacar el metro.", info: "Con el largo y el ancho, Nemul calcula la superficie y también la forma de la cocina, que es lo que decide cómo se reparten los focos. Para una cocina suelen recomendarse entre 300 y 400 lm/m² según la luz natural.", type: "dims", extra: TALL_CEILING_EXTRA },
     { key: "priorities", title: "¿Qué es lo más importante para ti en la cocina?", subtitle: "Puedes elegir varias opciones.", type: "multi", layout: "list", options: KITCHEN_PRIORITY_OPTIONS },
     {
       key: "upperCabinets", title: "¿Tienes muebles altos?", subtitle: "Esto nos dice dónde puede faltar luz sobre la encimera.", type: "single", layout: "list", options: KITCHEN_UPPER_CABINETS_OPTIONS,
@@ -1774,7 +1833,7 @@ const ROOM_FLOWS = {
   ],
   kitchenOpen: [
     { key: "layout", title: "¿Qué distribución tiene tu cocina?", subtitle: "Elige la forma que más se parece a la tuya.", type: "single", layout: "grid", options: KITCHEN_LAYOUT_OPTIONS, reactions: KITCHEN_LAYOUT_REACTIONS, extra: KITCHEN_MULTI_ZONE_EXTRA },
-    { key: "size", title: "¿Cuántos metros cuadrados tiene la zona de cocina?", subtitle: "Un cálculo aproximado está bien.", info: "Para una cocina suelen recomendarse entre 300 y 400 lm/m². Nemul hará el cálculo automáticamente según el tamaño y la luz natural.", type: "single", layout: "grid", options: KITCHEN_SIZE_OPTIONS, extra: TALL_CEILING_EXTRA },
+    { key: "dims", title: "¿Cuánto mide aproximadamente la zona de cocina?", subtitle: "Solo la parte de cocina, sin el salón al que se abre.", info: "Con el largo y el ancho, Nemul calcula la superficie y también la forma de la zona, que es lo que decide cómo se reparten los focos. Para una cocina suelen recomendarse entre 300 y 400 lm/m² según la luz natural.", type: "dims", extra: TALL_CEILING_EXTRA },
     { key: "priorities", title: "¿Qué es lo más importante para ti en la cocina?", subtitle: "Puedes elegir varias opciones.", type: "multi", layout: "list", options: KITCHEN_PRIORITY_OPTIONS },
     { key: "upperCabinets", title: "¿Tienes muebles altos?", subtitle: "Esto nos dice dónde puede faltar luz sobre la encimera.", type: "single", layout: "list", options: KITCHEN_UPPER_CABINETS_OPTIONS },
     { key: "light", title: "¿Cuánta luz natural recibe la cocina durante el día?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
@@ -1791,7 +1850,7 @@ const ROOM_FLOWS = {
       onlyLights: "Perfecto: respetaremos los puntos de luz que ya tienes y completaremos con luminarias que no necesiten obra.",
       renovation: "Entonces podemos diseñar la distribución desde cero, sin depender de dónde estén los puntos actuales.",
     } },
-    { key: "size", title: "¿Cuántos metros cuadrados tiene el dormitorio?", subtitle: "Un cálculo aproximado está bien.", info: "En un dormitorio suelen bastar entre 130 y 170 lm/m² de luz general. Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: BEDROOM_SIZE_OPTIONS },
+    { key: "dims", title: "¿Cuánto mide aproximadamente el dormitorio?", subtitle: "A ojo está bien: no hace falta sacar el metro.", info: "Con el largo y el ancho, Nemul calcula la superficie y también la forma de la habitación, que es lo que decide cómo se reparten los puntos de luz. En un dormitorio suelen bastar entre 130 y 170 lm/m² de luz general.", type: "dims" },
     lightStep,
     { key: "ceiling", title: "¿Qué tipo de techo tienes?", subtitle: "Esto determina qué soluciones de instalación son posibles.", type: "single", layout: "list", options: BEDROOM_CEILING_OPTIONS },
     // Condicional: con reforma no hay nada que respetar, así que no se pregunta.
@@ -1809,7 +1868,7 @@ const ROOM_FLOWS = {
       aseo: "Al ser un aseo, con un buen punto sobre el espejo y otro general bastará.",
       completo: "En un baño completo, vamos a diferenciar la luz del espejo, la ducha o bañera, y la general.",
     } },
-    { key: "size", title: "¿Cuántos metros cuadrados tiene aproximadamente?", subtitle: "Un cálculo aproximado está bien.", info: "En un baño suelen recomendarse entre 200 y 300 lm/m². Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: BATHROOM_SIZE_OPTIONS },
+    { key: "dims", title: "¿Cuánto mide aproximadamente el baño?", subtitle: "A ojo está bien: no hace falta sacar el metro.", info: "Con el largo y el ancho, Nemul calcula la superficie y también la forma del baño, que es lo que decide cómo se reparten los focos. En un baño suelen recomendarse entre 200 y 300 lm/m².", type: "dims" },
     { key: "mirrorUse", title: "¿Qué haces habitualmente delante del espejo?", subtitle: "Elige la opción principal.", type: "single", layout: "list", options: BATHROOM_MIRROR_OPTIONS },
     ...(answers.type === "aseo" ? [] : [{ key: "fixture", title: "¿Tienes ducha o bañera?", subtitle: "Cada una pide un tipo de luz distinto.", type: "single", layout: "list", options: BATHROOM_FIXTURE_OPTIONS }]),
     { key: "nightlight", title: "¿Te gustaría una luz nocturna automática?", subtitle: "Para las visitas nocturnas al baño.", type: "single", layout: "list", options: YES_NO_OPTIONS },
@@ -1824,7 +1883,7 @@ const ROOM_FLOWS = {
       rectangular: "Con mesa rectangular, dos o tres puntos en línea reparten mejor la luz.",
       cuadrada: "Con mesa cuadrada, un colgante centrado o de varias luces cubre bien toda la superficie.",
     } },
-    { key: "size", title: "¿Cuántos metros cuadrados tiene el comedor?", subtitle: "Un cálculo aproximado está bien.", info: "En un comedor suelen recomendarse entre 150 y 200 lm/m². Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: DINING_SIZE_OPTIONS },
+    { key: "dims", title: "¿Cuánto mide aproximadamente el comedor?", subtitle: "A ojo está bien: no hace falta sacar el metro.", info: "Con el largo y el ancho, Nemul calcula la superficie y también la forma del comedor, que es lo que decide cómo se reparten los puntos de luz. En un comedor suelen recomendarse entre 150 y 200 lm/m².", type: "dims" },
     { key: "seats", title: "¿Cuántas personas suelen comer?", subtitle: "Un cálculo aproximado está bien.", type: "single", layout: "list", options: DINING_SEATS_OPTIONS },
     { key: "pendant", title: "¿Quieres una lámpara decorativa sobre la mesa?", subtitle: "Como una lámpara colgante.", type: "single", layout: "list", options: YES_NO_OPTIONS },
     lightStep,
@@ -1842,7 +1901,7 @@ const ROOM_FLOWS = {
       planeo: "Antes de instalarlo, dejaremos previstos los puntos de luz y la instalación eléctrica en esa zona.",
       no: "Sin espejo en esta zona, la luz general uniforme del vestidor será suficiente.",
     } },
-    { key: "size", title: "¿Qué superficie tiene el vestidor?", subtitle: "Esto sí cambia la iluminación general de todo el espacio.", info: "En un vestidor conviene entre 250 y 300 lm/m² para ver bien los colores. Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: CLOSET_SIZE_OPTIONS },
+    { key: "dims", title: "¿Cuánto mide aproximadamente el vestidor?", subtitle: "A ojo está bien: no hace falta sacar el metro.", info: "Con el largo y el ancho, Nemul calcula la superficie y también la forma del vestidor, que es lo que decide cómo se reparten los puntos de luz. Aquí conviene entre 250 y 300 lm/m² para ver bien los colores.", type: "dims" },
     lightStep,
     problemStep("closet"),
     renovationStep,
@@ -1853,7 +1912,7 @@ const ROOM_FLOWS = {
       cubierta: "Al estar cubierta, podemos usar luminarias de interior, siempre protegidas de la humedad.",
       descubierta: "Al estar descubierta, elegiremos luminarias con certificación para exterior.",
     } },
-    { key: "size", title: "¿Cuántos metros cuadrados tiene la terraza?", subtitle: "Un cálculo aproximado está bien.", info: "En una terraza suelen bastar entre 80 y 150 lm/m² de ambiente. Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: TERRACE_SIZE_OPTIONS },
+    { key: "dims", title: "¿Cuánto mide aproximadamente la terraza?", subtitle: "A ojo está bien: no hace falta sacar el metro.", info: "Con el largo y el ancho, Nemul calcula la superficie. En una terraza suelen bastar entre 80 y 150 lm/m² de ambiente.", type: "dims" },
     { key: "night", title: "¿La usas principalmente de noche?", subtitle: "Cambia cuánto peso le damos a la luz artificial.", type: "single", layout: "list", options: YES_NO_OPTIONS },
     lightStep,
     problemStep("terrace"),
@@ -1878,7 +1937,7 @@ const ROOM_FLOWS = {
       lateral: "De lado a la ventana, es la posición más equilibrada: aprovechamos la luz sin deslumbrar ni generar reflejos.",
       sinVentana: "Sin ventana cerca, la luz artificial va a tener que cubrir todo el trabajo por sí sola.",
     } },
-    { key: "size", title: "¿Cuántos metros cuadrados tiene el despacho?", subtitle: "Un cálculo aproximado está bien.", info: "Un despacho se calcula en dos capas: la luz general de la estancia, entre 200 y 250 lm/m², y la de la mesa, que debe llegar a unos 500 lux con una lámpara de escritorio. Nemul calcula las dos por separado.", type: "single", layout: "grid", options: OFFICE_SIZE_OPTIONS },
+    { key: "dims", title: "¿Cuánto mide aproximadamente el despacho?", subtitle: "A ojo está bien: no hace falta sacar el metro.", info: "Con el largo y el ancho, Nemul calcula la superficie y también la forma del despacho, que es lo que decide cómo se reparten los focos. Un despacho se calcula en dos capas: la luz general de la estancia, entre 200 y 250 lm/m², y la de la mesa, que debe llegar a unos 500 lux con una lámpara de escritorio.", type: "dims" },
     { key: "light", title: "¿Cuánta luz natural recibe durante el día?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
     { key: "videoCalls", title: "¿Haces videollamadas con frecuencia?", subtitle: "Para adaptar la iluminación de tu zona de trabajo.", type: "single", layout: "list", options: YES_NO_OPTIONS },
     problemStep("office"),
@@ -2188,9 +2247,55 @@ function RoomsScreen({ selected, toggle, onContinue, onBack, freeRoomId }) {
   );
 }
 
+/* Los dos campos de medidas. Teclado numérico en el móvil, coma o punto
+ * indistintos, y la superficie calculándose debajo mientras se escribe: es la
+ * forma de que quien teclea vea al momento si se ha equivocado de una cifra. */
+function DimensionFields({ value, onChange }) {
+  const dims = value || {};
+  const area = roomDims({ dims }) ? Math.round(parseDim(dims.length) * parseDim(dims.width) * 10) / 10 : null;
+  const touched = (dims.length || "") !== "" || (dims.width || "") !== "";
+  const wrong = touched && !roomDims({ dims });
+
+  /* Los dos campos van escritos a mano y no con un componente local: un
+   * componente definido dentro de este cuerpo se recrea en cada render, y
+   * React desmonta el <input> en cada pulsación. El síntoma es que el campo
+   * pierde el foco después de teclear un solo carácter. */
+  return (
+    <div>
+      <div className="flex gap-3">
+        {[{ k: "length", label: "Largo" }, { k: "width", label: "Ancho" }].map(({ k, label }) => (
+          <label key={k} className="flex-1 rounded-xl px-4 py-3.5" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
+            <span className="font-body t-small block" style={{ color: COLORS.subtext }}>{label}</span>
+            <span className="flex items-baseline gap-1.5">
+              <input
+                type="text" inputMode="decimal" autoComplete="off"
+                value={dims[k] ?? ""}
+                onChange={(e) => onChange(k, e.target.value)}
+                placeholder="0,0"
+                aria-label={`${label} en metros`}
+                className="font-display bg-transparent outline-none w-full min-w-0"
+                style={{ color: COLORS.text, fontSize: 26, lineHeight: 1.2 }}
+              />
+              <span className="font-body t-body shrink-0" style={{ color: COLORS.subtext }}>m</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      <p className="font-body t-body mt-3 rounded-xl px-4 py-3" style={{ color: area ? COLORS.text : COLORS.subtext, backgroundColor: COLORS.bg }}>
+        {area
+          ? <>Superficie aproximada: <span className="font-medium">{fmtDim(area)} m²</span></>
+          : wrong
+            ? `Escribe las dos medidas en metros, entre ${DIM_MIN_M} y ${DIM_MAX_M}.`
+            : "Superficie aproximada: la calculamos en cuanto pongas las dos medidas."}
+      </p>
+    </div>
+  );
+}
+
 function QuestionScreen({ step, value, onSelect, onContinue, onBack, stepIndex, total, eyebrow, extraValue, onToggleExtra }) {
   const isMulti = step.type === "multi";
-  const isAnswered = isMulti ? (value || []).length > 0 : !!value;
+  const isDims = step.type === "dims";
+  const isAnswered = isMulti ? (value || []).length > 0 : isDims ? !!roomDims({ dims: value }) : !!value;
   const [showInfo, setShowInfo] = useState(false);
   return (
     <div className="flex flex-col h-full rise-in">
@@ -2217,7 +2322,8 @@ function QuestionScreen({ step, value, onSelect, onContinue, onBack, stepIndex, 
         )}
       </div>
       <div className="flex-1 overflow-y-auto px-6">
-        {step.layout === "list" && (
+        {isDims && <DimensionFields value={value} onChange={onSelect} />}
+        {step.layout === "list" && step.options && (
           <div className="flex flex-col gap-3">
             {step.options.map((opt, i) => {
               const selected = isMulti ? (value || []).includes(opt.id) : value === opt.id;
@@ -2225,7 +2331,7 @@ function QuestionScreen({ step, value, onSelect, onContinue, onBack, stepIndex, 
             })}
           </div>
         )}
-        {step.layout === "grid" && (
+        {step.layout === "grid" && step.options && (
           <div className="grid grid-cols-2 gap-3">
             {step.options.map((opt, i) => {
               const selected = isMulti ? (value || []).includes(opt.id) : value === opt.id;
@@ -2324,7 +2430,10 @@ function summarizeAnswers(flow, answers) {
   return flow.map((step, index) => {
     const raw = answers[step.key];
     let text;
-    if (step.type === "multi") {
+    if (step.type === "dims") {
+      const dm = roomDims({ dims: raw });
+      text = dm ? `${fmtDim(dm.length)} × ${fmtDim(dm.width)} m · ${fmtDim(Math.round(dm.w * dm.d * 10) / 10)} m²` : "Sin respuesta";
+    } else if (step.type === "multi") {
       const ids = raw || [];
       const labels = ids.map((id) => step.options.find((o) => o.id === id)?.label).filter(Boolean);
       text = labels.length ? labels.join(", ") : "Ninguna opción seleccionada";
@@ -2415,7 +2524,7 @@ function CalculationBlock({ area, lux, lumens, grid, onlyLights = false, ambient
     <div>
       <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Cálculo realizado</p>
       <div className="flex flex-col gap-3 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
-        <StatRow label="Superficie" value={`${area} m²`} />
+        <StatRow label="Superficie" value={`${fmtArea(area)} m²`} />
         <div>
           {/* En una estancia con zona de trabajo este número NO es el nivel de
               la mesa, y llamarlo "nivel de iluminación recomendado" a secas es
@@ -3156,7 +3265,7 @@ function openPlanLayout(area, lumens, minCount = 1, minLmPer = 0, limits = {}, d
   // una preferencia, no un requisito. Y si aun así no hay nada, se reparte
   // como el resto de la casa antes que devolver un informe sin plano.
   if (!best && minLmPer) return openPlanLayout(area, lumens, minCount, 0, limits, dims);
-  if (!best) return planLayout(area, lumens, minCount);
+  if (!best) return planLayout(area, lumens, minCount, dims);
 
   const { x, y, n } = best;
   const lmPer = downlightLumens(lumens, n);
@@ -3178,9 +3287,9 @@ function openPlanLayout(area, lumens, minCount = 1, minLmPer = 0, limits = {}, d
  * de ella, y el flujo de cada foco se ajusta después para dar el total
  * calculado. Nunca al revés.
  */
-function planLayout(area, lumens, minCount = 1) {
-  const w = Math.sqrt(area * PLAN_ASPECT);
-  const d = area / w;
+function planLayout(area, lumens, minCount = 1, dims = null) {
+  const w = dims ? dims.w : Math.sqrt(area * PLAN_ASPECT);
+  const d = dims ? dims.d : area / w;
   const xs = axisOptions(w);
   const ys = axisOptions(d);
 
@@ -3324,7 +3433,7 @@ function BedroomLayerBlock({ area, lux, layers, grid }) {
     <div>
       <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Necesidad general</p>
       <div className="flex flex-col gap-3 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
-        <StatRow label="Superficie" value={`${area} m²`} />
+        <StatRow label="Superficie" value={`${fmtArea(area)} m²`} />
         <StatRow label="Nivel recomendado" value={`${lux} lm/m²`} />
         <StatRow label="Luz general" value={`≈ ${need.toLocaleString("es-ES")} lm`} />
         {local.length > 0 && (
@@ -3461,7 +3570,7 @@ function BedroomZoneScheme({ layers }) {
 
 /* Zona de estar y zona de comedor, con el aviso delante y no en letra
  * pequeña al final: el corte lo ha estimado Nemul, no lo ha medido nadie. */
-function LivingZonesBlock({ layers }) {
+function LivingZonesBlock({ layers, measured }) {
   const { zones, estar, dining } = layers;
   return (
     <div data-pdf-keep>
@@ -3485,7 +3594,7 @@ function LivingZonesBlock({ layers }) {
         </p>
       </div>
       <p className="font-body t-small mt-2.5 rounded-lg p-3" style={{ color: COLORS.text, backgroundColor: COLORS.bgAlt }}>
-        <span className="font-medium">Este reparto de metros es una estimación de Nemul, no una medida de tu casa.</span> No te hemos preguntado el tamaño de tu mesa ni dónde está, así que hemos supuesto que el comedor ocupa alrededor de una tercera parte de la estancia, que es lo que suele ocupar una mesa con las sillas retiradas y paso alrededor. Lo que sí sabemos de tu mesa es la forma, y eso es lo que decide la solución de luz sobre ella.
+        <span className="font-medium">El corte entre las dos zonas lo ha estimado Nemul.</span> {measured ? "Los metros de la estancia son los tuyos, pero" : "No"} no te hemos preguntado el tamaño de tu mesa ni dónde está, así que hemos supuesto que el comedor ocupa alrededor de una tercera parte, que es lo que suele ocupar una mesa con las sillas retiradas y paso alrededor. Lo que sí sabemos de tu mesa es la forma, y eso es lo que decide la solución de luz sobre ella.
       </p>
     </div>
   );
@@ -3638,7 +3747,7 @@ function LivingLayerBlock({ layers }) {
  * declarada como referencia en el pie.
  *
  * Sin cotas. Las distancias están en las recomendaciones. */
-function LivingZonePlan({ layers }) {
+function LivingZonePlan({ layers, measured }) {
   const { plan, grid, dining, estar } = layers;
   const { roomW, roomD, diningDepth, estarW } = plan;
 
@@ -3743,14 +3852,16 @@ function LivingZonePlan({ layers }) {
           Solo se dibujan puntos de luz. Las lámparas de pie y de sobremesa no salen aquí porque no dependen del techo, y los muebles tampoco: Nemul no sabe cómo tienes puesto el salón.
         </p>
         <p className="font-body t-small mt-2.5 rounded-lg p-3" style={{ color: COLORS.text, backgroundColor: COLORS.bgAlt }}>
-          <span className="font-medium">El esquema es orientativo.</span> La forma de la estancia, el corte entre las dos zonas y el lugar de la mesa —dibujada con línea discontinua— los ha supuesto Nemul a partir de tus metros cuadrados. Lo que puedes llevarte tal cual es el criterio: los focos generales solo por la zona de estar, y ninguno sobre la mesa ni pegado a ella.
+          <span className="font-medium">El esquema es orientativo.</span> {measured
+            ? "El rectángulo son las medidas que nos has dado; lo que ha supuesto Nemul es el corte entre las dos zonas y el lugar de la mesa, dibujada con línea discontinua."
+            : "La forma de la estancia, el corte entre las dos zonas y el lugar de la mesa —dibujada con línea discontinua— los ha supuesto Nemul a partir de tus metros cuadrados."} Lo que puedes llevarte tal cual es el criterio: los focos generales solo por la zona de estar, y ninguno sobre la mesa ni pegado a ella.
         </p>
       </div>
     </div>
   );
 }
 
-function CeilingPlan({ grid, onlyLights = false }) {
+function CeilingPlan({ grid, onlyLights = false, measured = false }) {
   const { area, w, d, n, cols, rows, sx, sy, mx, my } = grid;
   const PAD = 20;
   const BOX_W = 300;
@@ -3844,7 +3955,7 @@ function CeilingPlan({ grid, onlyLights = false }) {
             <line x1={LEFT + BOX_W} y1={vbH - 22} x2={LEFT + BOX_W} y2={vbH - 14} />
           </g>
           <text x={LEFT + BOX_W / 2} y={vbH - 4} textAnchor="middle" fontFamily="Montserrat, sans-serif" fontSize="9.5" fill={COLORS.subtext}>
-            {area} m² · unos {fmtM(w)} × {fmtM(d)} m
+            {fmtArea(area)} m² · unos {fmtM(w)} × {fmtM(d)} m
           </text>
         </svg>
 
@@ -3863,8 +3974,8 @@ function CeilingPlan({ grid, onlyLights = false }) {
 
         <p className="font-body t-small italic mt-2.5" style={{ color: COLORS.subtext }}>
           {onlyLights
-            ? `Reparto orientativo en ${cols} × ${rows}: unos ${spacingText(grid, true)}, y a unos ${marginText(grid)} de las paredes. La forma de la estancia se ha dibujado como un rectángulo corriente a partir de los m²: llévalo a tu planta real y a dónde estén los muebles, y cuenta las lámparas que ya tienes como parte del reparto.`
-            : `Colocación orientativa en ${cols} × ${rows}: unos ${spacingText(grid)}, y a unos ${marginText(grid)} de las paredes. La forma de la estancia se ha dibujado como un rectángulo corriente a partir de los m²: ajusta la retícula a tu planta real y a dónde estén los muebles, apartando los focos de los sitios donde os sentáis para que no queden en el campo de visión.`}
+            ? `Reparto orientativo en ${cols} × ${rows}: unos ${spacingText(grid, true)}, y a unos ${marginText(grid)} de las paredes. ${measured ? "El rectángulo son las medidas que nos has dado: si tu planta tiene recodos o columnas, ajústalo" : "La forma de la estancia se ha dibujado como un rectángulo corriente a partir de los m²: llévalo a tu planta real"} y a dónde estén los muebles, y cuenta las lámparas que ya tienes como parte del reparto.`
+            : `Colocación orientativa en ${cols} × ${rows}: unos ${spacingText(grid)}, y a unos ${marginText(grid)} de las paredes. ${measured ? "El rectángulo son las medidas que nos has dado: ajusta la retícula a los recodos que tenga tu planta" : "La forma de la estancia se ha dibujado como un rectángulo corriente a partir de los m²: ajusta la retícula a tu planta real"} y a dónde estén los muebles, apartando los focos de los sitios donde os sentáis para que no queden en el campo de visión.`}
         </p>
         {/* Este plano dibuja la distribución ideal para los m² de la estancia:
             no sabe dónde están los puntos de luz actuales, porque no se
@@ -4000,7 +4111,7 @@ function TechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) 
         <div className="px-5 pb-5 flex flex-col gap-5">
           <ColorTempBlock roomId={room.id} tempK={tempK} sameToneAs={sameToneAs} />
 
-          {layers.isDining && <LivingZonesBlock layers={layers} />}
+          {layers.isDining && <LivingZonesBlock layers={layers} measured={!!roomDims(answers)} />}
 
           <LivingLayerBlock layers={layers} />
 
@@ -4013,8 +4124,8 @@ function TechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) 
               sabe Nemul. Solo se dibuja cuando hay reforma y los puntos que
               se enseñan son de verdad una propuesta. */}
           {layers.isDining
-            ? (!onlyLights && <LivingZonePlan layers={layers} />)
-            : <CeilingPlan grid={grid} onlyLights={onlyLights} />}
+            ? (!onlyLights && <LivingZonePlan layers={layers} measured={!!roomDims(answers)} />)
+            : <CeilingPlan grid={grid} onlyLights={onlyLights} measured={!!roomDims(answers)} />}
 
           <TipsList tips={tips} />
 
@@ -4049,7 +4160,7 @@ function KitchenReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
 
           <CalculationBlock area={area} lux={lux} lumens={lumens} grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} />
 
-          <CeilingPlan grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} />
+          <CeilingPlan grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} measured={!!roomDims(answers)} />
 
           <div>
             <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Distribución recomendada de los focos</p>
@@ -4145,7 +4256,7 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameTon
           {/* El dormitorio elige entre tres representaciones según lo que hay
               en su techo; ver BEDROOM: LAS CUATRO CARAS DEL INFORME. */}
           {layers ? (
-            layers.mode === "reforma" ? <CeilingPlan grid={grid} />
+            layers.mode === "reforma" ? <CeilingPlan grid={grid} measured={!!roomDims(answers)} />
             : layers.mode === "varios" ? <CeilingFluxNote generalLm={layers.generalLm} />
             : <BedroomZoneScheme layers={layers} />
           ) : room.id === "terrace" ? (
@@ -4156,7 +4267,7 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameTon
               </div>
             </div>
           ) : (
-            <CeilingPlan grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} />
+            <CeilingPlan grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} measured={!!roomDims(answers)} />
           )}
 
           <TipsList tips={tips} />
@@ -5498,12 +5609,17 @@ export default function NemulApp() {
 
   const toggleRoom = (id) => setSelectedRoomIds((r) => (r[0] === id ? [] : [id]));
 
-  const setAnswer = (optionId) => {
+  const setAnswer = (optionId, dimValue) => {
     if (!currentRoom || !currentStep) return;
     setAnswersByRoom((prev) => {
       const roomAnswers = prev[currentRoom.id] || {};
       let value;
-      if (currentStep.type === "multi") {
+      if (currentStep.type === "dims") {
+        // Aquí `optionId` es el campo ("length" o "width") y `dimValue` lo
+        // tecleado. Se guarda tal cual, sin parsear: si no, no se puede
+        // escribir "4," porque el punto intermedio desaparecería al teclear.
+        value = { ...(roomAnswers[currentStep.key] || {}), [optionId]: dimValue };
+      } else if (currentStep.type === "multi") {
         const arr = roomAnswers[currentStep.key] || [];
         // "Ninguna de estas" no convive con las demás: marcarla las apaga, y
         // marcar cualquier otra la apaga a ella. Sin esto se podía responder
