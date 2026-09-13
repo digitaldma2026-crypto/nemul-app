@@ -3491,68 +3491,119 @@ function LivingZonesBlock({ layers }) {
   );
 }
 
-/* De dónde sale la luz. Una fila por capa, con lo que aporta cada una, y la
- * general al principio porque es la que se lleva el resto. */
+/* Qué capas de luz necesita cada zona.
+ *
+ * Un esquema conceptual, no una planta. La pregunta que responde es "¿qué
+ * luces hacen falta y cuánto da cada una?", y para eso no hace falta saber
+ * dónde está el sofá.
+ *
+ * Aquí hubo un intento anterior de dibujar la zona de estar con su sofá, su
+ * mueble de televisión y las lámparas colocadas, y estaba mal: cuando el
+ * usuario solo va a cambiar luminarias, Nemul no sabe dónde está su mobiliario.
+ * Un sofá dibujado en una esquina se lee como "tu sofá va ahí". Dibujar la
+ * distribución solo tiene sentido cuando hay obra y Nemul propone puntos
+ * nuevos de verdad: eso es LivingZonePlan, y solo aparece en reforma.
+ *
+ * Dónde va cada luminaria se cuenta en las recomendaciones, con palabras. */
+const LIVING_LAYER_ICON = {
+  general: Lightbulb,
+  lectura: BookOpen,
+  ambiente: Lamp,
+  relax: Lamp,
+  acento: Sparkles,
+  mesa: Lightbulb,
+  apoyo: Lamp,
+};
+
 function LivingLayerBlock({ layers }) {
   const { estar, dining, grid, onlyLights, isDining } = layers;
 
   const ceilingLm = onlyLights ? estar.generalLm : grid.totalLm;
-  const ceilingLabel = onlyLights
-    ? "Luz general — tus puntos actuales"
-    : `Luz general — ${grid.n} downlights de ${grid.lmPer} lm`;
-
-  const rows = [
-    { label: ceilingLabel, lm: ceilingLm },
-    ...estar.ambient.map((a) => ({ label: `${a.label} — 1 × ${a.lm} lm`, lm: a.lm, soft: true })),
-    ...(estar.accent ? [{ label: `Acento — tira LED, ${estar.accent.lm} lm`, lm: estar.accent.lm, soft: true }] : []),
-    ...(dining ? [{ label: `Sobre la mesa — ${dining.pieces > 1 ? `${dining.pieces} × ${dining.pendantPer}` : `${dining.pendantPer}`} lm`, lm: dining.pendantTotal, dining: true }] : []),
-    ...(dining && dining.fillPieces ? [{ label: `Borde del comedor — ${dining.fillPieces} × ${dining.fillPer} lm`, lm: dining.fillTotal, dining: true }] : []),
+  const estarRows = [
+    {
+      id: "general", label: "Luz general", lm: ceilingLm,
+      hint: onlyLights ? "repartida entre los puntos de techo que ya tienes" : `${grid.n} downlights de ${grid.lmPer} lm`,
+    },
+    ...estar.ambient.map((a) => ({
+      id: a.id,
+      label: a.id === "lectura" ? "Pie de lectura" : a.label,
+      lm: a.lm,
+      hint: "regulable",
+    })),
+    ...(estar.accent ? [{ id: "acento", label: "Luz de acento TV", lm: estar.accent.lm, hint: "tira LED en el mueble de la televisión" }] : []),
   ];
-  const total = rows.reduce((acc, r) => acc + r.lm, 0);
+
+  const diningRows = dining
+    ? [
+        { id: "mesa", label: "Luz sobre la mesa", lm: dining.pendantTotal, hint: dining.pieces > 1 ? `${dining.pieces} colgantes de ${dining.pendantPer} lm` : `un colgante de ${dining.pendantPer} lm` },
+        ...(dining.fillPieces ? [{ id: "apoyo", label: "Luz de apoyo", lm: dining.fillTotal, hint: `${dining.fillPieces} puntos en el borde de la zona` }] : []),
+      ]
+    : [];
+
+  const sum = (rows) => rows.reduce((acc, r) => acc + r.lm, 0);
+  const total = sum(estarRows) + sum(diningRows);
 
   /* El total de las capas casi nunca cae clavado en lo que pedían las zonas,
    * y cuando se aleja de verdad hay que decir por qué. Pasa sobre todo en
-   * estancias pequeñas con muchas capas activas: una lámpara de lectura da
-   * 450 lm tenga el salón 12 o 40 m², así que en uno pequeño esas piezas se
-   * comen la cuenta. No se recorta la lámpara para cuadrar el número —una
-   * lámpara de lectura de 380 lm no lee—: se explica que van reguladas. */
+   * estancias pequeñas: una lámpara de lectura da 450 lm tenga el salón 12 o
+   * 40 m², así que en una pequeña esas piezas se comen la cuenta. */
   const need = estar.need + (dining ? dining.need : 0);
   const drift = Math.abs(total / need - 1) > 0.1;
 
+  const Zone = ({ Icon, name, rows }) => (
+    <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
+      <div className="flex items-center gap-2.5 px-4 py-3" style={{ backgroundColor: COLORS.bgAlt }}>
+        <Icon size={17} color={COLORS.accent} strokeWidth={1.7} className="shrink-0" />
+        <p className="font-body t-small font-semibold flex-1" style={{ color: COLORS.text, letterSpacing: "0.04em" }}>{name}</p>
+        <p className="font-body t-small font-semibold shrink-0" style={{ color: COLORS.text }}>{sum(rows).toLocaleString("es-ES")} lm</p>
+      </div>
+      <div className="flex flex-col">
+        {rows.map((r, i) => {
+          const RowIcon = LIVING_LAYER_ICON[r.id] || Lightbulb;
+          return (
+            <div key={r.id} className="flex items-start gap-3 px-4 py-3"
+              style={{ borderTop: i === 0 ? "none" : `1px solid ${COLORS.border}` }}>
+              <RowIcon size={16} color={COLORS.bulb} strokeWidth={1.9} className="shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="font-body t-body" style={{ color: COLORS.text }}>{r.label}</p>
+                <p className="font-body t-caption" style={{ color: COLORS.subtext }}>{r.hint}</p>
+              </div>
+              <p className="font-body t-body font-medium shrink-0" style={{ color: COLORS.text }}>{r.lm.toLocaleString("es-ES")} lm</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   return (
     <div>
-      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>De dónde sale la luz</p>
-      <div className="flex flex-col gap-2.5 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
-        <LayerBar parts={rows.map((r) => ({ lm: r.lm }))} />
-        {rows.map((r, i) => (
-          <div key={i} className="flex items-baseline justify-between gap-3">
-            <p className="font-body t-small" style={{ color: COLORS.subtext }}>{r.label}</p>
-            <p className="font-body t-small font-medium shrink-0" style={{ color: COLORS.text }}>{r.lm.toLocaleString("es-ES")} lm</p>
-          </div>
-        ))}
-        <div style={{ borderTop: `1px solid ${COLORS.border}`, paddingTop: 10 }}>
-          <div className="flex items-baseline justify-between gap-3">
-            <p className="font-body t-small font-semibold" style={{ color: COLORS.text }}>Total</p>
-            <p className="font-body t-small font-semibold shrink-0" style={{ color: COLORS.text }}>{total.toLocaleString("es-ES")} lm</p>
-          </div>
-        </div>
-        <p className="font-body t-small italic" style={{ color: COLORS.subtext }}>
-          {onlyLights
-            ? `Los ${estar.generalLm.toLocaleString("es-ES")} lm de la luz general se reparten entre los puntos de techo que ya tienes${isDining ? ", todos ellos en la zona de estar" : ""}. No hace falta que todos den lo mismo: lo que conviene mantener es el total de la capa.`
-            : "El flujo de cada capa es la propuesta; el modelo concreto lo eliges tú. Lo que conviene mantener es el total de cada capa, no el número exacto de piezas."}
-        </p>
-        {drift && (
-          <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
-            {total > need
-              ? `La suma pasa de los ${need.toLocaleString("es-ES")} lm que pedían las zonas. Ya hemos simplificado lo que se podía simplificar; lo que queda es lo que has pedido, y una lámpara de lectura da ${LIVING_READING_LM} lm tenga tu salón los metros que tenga. Bajarla para cuadrar la cifra sería dejarte sin poder leer. Va regulada: solo estará a plena potencia cuando la uses.`
-              : `La suma se queda algo por debajo de los ${need.toLocaleString("es-ES")} lm de referencia porque las luminarias vienen en escalones de flujo: este es el reparto real más cercano.`}
-          </p>
-        )}
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>
+        {isDining ? "Qué capas de luz necesita cada zona" : "Qué capas de luz necesita tu salón"}
+      </p>
+
+      <div className="flex flex-col gap-3">
+        <Zone Icon={Sofa} name={isDining ? "ZONA DE ESTAR" : "TU SALÓN"} rows={estarRows} />
+        {isDining && <Zone Icon={UtensilsCrossed} name="ZONA DE COMEDOR" rows={diningRows} />}
       </div>
 
+      {isDining && (
+        <div className="flex items-baseline justify-between gap-3 mt-3 px-1">
+          <p className="font-body t-small font-semibold" style={{ color: COLORS.text }}>Total del salón-comedor</p>
+          <p className="font-body t-small font-semibold shrink-0" style={{ color: COLORS.text }}>{total.toLocaleString("es-ES")} lm</p>
+        </div>
+      )}
+
       <p className="font-body t-caption mt-2.5" style={{ color: COLORS.subtext }}>
-        La luz general no es toda la luz de la estancia. Se dimensionan primero las capas que existen de verdad según lo que has contestado —las lámparas, el acento{isDining ? ", la mesa" : ""}— y la general se queda con el resto. Es lo que permite que el techo vaya despejado: aquí, {onlyLights ? `${grid.n} zonas de luz` : `${grid.n} downlights`} en vez de llenarlo de agujeros.
+        La luz general no es toda la luz de la estancia. Se dimensionan primero las capas que existen de verdad según lo que has contestado —las lámparas, el acento{isDining ? ", la mesa" : ""}— y la general se queda con el resto. Es lo que permite que el techo vaya despejado{onlyLights ? "" : `: aquí, ${grid.n} downlights en vez de llenarlo de agujeros`}. Dónde colocar cada luminaria lo tienes en las recomendaciones.
       </p>
+      {drift && (
+        <p className="font-body t-caption mt-2" style={{ color: COLORS.subtext }}>
+          {total > need
+            ? `La suma pasa de los ${need.toLocaleString("es-ES")} lm que pedían las zonas. Ya hemos simplificado lo que se podía simplificar; lo que queda es lo que has pedido, y una lámpara de lectura da ${LIVING_READING_LM} lm tenga tu salón los metros que tenga. Bajarla para cuadrar la cifra sería dejarte sin poder leer. Va regulada: solo estará a plena potencia cuando la uses.`
+            : `La suma se queda algo por debajo de los ${need.toLocaleString("es-ES")} lm de referencia porque las luminarias vienen en escalones de flujo: este es el reparto real más cercano.`}
+        </p>
+      )}
 
       {estar.simplified.length > 0 && (
         <>
@@ -3570,56 +3621,25 @@ function LivingLayerBlock({ layers }) {
           </div>
         </>
       )}
-
-      {(estar.ambient.length > 0 || estar.accent) && (
-        <>
-          <p className="font-body t-eyebrow mt-4 mb-2.5" style={{ color: COLORS.accent }}>{isDining ? "Las capas de la zona de estar" : "Las otras capas del salón"}</p>
-          <div className="flex flex-col gap-2.5 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
-            {estar.ambient.map((a) => (
-              <div key={a.id} className="flex items-start gap-3">
-                <Lightbulb size={15} color={COLORS.accent} strokeWidth={1.8} className="shrink-0 mt-0.5" />
-                <p className="font-body t-small" style={{ color: COLORS.text }}>
-                  <span className="font-medium">{a.label} — {a.lm} lm{a.dimmable ? ", regulable" : ""}</span>
-                  <span style={{ color: COLORS.subtext }}>, {a.detail}</span>
-                </p>
-              </div>
-            ))}
-            {estar.accent && (
-              <div className="flex items-start gap-3">
-                <Sparkles size={15} color={COLORS.accent} strokeWidth={1.8} className="shrink-0 mt-0.5" />
-                <p className="font-body t-small" style={{ color: COLORS.text }}>
-                  <span className="font-medium">{estar.accent.label} — {estar.accent.lm} lm</span>
-                  <span style={{ color: COLORS.subtext }}>, {estar.accent.detail}</span>
-                </p>
-              </div>
-            )}
-          </div>
-        </>
-      )}
     </div>
   );
 }
 
-/* El plano de dos zonas.
+/* El esquema de distribución de techo. SOLO en reforma.
  *
- * Su trabajo es que se entienda de un vistazo cómo se reparten las capas
- * entre el salón y el comedor. No es un plano de obra: por eso aquí no hay
- * ni una cota. Las distancias, la altura del colgante y los lúmenes de cada
- * pieza están en el reparto y en las recomendaciones; repetirlos dentro del
- * dibujo lo convertía en un plano técnico que nadie mira de un vistazo.
+ * Aquí sí hay algo real que enseñar: los puntos no existen todavía y Nemul los
+ * está proponiendo, así que su posición es la propuesta. Lo que se dibuja son
+ * puntos de luz, no muebles: el sofá y el mueble de la televisión estuvieron
+ * un rato en este plano y se quitaron, porque Nemul no sabe dónde están y
+ * dibujarlos se leía como una instrucción de dónde ponerlos.
  *
- * Las dos mitades tienen que estar dibujadas. Antes la zona de estar salía
- * vacía —solo un rectángulo blanco— y el esquema parecía decir que en el
- * salón no hay luz: se leía como un plano del comedor con un hueco al lado.
- * Ahora lleva el sofá, el mueble de la televisión y las tres capas que Nemul
- * recomienda, cada una con su símbolo.
+ * La mesa sí se dibuja, y por una razón concreta: es lo que da sentido al
+ * recuadro discontinuo y a que la retícula se pare antes de llegar. Va
+ * declarada como referencia en el pie.
  *
- * Lo único que NO se dibuja con posición es la luz general cuando el usuario
- * solo va a cambiar luminarias: sus puntos ya están donde están, y poner
- * cuatro círculos "ideales" se lee como el sitio donde deberían ir los suyos.
- * En su lugar, la zona se baña de luz y se dice de dónde sale. */
+ * Sin cotas. Las distancias están en las recomendaciones. */
 function LivingZonePlan({ layers }) {
-  const { plan, grid, dining, onlyLights, estar } = layers;
+  const { plan, grid, dining, estar } = layers;
   const { roomW, roomD, diningDepth, estarW } = plan;
 
   const PAD = 18, BOX_W = 320;
@@ -3630,30 +3650,14 @@ function LivingZonePlan({ layers }) {
   const Y = (m) => PAD + m * py;
   const splitX = X(estarW);
 
-  const reading = estar.ambient.find((a) => a.id === "lectura");
-  const ambientLamp = estar.ambient.find((a) => a.id !== "lectura");
-  const hasTv = !!estar.accent;
-
-  // Muebles en fracciones de la zona, para que el dibujo aguante cualquier
-  // tamaño de estancia. El sofá abajo, el mueble de la tele enfrente.
-  const EW = estarW, D = roomD;
-  const sofa = { x0: 0.10 * EW, x1: 0.68 * EW, y0: 0.79 * D, y1: 0.93 * D };
-  const tv = { x0: 0.16 * EW, x1: 0.62 * EW, y0: 0.055 * D, y1: 0.155 * D };
-
-  // Retícula de la zona de estar: solo cuando hay obra y, por tanto, posición.
   const dots = [];
-  if (!onlyLights) {
-    for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) {
-      dots.push({
-        x: grid.cols > 1 ? grid.mx + c * grid.sx : estarW / 2,
-        y: grid.rows > 1 ? grid.my + r * grid.sy : roomD / 2,
-      });
-    }
+  for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) {
+    dots.push({
+      x: grid.cols > 1 ? grid.mx + c * grid.sx : estarW / 2,
+      y: grid.rows > 1 ? grid.my + r * grid.sy : roomD / 2,
+    });
   }
 
-  /* La mesa se dibuja a escala de la zona, no de una medida que nadie nos ha
-   * dado: ocupa poco más de la mitad del comedor en las dos direcciones, que
-   * es lo que deja el paso de las sillas. Es una referencia visual. */
   const tW = diningDepth * 0.55;
   const tL = Math.min(roomD * 0.45, 1.7);
   const tCx = estarW + diningDepth / 2;
@@ -3670,59 +3674,23 @@ function LivingZonePlan({ layers }) {
   const clampY = (m) => Math.min(Math.max(m, 0.35), roomD - 0.35);
   const fills = dining.fillPieces ? [clampY(tCy - fillOff), clampY(tCy + fillOff)] : [];
 
-  // Una lámpara de pie o de sobremesa: pantalla y halo. El mismo símbolo para
-  // la de lectura y la de ambiente, porque son la misma clase de luz.
-  const Lamp = ({ mx, my }) => (
-    <g>
-      <circle cx={X(mx)} cy={Y(my)} r="14" fill={COLORS.bulb} opacity="0.26" />
-      <path d={`M${X(mx) - 8},${Y(my) + 5} L${X(mx)},${Y(my) - 7} L${X(mx) + 8},${Y(my) + 5} Z`}
-        fill={COLORS.bulb} stroke={COLORS.text} strokeWidth="1.4" strokeLinejoin="round" />
-    </g>
-  );
-
-  const zoneLabel = (t) => (
-    <tspan fontFamily="Montserrat, sans-serif" fontSize="9" fontWeight="600" fill={COLORS.subtext}>{t}</tspan>
-  );
-
   return (
     <div data-pdf-keep>
-      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Cómo se reparte la luz entre las dos zonas</p>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Dónde abrir los puntos de techo</p>
       <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
         <svg viewBox={`0 0 ${vbW} ${vbH}`} xmlns="http://www.w3.org/2000/svg" role="img"
-          aria-label={`Esquema de las dos zonas. En la de estar: ${onlyLights ? "la luz general sale de los puntos de techo que ya existen" : `${grid.n} focos generales`}${reading ? ", un pie de lectura junto al sofá" : ""}${ambientLamp ? ", una lámpara de ambiente en el extremo opuesto" : ""}${hasTv ? " y una tira de acento en el mueble de la televisión" : ""}. En la de comedor: ${n === 1 ? "un colgante" : `${n} colgantes`} sobre la mesa y luz de apoyo en el borde, sin ninguna luz general encima de la mesa.`}
+          aria-label={`Esquema de techo: ${grid.n} focos generales repartidos solo por la zona de estar, ${n === 1 ? "un colgante" : `${n} colgantes`} sobre la mesa y luz de apoyo en el borde del comedor. Ningún foco general sobre la mesa.`}
           style={{ display: "block", width: "100%", height: "auto" }}>
           <defs>
             <radialGradient id="nemul-zone-pool">
               <stop offset="0" stopColor={COLORS.bulb} stopOpacity="0.42" />
               <stop offset="1" stopColor={COLORS.bulb} stopOpacity="0" />
             </radialGradient>
-            <linearGradient id="nemul-zone-wash" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor={COLORS.bulb} stopOpacity="0.20" />
-              <stop offset="1" stopColor={COLORS.bulb} stopOpacity="0.06" />
-            </linearGradient>
           </defs>
 
           <rect x={PAD} y={PAD} width={BOX_W} height={BOX_H} rx="4" fill="#FFFDF8" stroke={COLORS.text} strokeWidth="2" />
           <rect x={splitX} y={PAD} width={PAD + BOX_W - splitX} height={BOX_H} fill={COLORS.bgAlt} opacity="0.8" />
-
-          {/* Luz general sin posición: la zona bañada, y dicho de dónde sale. */}
-          {onlyLights && <rect x={PAD + 2} y={PAD + 2} width={splitX - PAD - 4} height={BOX_H - 4} fill="url(#nemul-zone-wash)" />}
-
           <line x1={splitX} y1={PAD} x2={splitX} y2={PAD + BOX_H} stroke={COLORS.subtext} strokeWidth="1.6" strokeDasharray="7 5" />
-
-          {/* ---------- zona de estar ---------- */}
-          {hasTv && (
-            <>
-              <rect x={X(tv.x0)} y={Y(tv.y0)} width={(tv.x1 - tv.x0) * px} height={(tv.y1 - tv.y0) * py} rx="2" fill={COLORS.bgAlt} stroke={COLORS.subtext} strokeWidth="1.2" />
-              <line x1={X(tv.x0)} y1={Y(tv.y1) + 4} x2={X(tv.x1)} y2={Y(tv.y1) + 4} stroke={COLORS.bulb} strokeWidth="4" strokeLinecap="round" />
-              <text x={X((tv.x0 + tv.x1) / 2)} y={Y((tv.y0 + tv.y1) / 2) + 3.5} textAnchor="middle">{zoneLabel("TV")}</text>
-            </>
-          )}
-          <rect x={X(sofa.x0)} y={Y(sofa.y0)} width={(sofa.x1 - sofa.x0) * px} height={(sofa.y1 - sofa.y0) * py} rx="5" fill={COLORS.bgAlt} stroke={COLORS.subtext} strokeWidth="1.2" />
-          <text x={X((sofa.x0 + sofa.x1) / 2)} y={Y((sofa.y0 + sofa.y1) / 2) + 3.5} textAnchor="middle">{zoneLabel("sofá")}</text>
-
-          {reading && <Lamp mx={0.11 * EW} my={0.68 * D} />}
-          {ambientLamp && <Lamp mx={0.80 * EW} my={0.86 * D} />}
 
           {dots.map((p, i) => (
             <circle key={`pool${i}`} cx={X(p.x)} cy={Y(p.y)} r={Math.min(grid.cols > 1 ? grid.sx * px : BOX_W, grid.rows > 1 ? grid.sy * py : BOX_H) * 0.55} fill="url(#nemul-zone-pool)" />
@@ -3731,11 +3699,10 @@ function LivingZonePlan({ layers }) {
             <circle key={`d${i}`} cx={X(p.x)} cy={Y(p.y)} r="6" fill={COLORS.bulb} stroke={COLORS.text} strokeWidth="1.5" />
           ))}
 
-          {/* ---------- zona de comedor ---------- */}
           <rect x={kx0} y={ky0} width={kx1 - kx0} height={ky1 - ky0} rx="4" fill="none" stroke={COLORS.warning} strokeWidth="1.3" strokeDasharray="6 4" />
           {round
-            ? <circle cx={X(tCx)} cy={Y(tCy)} r={Math.min((tW / 2) * px, (tL / 2) * py)} fill={COLORS.bgAlt} stroke={COLORS.text} strokeWidth="1.5" />
-            : <rect x={X(tCx - tW / 2)} y={Y(tCy - tL / 2)} width={tW * px} height={tL * py} rx="3" fill={COLORS.bgAlt} stroke={COLORS.text} strokeWidth="1.5" />}
+            ? <circle cx={X(tCx)} cy={Y(tCy)} r={Math.min((tW / 2) * px, (tL / 2) * py)} fill={COLORS.bgAlt} stroke={COLORS.subtext} strokeWidth="1.4" strokeDasharray="4 3" />
+            : <rect x={X(tCx - tW / 2)} y={Y(tCy - tL / 2)} width={tW * px} height={tL * py} rx="3" fill={COLORS.bgAlt} stroke={COLORS.subtext} strokeWidth="1.4" strokeDasharray="4 3" />}
           {pend.map((m, i) => (
             <g key={`c${i}`}>
               <circle cx={X(tCx)} cy={Y(m)} r="15" fill={COLORS.bulb} opacity="0.34" />
@@ -3753,33 +3720,9 @@ function LivingZonePlan({ layers }) {
 
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
           <div className="flex items-center gap-2">
-            {onlyLights
-              ? <span className="rounded" style={{ width: 14, height: 11, background: `linear-gradient(${COLORS.bulb}88, ${COLORS.bulb}22)`, border: `1px solid ${COLORS.bulb}` }} />
-              : <span className="rounded-full" style={{ width: 11, height: 11, backgroundColor: COLORS.bulb, boxShadow: `inset 0 0 0 1.4px ${COLORS.text}` }} />}
-            <span className="font-body t-caption" style={{ color: COLORS.subtext }}>
-              {onlyLights
-                ? `Luz general — tus puntos de techo, ${estar.generalLm.toLocaleString("es-ES")} lm`
-                : `Luz general — ${grid.n} focos de ${grid.lmPer} lm`}
-            </span>
+            <span className="rounded-full" style={{ width: 11, height: 11, backgroundColor: COLORS.bulb, boxShadow: `inset 0 0 0 1.4px ${COLORS.text}` }} />
+            <span className="font-body t-caption" style={{ color: COLORS.subtext }}>Luz general — {grid.n} focos de {grid.lmPer} lm</span>
           </div>
-          {reading && (
-            <div className="flex items-center gap-2">
-              <span style={{ width: 0, height: 0, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderBottom: `10px solid ${COLORS.bulb}` }} />
-              <span className="font-body t-caption" style={{ color: COLORS.subtext }}>Pie de lectura — {reading.lm} lm</span>
-            </div>
-          )}
-          {ambientLamp && (
-            <div className="flex items-center gap-2">
-              <span style={{ width: 0, height: 0, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderBottom: `10px solid ${COLORS.bulb}` }} />
-              <span className="font-body t-caption" style={{ color: COLORS.subtext }}>{ambientLamp.label} — {ambientLamp.lm} lm</span>
-            </div>
-          )}
-          {hasTv && (
-            <div className="flex items-center gap-2">
-              <span className="rounded-full" style={{ width: 14, height: 4, backgroundColor: COLORS.bulb }} />
-              <span className="font-body t-caption" style={{ color: COLORS.subtext }}>Acento en el mueble de TV — {estar.accent.lm} lm</span>
-            </div>
-          )}
           <div className="flex items-center gap-2">
             <span className="rounded-full" style={{ width: 13, height: 13, backgroundColor: COLORS.bulb, boxShadow: `inset 0 0 0 1.6px ${COLORS.text}` }} />
             <span className="font-body t-caption" style={{ color: COLORS.subtext }}>{n === 1 ? `Colgante de ${dining.pendantPer} lm` : `${n} colgantes de ${dining.pendantPer} lm`}</span>
@@ -3797,12 +3740,10 @@ function LivingZonePlan({ layers }) {
         </div>
 
         <p className="font-body t-small italic mt-2.5" style={{ color: COLORS.subtext }}>
-          {onlyLights
-            ? "La luz general de la zona de estar aparece como un baño de luz y no como una serie de focos: dijiste que solo vas a cambiar las luminarias, así que tus puntos de techo ya están donde están y Nemul no va a inventarte posiciones nuevas."
-            : "Los focos generales se reparten solo por la zona de estar. Ninguno entra en el recuadro discontinuo de la mesa."}
+          Solo se dibujan puntos de luz. Las lámparas de pie y de sobremesa no salen aquí porque no dependen del techo, y los muebles tampoco: Nemul no sabe cómo tienes puesto el salón.
         </p>
         <p className="font-body t-small mt-2.5 rounded-lg p-3" style={{ color: COLORS.text, backgroundColor: COLORS.bgAlt }}>
-          <span className="font-medium">El dibujo es orientativo.</span> La forma de la estancia, el corte entre las dos zonas y dónde hemos puesto la mesa y el sofá los ha supuesto Nemul: no sabemos cómo es tu salón-comedor por dentro. Lo que sí puedes llevarte tal cual es el criterio: la luz general por la zona de estar, las lámparas donde de verdad te sientas, la mesa con su propia luminaria, y nada de la general encima de la mesa.
+          <span className="font-medium">El esquema es orientativo.</span> La forma de la estancia, el corte entre las dos zonas y el lugar de la mesa —dibujada con línea discontinua— los ha supuesto Nemul a partir de tus metros cuadrados. Lo que puedes llevarte tal cual es el criterio: los focos generales solo por la zona de estar, y ninguno sobre la mesa ni pegado a ella.
         </p>
       </div>
     </div>
@@ -4063,8 +4004,16 @@ function TechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) 
 
           <LivingLayerBlock layers={layers} />
 
+          {/* El salón conserva su esquema orientativo en los dos modos, con el
+              aviso de siempre de que es un reparto recomendado y no una
+              instalación que haya que abrir.
+
+              El salón-comedor no: ahí el dibujo tendría que colocar la mesa y
+              el corte entre las dos zonas, y ninguna de las dos cosas las
+              sabe Nemul. Solo se dibuja cuando hay reforma y los puntos que
+              se enseñan son de verdad una propuesta. */}
           {layers.isDining
-            ? <LivingZonePlan layers={layers} />
+            ? (!onlyLights && <LivingZonePlan layers={layers} />)
             : <CeilingPlan grid={grid} onlyLights={onlyLights} />}
 
           <TipsList tips={tips} />
