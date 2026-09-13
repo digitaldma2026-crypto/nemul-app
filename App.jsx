@@ -129,13 +129,13 @@ const FONT_STYLE = `
 `;
 
 const ROOMS = [
-  { id: "living", label: "Salón / Salón-comedor", Icon: Sofa },
-  /* El salón-comedor deja de ser una habitación aparte: ahora lo identifica
-   * la opción "Tengo zona de comedor" dentro del cuestionario del salón. Se
-   * queda aquí, oculto del selector, porque los planes que ya estén guardados
-   * lo tienen apuntado y loadSavedPlans() descarta con .filter(Boolean) todo
-   * id que no encuentre: quitarlo del todo les borraría la habitación. */
-  { id: "livingDining", label: "Salón-Comedor abierto", Icon: Sofa, hidden: true },
+  { id: "living", label: "Salón", Icon: Sofa },
+  /* Salón y salón-comedor vuelven a ser dos estancias distintas, y no es solo
+   * una etiqueta: al elegir "Salón-comedor" Nemul ya sabe desde el principio
+   * que hay dos zonas principales —zona de estar y zona de comedor— y usa ese
+   * dato después, al montar las capas de luz. En "Salón" no se da por supuesta
+   * ninguna zona de comedor: si alguien come ahí, elige la otra estancia. */
+  { id: "livingDining", label: "Salón-comedor", Icon: Sofa },
   { id: "kitchen", label: "Cocina", Icon: ChefHat },
   { id: "kitchenOpen", label: "Cocina abierta al salón", Icon: ChefHat },
   { id: "bedroom", label: "Dormitorio", Icon: BedDouble },
@@ -439,12 +439,14 @@ function getLux(roomId, light) {
  * pedían lo mismo por otro camino. Ahora se pregunta una sola vez y en el
  * idioma de quien contesta: cómo vive el salón, no qué luminaria quiere.
  *
- * "Tengo zona de comedor" es además lo que identifica un salón-comedor: por
- * eso ya no hay dos habitaciones distintas en la lista. */
+ * La zona de comedor ya no se pregunta aquí: la dice la estancia elegida. En
+ * "Salón" no la hay, y en "Salón-comedor" la damos por sabida —preguntarla
+ * sería pedir un dato que ya tenemos. Los planes antiguos que la guardaron
+ * como actividad se siguen leyendo (ver hasDining en generateLivingReport). */
 const LIVING_ACTIVITY_OPTIONS = [
-  { id: "dining", label: "Tengo zona de comedor", Icon: UtensilsCrossed },
   { id: "tv", label: "Tengo zona de televisión", Icon: Tv },
-  { id: "read", label: "Me gusta leer en el salón", Icon: BookOpen },
+  // "aquí" y no "en el salón": la misma lista se usa en el salón-comedor.
+  { id: "read", label: "Me gusta leer aquí", Icon: BookOpen },
   { id: "relax", label: "Principalmente para descansar", Icon: Sofa },
 ];
 
@@ -468,72 +470,308 @@ const SALON_AREA_BY_SIZE = Object.fromEntries(SALON_SIZE_OPTIONS.map((o) => [o.i
  * rincón cálido sin enfriar ni calentar la habitación entera. */
 const LIVING_TEMP_K = 3000;
 
-function generateLivingReport(answers = {}) {
-  const { activities = [], size, light, ceiling, renovationStatus, diningShape } = answers;
+/* ---------------------------------------------------------------------------
+ * CAPAS DEL SALÓN Y DEL SALÓN-COMEDOR
+ *
+ * El cambio de fondo: los m² dejan de ser una superficie uniforme.
+ *
+ * Antes, un salón-comedor de 20 m² pedía 3.500 lm y el cálculo los repartía en
+ * nueve downlights por todo el techo, mesa incluida. Eso es iluminar una mesa
+ * de comedor con luz general, que es exactamente lo que no se hace: la mesa es
+ * una zona funcional propia y se resuelve con su colgante.
+ *
+ * Ahora Nemul parte la estancia en zonas ANTES de calcular nada, y dentro de
+ * cada zona reparte por capas. La regla de reparto es la del dormitorio: se
+ * dimensionan primero las capas concretas —las que existen de verdad según lo
+ * que ha contestado— y la general se queda con el resto. Así el reparto se
+ * adapta solo: un salón con televisión y rincón de lectura tiene menos luz de
+ * techo que uno sin nada de eso, porque el pie y la tira LED ya ponen su parte.
+ *
+ * Los porcentajes de aquí abajo son el arranque de una capa cuando esa capa
+ * existe. No son cuotas que haya que rellenar siempre. */
+
+/* La partición estar / comedor es una ESTIMACIÓN de Nemul, no un dato del
+ * usuario: no sabemos el tamaño de su mesa ni dónde está, y no lo preguntamos
+ * para no alargar el cuestionario. Un 30 % es lo que ocupa de verdad una mesa
+ * con las sillas retiradas y paso alrededor. Los topes evitan los dos
+ * absurdos: un comedor de 3,6 m² donde no cabe la mesa, y uno de 12 m² que se
+ * comería el salón. Todo lo que salga de aquí se presenta como orientativo.
+ * Ver ZoneSplitBlock y LivingZonePlan. */
+const LIVING_DINING_AREA_SHARE = 0.3;
+const LIVING_DINING_AREA_MIN = 5;
+const LIVING_DINING_AREA_MAX = 9;
+
+// Las capas concretas son piezas físicas, y una lámpara de pie da lo que da
+// tenga el salón 12 o 40 m². Por eso van en lúmenes absolutos y no en
+// proporción: escalar el acento con la superficie pedía tiras LED de 1.000 lm
+// en un salón grande, que no es una tira LED, es otra luz general.
+const LIVING_ACCENT_LM = 350;         // tira LED en el mueble de televisión
+const LIVING_AMBIENT_PIECE_LM = 300;  // una lámpara de pie o de sobremesa
+const LIVING_READING_LM = 450;        // el pie de lectura, regulable
+
+// Y el contrapeso: por muchas capas que se activen, la general nunca baja de
+// la mitad de lo que pide la zona. Sin este suelo, una zona de estar pequeña
+// con televisión, lectura y relax se quedaba con la luz general en negativo.
+const LIVING_GENERAL_MIN_SHARE = 0.5;
+
+// El colgante resuelve la mesa; el resto de la zona necesita un relleno en el
+// borde, o al encender solo el colgante la mesa flota en un pozo negro.
+const LIVING_PENDANT_SHARE = 0.75;
+const LIVING_DINING_FILL_PIECES = 2;
+
+// Cuántos colgantes según la forma de la mesa, que es el único dato real que
+// tenemos de ella. Es la misma regla que ya decían los consejos del comedor.
+const LIVING_PENDANTS_BY_SHAPE = { redonda: 1, cuadrada: 1, rectangular: 3 };
+
+/* La altura del colgante se mide DESDE EL TABLERO, no desde el suelo.
+ *
+ * Desde el suelo la cifra no sirve para nada: obliga a saber la altura de la
+ * mesa y a restar, y cada mesa es de una altura. Desde el tablero es una
+ * medida que se comprueba con un metro en la mano. Y se mide hasta la PARTE
+ * INFERIOR de la luminaria, que es lo que entra en el campo de visión de
+ * quien está sentado enfrente. */
+const PENDANT_H_MIN_CM = 75;
+const PENDANT_H_MAX_CM = 85;
+const PENDANT_H_TEXT = `${PENDANT_H_MIN_CM}–${PENDANT_H_MAX_CM} cm`;
+
+/* La zona de estar se reparte con la geometría suelta del dormitorio, no con
+ * la del salón, y por el mismo motivo que allí: su techo ya no es toda la luz
+ * de la estancia. De los 2.450 lm de una zona de estar de 14 m², la general
+ * pone 1.350 y el resto lo ponen el pie, la sobremesa y el acento. Exigirle la
+ * uniformidad de un techo que trabaja solo es lo que llenaba de agujeros el
+ * salón. Con los topes del salón esa misma zona pedía seis downlights; con
+ * estos, cuatro. */
+const LIVING_GRID_LIMITS = BEDROOM_GRID_LIMITS;
+// Ningún foco de la general entra en la mesa ni en su corona de 60 cm. Se
+// dice en el informe y se dibuja en el plano.
+const LIVING_TABLE_KEEPOUT_M = 0.6;
+
+/* La partición de la estancia. En el salón hay una sola zona y es la estancia
+ * entera; en el salón-comedor son dos. */
+function livingZones(area, roomId) {
+  if (roomId !== "livingDining") return { estar: area, comedor: 0 };
+  const raw = area * LIVING_DINING_AREA_SHARE;
+  const comedor = Math.round(Math.min(LIVING_DINING_AREA_MAX, Math.max(LIVING_DINING_AREA_MIN, raw)) * 10) / 10;
+  return { estar: Math.round((area - comedor) * 10) / 10, comedor };
+}
+
+/* El reparto completo: zonas, capas y retícula de la zona de estar.
+ *
+ * Devuelve lo que aporta cada capa, no lo que "debería" aportar: si las capas
+ * concretas suman más de lo que la zona pedía, el total sube y se dice. Un
+ * reparto que cuadra a base de recortar la lámpara de lectura a 380 lm es un
+ * reparto que miente sobre la lámpara. */
+function livingLayers(area, answers = {}, roomId = "living") {
+  const activities = answers.activities || [];
+  const zones = livingZones(area, roomId);
+  const isDining = zones.comedor > 0;
+  const onlyLights = answers.renovationStatus === "onlyLights";
+
+  // ---------- zona de estar ----------
+  const estarLux = getLux("living", answers.light);
+  const estarNeed = roundLm(zones.estar * estarLux, 50);
+
+  let ambient = [];
+  if (activities.includes("read")) {
+    ambient.push({
+      id: "lectura", lm: LIVING_READING_LM, dimmable: true,
+      label: "Pie de lectura",
+      detail: "junto al sofá y por detrás del hombro, con la pantalla por debajo de la altura de los ojos al sentarse",
+    });
+  }
+  ambient.push({
+    id: "ambiente", lm: LIVING_AMBIENT_PIECE_LM, dimmable: true,
+    label: "Lámpara de ambiente",
+    detail: "de sobremesa o de pie, en el extremo opuesto del sofá, para que la luz venga de dos sitios y no de uno",
+  });
+  // Quien dice que el salón es sobre todo para descansar pide luz repartida y
+  // baja, no un foco más: se le da una segunda pieza en vez de subir el techo.
+  if (activities.includes("relax")) {
+    ambient.push({
+      id: "relax", lm: LIVING_AMBIENT_PIECE_LM, dimmable: true,
+      label: "Segundo punto de ambiente",
+      detail: "una lámpara más, baja y cálida, para las noches en las que la luz general sobra",
+    });
+  }
+  let accent = activities.includes("tv")
+    ? { lm: LIVING_ACCENT_LM, label: "Acento", detail: "una tira LED en el mueble de la televisión, oculta tras el canto: da profundidad y evita el contraste duro entre la pantalla y la pared" }
+    : null;
+
+  /* ---------- Simplificación de capas en estancias pequeñas ----------
+   *
+   * En 7 m² de zona de estar, cuatro capas encendidas piden más luz de la que
+   * cabe: una lámpara de lectura da 450 lm tenga la estancia los metros que
+   * tenga, así que en una pequeña las piezas concretas se comen la cuenta.
+   *
+   * El orden en que se recorta es de menos a más funcional:
+   *   1. general  — nunca se quita, tiene suelo propio
+   *   2. mesa     — nunca se quita en un salón-comedor: es la razón de la estancia
+   *   3. lectura  — nunca se quita ni se baja de LIVING_READING_LM si lo ha pedido
+   *   4. ambiental — se funde con otra capa cuando se puede
+   *   5. acento   — lo primero que sale
+   *
+   * "Quitar" no significa prohibir: significa que deja de ocupar un hueco en el
+   * reparto de lúmenes. La tira LED se sigue pudiendo poner, y se dice. Lo que
+   * no se hace nunca es recortar la lámpara de lectura para que cuadre la suma:
+   * una lámpara de lectura de 380 lm no lee. */
+  const softBudget = roundLm(estarNeed * (1 - LIVING_GENERAL_MIN_SHARE), 50);
+  const softLm = () => ambient.reduce((acc, a) => acc + a.lm, 0) + (accent ? accent.lm : 0);
+  const simplified = [];
+
+  if (softLm() > softBudget && accent) {
+    simplified.push({
+      id: "acento",
+      text: "El acento deja de contar como capa: aquí la luz general y las lámparas ya cubren lo que pide la estancia. La tira LED del mueble de la televisión la puedes poner igual, pero como detalle y regulada baja, no como una capa más de luz.",
+    });
+    accent = null;
+  }
+  if (softLm() > softBudget && ambient.some((a) => a.id === "relax")) {
+    simplified.push({
+      id: "relax",
+      text: "Las dos lámparas de ambiente se juntan en una sola: en estos metros, dos puntos de relax además de la general sobran, y con una regulable consigues lo mismo.",
+    });
+    ambient = ambient.filter((a) => a.id !== "relax");
+  }
+  if (softLm() > softBudget && ambient.some((a) => a.id === "lectura") && ambient.some((a) => a.id === "ambiente")) {
+    simplified.push({
+      id: "ambiente",
+      text: "El pie de lectura hace también de lámpara de ambiente: al ser regulable, a plena potencia sirve para leer y atenuado da el ambiente de la tarde. No hace falta una segunda lámpara.",
+    });
+    ambient = ambient.filter((a) => a.id !== "ambiente");
+  }
+  // Y aquí se para. Si lo que queda es solo el pie de lectura y aun así pasa
+  // del presupuesto, se queda: es una necesidad que el usuario ha declarado.
+
+  const ambientLm = ambient.reduce((acc, a) => acc + a.lm, 0);
+  const accentLm = accent ? accent.lm : 0;
+
+  const generalLm = Math.max(
+    roundLm(estarNeed * LIVING_GENERAL_MIN_SHARE, 50),
+    roundLm(estarNeed - ambientLm - accentLm, 50),
+  );
+  const estarTotal = generalLm + ambientLm + accentLm;
+
+  /* La retícula se calcula sobre los m² de la zona de estar y con los lúmenes
+   * de la general, nunca sobre la estancia entera ni con el total. Y con las
+   * dimensiones reales de la zona: el comedor se lleva una franja de la
+   * estancia, así que lo que le queda al estar no es un rectángulo corriente
+   * de 14 m², es 3,7 x 3,8 m. */
+  const roomW = Math.sqrt(area * PLAN_ASPECT);
+  const roomD = area / roomW;
+  const diningDepth = isDining ? zones.comedor / roomD : 0;
+  const estarDims = { w: roomW - diningDepth, d: roomD };
+  const grid = openPlanLayout(zones.estar, generalLm, 1, 200, LIVING_GRID_LIMITS, isDining ? estarDims : null);
+
+  // ---------- zona de comedor ----------
+  let dining = null;
+  if (isDining) {
+    const diningLux = getLux("dining", answers.light);
+    const need = roundLm(zones.comedor * diningLux, 50);
+    const pendantTotal = roundLm(need * LIVING_PENDANT_SHARE, 50);
+    const pieces = LIVING_PENDANTS_BY_SHAPE[answers.diningShape] || 1;
+    const pendantPer = roundLm(pendantTotal / pieces, 50);
+    const fillTotal = Math.max(0, need - pendantPer * pieces);
+    const fillPer = fillTotal > 0 ? roundLm(fillTotal / LIVING_DINING_FILL_PIECES, 50) : 0;
+    dining = {
+      area: zones.comedor, lux: diningLux, need,
+      pieces, pendantPer, pendantTotal: pendantPer * pieces,
+      fillPieces: fillPer > 0 ? LIVING_DINING_FILL_PIECES : 0,
+      fillPer, fillTotal: fillPer * LIVING_DINING_FILL_PIECES,
+      shape: answers.diningShape || null,
+    };
+  }
+
+  const total = estarTotal + (dining ? dining.pendantTotal + dining.fillTotal : 0);
+
+  return {
+    zones, isDining, onlyLights,
+    plan: { roomW, roomD, diningDepth, estarW: estarDims.w },
+    estar: { area: zones.estar, lux: estarLux, need: estarNeed, generalLm, ambient, ambientLm, accent, accentLm, total: estarTotal, simplified },
+    grid, dining, total,
+  };
+}
+
+function generateLivingReport(answers = {}, roomId = "living") {
+  const { size, light, ceiling, renovationStatus } = answers;
+  const activities = answers.activities || [];
 
   const area = SALON_AREA_BY_SIZE[size] || 20;
   const tempK = LIVING_TEMP_K;
   const lux = getLux("living", light);
-  const lumens = Math.round((lux * area) / 100) * 100;
-  // Un salón se reparte con el criterio abierto: aquí un techo despejado vale
-  // tanto como la uniformidad. La cocina, el baño y las demás siguen con
-  // planLayout, donde manda la encimera o el espejo y no el número de agujeros.
-  const grid = openPlanLayout(area, lumens, 4);
+  const layers = livingLayers(area, answers, roomId);
+  const { estar, dining, grid } = layers;
+  // El total ya no es area x lux: cada zona tiene su nivel y cada capa su
+  // flujo. Se sigue devolviendo `lumens` porque el resto del informe —el
+  // glosario, el PDF— lo lee, pero ahora es la suma real de las capas.
+  const lumens = layers.total;
+  const onlyLights = renovationStatus === "onlyLights";
+  const room = dining ? "salón-comedor" : "salón";
+  const cut = (id) => estar.simplified.some((c) => c.id === id);
 
   const tips = [];
-  const onlyLights = renovationStatus === "onlyLights";
-  tips.push(onlyLights
-    ? `Reparte la luz siguiendo el esquema del plano: unos ${spacingText(grid, true)}, y a unos ${marginText(grid)} de las paredes. Las lámparas de pie y de sobremesa que ya tienes cuentan como parte de ese reparto.`
-    : `Coloca los downlights siguiendo la retícula del plano: unos ${spacingText(grid)}, y a unos ${marginText(grid)} de las paredes.`);
+
+  // ---------- la general de la zona de estar ----------
+  if (dining) {
+    tips.push(onlyLights
+      ? `La luz general no se reparte por toda la estancia: se reparte por la zona de estar. Son unos ${estar.generalLm.toLocaleString("es-ES")} lm sobre unos ${fmtArea(estar.area)} m², y la mesa queda fuera de ese reparto porque la resuelve su propia luminaria.`
+      : `Reparte la luz general solo por la zona de estar, siguiendo el esquema del plano: unos ${spacingText(grid)}, y a unos ${marginText(grid)} de las paredes. La zona de la mesa queda fuera de esa retícula.`);
+    tips.push(`Ningún foco de la luz general debe caer sobre la mesa ni a menos de ${Math.round(LIVING_TABLE_KEEPOUT_M * 100)} cm de su borde: si la mesa ya tiene su colgante, un downlight encima solo añade una segunda sombra y le quita el papel de zona propia.`);
+  } else {
+    tips.push(onlyLights
+      ? `Reparte la luz siguiendo el esquema del plano: unos ${spacingText(grid, true)}, y a unos ${marginText(grid)} de las paredes. Las lámparas de pie y de sobremesa que ya tienes cuentan como parte de ese reparto.`
+      : `Coloca los downlights siguiendo la retícula del plano: unos ${spacingText(grid)}, y a unos ${marginText(grid)} de las paredes.`);
+  }
   tips.push(`Ajusta ${onlyLights ? "ese reparto" : "esa retícula"} a la planta real y a los muebles: es una referencia de partida, no una plantilla que haya que respetar punto por punto.`);
+  tips.push(`En un ${room} no hace falta que toda la luz salga del techo. Aquí la general pone ${estar.generalLm.toLocaleString("es-ES")} de los ${estar.total.toLocaleString("es-ES")} lm de la zona de estar; el resto lo ponen las lámparas y el acento, que es lo que hace que el techo pueda ir despejado.`);
   tips.push("Evita colocar focos justo encima del sofá o de donde os sentéis: desde ahí el foco queda en el campo de visión y deslumbra.");
-  tips.push("Al ser una zona de relax, prioriza lámparas de pared, de pie o de sobremesa sobre la luz general de techo; mejor varios puntos suaves repartidos que pocos focos potentes.");
 
-  // Los consejos que dependían de "objetivos" y "problema" se reconducen a
-  // las cuatro formas de usar el salón, que es lo único que se pregunta ya.
-  // Los que no tienen equivalente —resaltar decoración, escenas de luz— se
-  // retiran: volverán cuando Nemul los deduzca en la fase de capas, no como
-  // respuesta a una pregunta.
-  if (activities.includes("read")) tips.push("Añade una lámpara de pie regulable junto al sofá, pensada para leer sin depender de la luz general.");
+  // ---------- capas de la zona de estar ----------
+  if (activities.includes("read")) tips.push(`El pie de lectura pide unos ${LIVING_READING_LM} lm y un regulador: a plena potencia para leer, atenuado el resto del tiempo. Colócalo junto al sofá y por detrás del hombro, no enfrente.`);
   if (activities.includes("tv")) tips.push("Dirige la luz general lejos de la pantalla del televisor para evitar reflejos molestos.");
-  if (activities.includes("tv")) tips.push("Una tira LED en el mueble de televisión aportará profundidad y hará el ambiente más acogedor.");
-  if (activities.includes("relax")) tips.push("Prioriza tonos cálidos y añade la posibilidad de atenuar la luz para las noches de relax: un regulador es lo que permite pasar de un salón luminoso a uno de sobremesa.");
+  if (activities.includes("tv")) tips.push(cut("acento")
+    ? "La tira LED del mueble de televisión sigue mereciendo la pena por lo que hace —suavizar el contraste entre la pantalla encendida y la pared oscura—, pero en estos metros no la contamos como capa de luz: ponla regulada baja, como detalle."
+    : `Una tira LED de unos ${LIVING_ACCENT_LM} lm en el mueble de televisión, oculta tras el canto, aporta profundidad y suaviza el contraste entre la pantalla encendida y la pared oscura.`);
+  if (activities.includes("relax")) tips.push("Que la luz de ambiente sea regulable: es lo que permite pasar de un salón luminoso a uno de sobremesa sin cambiar ninguna bombilla.");
 
-  // Zona de comedor dentro del salón: mismo criterio que en un comedor aparte.
-  if (EXTRA_INSIGHT.dining?.shape?.[diningShape]) tips.push(EXTRA_INSIGHT.dining.shape[diningShape]);
-  if (activities.includes("dining")) {
-    // El número de comensales y el "¿quieres colgante?" eran dos preguntas
-    // para dos consejos sueltos. El primero ya se deduce del tamaño y la
-    // forma de la mesa; el segundo se recomienda de oficio, porque en un
-    // salón-comedor es lo que separa las dos zonas sin cambiar el tono.
-    tips.push("Sobre la mesa, una lámpara colgante a 70–90 cm de la superficie ilumina bien sin bloquear la vista entre comensales, y marca la zona de comedor dentro del salón.");
-    tips.push("Como el salón y el comedor comparten el mismo espacio, mantén una temperatura de luz similar en ambas zonas: usa la mesa para marcar la diferencia con un punto de luz propio, no con un tono distinto.");
+  // Lo que se ha simplificado se dice, y se dice por qué. Una capa que
+  // desaparece sin explicación se lee como un olvido.
+  estar.simplified.forEach((c) => tips.push(c.text));
+
+  // ---------- la mesa ----------
+  if (dining) {
+    tips.push(`Sobre la mesa, ${dining.pieces > 1 ? `${dining.pieces} colgantes en línea de unos ${dining.pendantPer} lm cada uno` : `un colgante de unos ${dining.pendantPer} lm`}, colgados a ${PENDANT_H_TEXT} sobre el tablero: se mide desde la superficie de la mesa hasta la parte inferior de la luminaria, no desde el suelo. A esa altura ilumina bien el plato y queda por encima de la línea de visión entre comensales.`);
+    tips.push(`Si dudas dentro del rango, ${PENDANT_H_MIN_CM} cm para una mesa donde se cena a diario y ${PENDANT_H_MAX_CM} cm si la luminaria es ancha o el techo alto: cuanto más grande es la pantalla, más alto puede ir sin cerrar la vista.`);
+    if (dining.pieces > 1) tips.push("Reparte los colgantes a lo largo del eje largo de la mesa y deja libres unos 25–30 cm en cada extremo del tablero: así la luz cubre toda la superficie sin que el colgante de la punta quede sobre el aire.");
+    if (EXTRA_INSIGHT.dining?.shape?.[dining.shape]) tips.push(EXTRA_INSIGHT.dining.shape[dining.shape]);
+    if (dining.fillPieces) tips.push(`Añade ${dining.fillPieces} puntos de unos ${dining.fillPer} lm en el borde de la zona de comedor —o un aplique equivalente—, siempre fuera de la mesa. Sin ellos, al encender solo el colgante la mesa queda flotando en un rincón oscuro.`);
+    tips.push("Mantén la misma temperatura de luz en las dos zonas: lo que separa el comedor del estar es que tiene su propio punto de luz, no un tono distinto.");
+    tips.push("Deja el colgante en un circuito propio, aparte de la luz general del estar: poder cenar con la mesa encendida y el resto apagado es la mitad del valor de tener dos zonas.");
+    if (onlyLights) tips.push("El punto de techo que ya tienes casi nunca cae sobre la mesa, sino en el centro de la estancia. Sin obra, la salida es desviar el cable hasta el eje de la mesa con un gancho o un florón de desvío, o sustituir el punto por un carril que te deje mover las luminarias.");
   }
 
+  // ---------- techo, luz natural, obra ----------
   if (ceiling === "vigas") tips.push("Con vigas vistas, evita empotrar downlights en la madera: opta por focos de superficie o carriles que se adapten a la estructura.");
   if (ceiling === "pladur") tips.push("Un falso techo de pladur es ideal para empotrar downlights e integrar tiras LED perimetrales sin obra adicional. Elige uno con acabado negro y la fuente de luz más hundida: da más confort visual que uno blanco y superficial.");
   if (ceiling === "liso") tips.push("Un techo liso no tiene cámara para empotrar: si no vas a reformar, usa downlights de superficie, y si te preocupa el deslumbramiento lateral, un accesorio tipo \"honeycomb\" lo reduce bastante.");
   if (ceiling === "noSe") tips.push("Antes de instalar downlights empotrados, confirma con un instalador qué tipo de techo tienes.");
 
-  if (light === "bright") tips.push("Como el salón recibe mucha luz natural de día, reserva la calidez de la luz artificial sobre todo para la noche.");
-  if (light === "moderate") tips.push("Con una entrada de luz natural media, la zona del salón más alejada de la ventana puede recibir menos iluminación durante buena parte del día. Refuerza esa zona con luz artificial en lugar de aumentar la intensidad general de toda la estancia.");
-  if (light === "low") tips.push("Como el salón necesita más luz, sube ligeramente los lúmenes generales calculados y refuerza también las esquinas.");
+  if (light === "bright") tips.push(`Como el ${room} recibe mucha luz natural de día, reserva la calidez de la luz artificial sobre todo para la noche.`);
+  if (light === "moderate") tips.push(`Con una entrada de luz natural media, la parte del ${room} más alejada de la ventana puede recibir menos iluminación durante buena parte del día. Refuerza esa zona con luz artificial en lugar de aumentar la intensidad general de toda la estancia.`);
+  if (light === "low") tips.push(`Como el ${room} necesita más luz, sube ligeramente los lúmenes generales calculados y refuerza también las esquinas.`);
 
-  if (renovationStatus === "renovation") tips.push("Como vas a reformar desde cero, aprovecha para dejar previstos varios circuitos independientes y reguladores de intensidad.");
-  if (renovationStatus === "onlyLights") tips.push("Como solo vas a cambiar las luminarias, prioriza soluciones que aprovechen los puntos de luz ya existentes, como sustituir un plafón por un foco orientable en el mismo lugar.");
+  if (renovationStatus === "renovation") tips.push(`Como vas a reformar desde cero, aprovecha para dejar previstos circuitos independientes${dining ? " —general del estar, colgante de la mesa y ambiente— " : " "}y reguladores de intensidad.`);
+  if (onlyLights) tips.push("Como solo vas a cambiar las luminarias, prioriza soluciones que aprovechen los puntos de luz ya existentes, como sustituir un plafón por un foco orientable en el mismo lugar.");
 
-  // Los errores se redactan siempre igual: qué evitar y por qué. Antes eran
-  // imperativos secos ("No utilices...") que sonaban a lista de
-  // prohibiciones y, sobre todo, no explicaban la consecuencia.
   const mistakes = [
-    "Evita depender de una única lámpara en el centro del salón, ya que genera una luz plana y deja las esquinas apagadas.",
+    `Evita depender de una única lámpara en el centro del ${room}, ya que genera una luz plana y deja las esquinas apagadas.`,
     "Evita mezclar temperaturas de color muy diferentes en la misma estancia, ya que el contraste hace que el conjunto se perciba desordenado.",
     "Evita colocar todos los focos pegados a las paredes, ya que iluminan más el muro que la zona donde realmente se hace vida.",
   ];
+  if (dining) mistakes.push("Evita cubrir la mesa con focos generales del techo además del colgante, ya que duplicar la luz cenital sobre el mismo sitio marca ojeras en la cara de quien come y deja la mesa sin identidad propia dentro del espacio.");
   if (activities.includes("tv")) mistakes.push("Evita dirigir la luz directamente hacia la pantalla del televisor, ya que produce reflejos que obligan a forzar la vista.");
   if (ceiling === "vigas") mistakes.push("No es recomendable empotrar focos en las vigas de madera sin consultarlo antes con un instalador, ya que son elementos estructurales y no siempre admiten perforaciones.");
 
-  return { tempK, lumens, grid, area, lux, tips: [...new Set(tips)], mistakes: [...new Set(mistakes)] };
+  return { tempK, lumens, grid, area, lux, layers, tips: [...new Set(tips)], mistakes: [...new Set(mistakes)] };
 }
 
 // ---------- Cocina ----------
@@ -769,9 +1007,9 @@ const BEDROOM_ACTIVITY_OPTIONS = [
  * puede diseñar puntos nuevos. La clave sigue siendo `renovationStatus`, la
  * misma que el resto de la casa, para no duplicar la lógica de los consejos.
  * Lo que cambia son los textos, que aquí hablan del dormitorio. */
-const LIVING_PROJECT_OPTIONS = [
+const livingProjectOptions = (roomWord) => [
   { id: "onlyLights", label: "Solo mejorar o cambiar la iluminación", Icon: Lightbulb },
-  { id: "renovation", label: "Estoy reformando el salón", Icon: Hammer },
+  { id: "renovation", label: `Estoy reformando el ${roomWord}`, Icon: Hammer },
 ];
 
 // Igual que en el dormitorio: sin "con vigas", que se resuelve como un techo
@@ -1463,16 +1701,25 @@ function generateGenericTechnicalReport(roomId, answers = {}) {
   return { tempK, lumens, grid, area, lux, tips, mistakes, layers };
 }
 
-const ROOM_FLOWS = {
-  /* Un solo recorrido para salón y salón-comedor: lo que antes eran dos
-   * habitaciones distintas ahora lo distingue la opción "Tengo zona de
-   * comedor", que además activa la pregunta de la forma de la mesa. */
-  living: (answers = {}) => [
-    { key: "renovationStatus", title: "¿Qué quieres hacer?", subtitle: "Esto decide si nos adaptamos a lo que ya hay o podemos diseñar de cero.", type: "single", layout: "list", options: LIVING_PROJECT_OPTIONS, reactions: {
+/* Salón y salón-comedor comparten las mismas preguntas, no el mismo recorrido.
+ *
+ * La diferencia está en un dato que en un caso se pregunta y en el otro ya se
+ * sabe: si hay zona de comedor. En "Salón" no la hay —nadie la ha pedido, así
+ * que Nemul no la inventa—. En "Salón-comedor" la damos por hecha desde la
+ * primera pantalla, y por eso ahí no se pregunta "¿tienes zona de comedor?"
+ * sino directamente por la mesa, que es lo único que cambia el reparto de luz.
+ *
+ * Esa misma información —dos zonas principales, estar y comedor— es la que
+ * usarán después las capas. Aquí solo se recoge. */
+const livingFlow = (roomId) => (answers = {}) => {
+  const isDining = roomId === "livingDining";
+  const room = isDining ? "salón-comedor" : "salón";
+  return [
+    { key: "renovationStatus", title: "¿Qué quieres hacer?", subtitle: "Esto decide si nos adaptamos a lo que ya hay o podemos diseñar de cero.", type: "single", layout: "list", options: livingProjectOptions(room), reactions: {
       onlyLights: "Perfecto: respetaremos los puntos de luz que ya tienes y completaremos con luminarias que no necesiten obra.",
       renovation: "Entonces podemos diseñar la distribución desde cero, sin depender de dónde estén los puntos actuales.",
     } },
-    { key: "size", title: "¿Cuántos metros cuadrados tiene aproximadamente tu salón?", subtitle: "Un cálculo aproximado está bien.", info: "En un salón suelen recomendarse entre 150 y 200 lm/m² según la luz natural que entre. Nemul hará el cálculo automáticamente.", type: "single", layout: "grid", options: SALON_SIZE_OPTIONS },
+    { key: "size", title: `¿Cuántos metros cuadrados tiene aproximadamente tu ${room}?`, subtitle: "Un cálculo aproximado está bien.", info: `En un ${room} suelen recomendarse entre 150 y 200 lm/m² según la luz natural que entre. Nemul hará el cálculo automáticamente.`, type: "single", layout: "grid", options: SALON_SIZE_OPTIONS },
     { key: "light", title: "¿Cuánta luz natural entra?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
     { key: "ceiling", title: "¿Qué tipo de techo tienes?", subtitle: "Esto determina qué soluciones de instalación son posibles.", type: "single", layout: "list", options: LIVING_CEILING_OPTIONS },
     // Con reforma no hay instalación que respetar, así que no se pregunta.
@@ -1482,21 +1729,26 @@ const ROOM_FLOWS = {
         varios: "Con varios puntos, te diremos cuánta luz debe salir del techo en conjunto y la repartes entre los que tienes.",
       } },
     ]),
-    { key: "activities", title: "¿Cómo usas tu salón?", subtitle: "Puedes elegir varias opciones.", type: "multi", layout: "list", options: LIVING_ACTIVITY_OPTIONS },
-    // La forma de la mesa sí cambia la propuesta: redonda pide un punto
-    // centrado y rectangular dos o tres en línea. Por eso sobrevive, y solo
-    // se pregunta a quien ha dicho que tiene comedor.
-    ...((answers.activities || []).includes("dining") ? [
+    { key: "activities", title: `¿Cómo usas tu ${room}?`, subtitle: isDining
+      ? "La zona de comedor ya la damos por hecha. Cuéntanos qué más haces aquí."
+      : "Puedes elegir varias opciones.", type: "multi", layout: "list", options: LIVING_ACTIVITY_OPTIONS },
+    /* La forma de la mesa sí cambia la propuesta: redonda pide un punto
+     * centrado y rectangular dos o tres en línea. En el salón-comedor se
+     * pregunta siempre; en el salón no se pregunta nunca, salvo en un plan
+     * antiguo que guardara la zona de comedor como actividad. */
+    ...(isDining || (answers.activities || []).includes("dining") ? [
       { key: "diningShape", title: "¿La mesa del comedor es redonda, rectangular o cuadrada?", subtitle: "La forma cambia cómo repartimos la luz sobre ella.", type: "single", layout: "list", options: DINING_SHAPE_OPTIONS, reactions: {
         redonda: "Con mesa redonda, un único punto centrado suele ser suficiente y queda muy equilibrado.",
         rectangular: "Con mesa rectangular, dos o tres puntos en línea reparten mejor la luz.",
         cuadrada: "Con mesa cuadrada, un colgante centrado o de varias luces cubre bien toda la superficie.",
       } },
     ] : []),
-  ],
-  // Los planes guardados como "Salón-Comedor abierto" siguen abriéndose con
-  // el mismo recorrido; ya no se puede elegir esa habitación de nuevo.
-  livingDining: (answers = {}) => getFlowForRoom("living", answers),
+  ];
+};
+
+const ROOM_FLOWS = {
+  living: livingFlow("living"),
+  livingDining: livingFlow("livingDining"),
   kitchen: [
     {
       key: "layout", title: "¿Qué distribución tiene tu cocina?", subtitle: "Elige la forma que más se parece a la tuya.", type: "single", layout: "grid", options: KITCHEN_LAYOUT_OPTIONS,
@@ -2415,7 +2667,7 @@ function sceneTrio(tempK) {
 }
 
 const SCENE_ROOM_NAME = {
-  living: "Tu salón", livingDining: "Tu salón", kitchen: "Tu cocina",
+  living: "Tu salón", livingDining: "Tu salón-comedor", kitchen: "Tu cocina",
   kitchenOpen: "Tu cocina", bedroom: "Tu dormitorio", bathroom: "Tu baño",
   dining: "Tu comedor", closet: "Tu vestidor", office: "Tu despacho",
   terrace: "Tu terraza",
@@ -2556,7 +2808,7 @@ function KelvinScale({ tempK, roomId }) {
  * tiene terraza no necesita saber qué es un IP44.
  */
 function reportBundle(roomId, answers = {}) {
-  if (roomId === "living" || roomId === "livingDining") return generateLivingReport(answers);
+  if (roomId === "living" || roomId === "livingDining") return generateLivingReport(answers, roomId);
   if (roomId === "kitchen" || roomId === "kitchenOpen") return generateKitchenReport(answers);
   if (GENERIC_TECH_ROOMS.includes(roomId)) return generateGenericTechnicalReport(roomId, answers);
   return null;
@@ -2862,13 +3114,18 @@ function axisSpreads(len) {
  * Esa preferencia por menos puntos es el ajuste entero: sin ella el cálculo
  * sube focos gratis para apretar la retícula, que es de donde venían los 12.
  */
-function openPlanLayout(area, lumens, minCount = 1, minLmPer = 0, limits = {}) {
+function openPlanLayout(area, lumens, minCount = 1, minLmPer = 0, limits = {}, dims = null) {
   // Sin `limits` manda el criterio del salón, que es el de toda la casa.
   const axisMax = limits.axisMax ?? AXIS_OPEN_MAX;
   const seMax = limits.seMax ?? SE_OPEN_MAX;
   const anisoMax = limits.anisoMax ?? GRID_ANISO_MAX;
-  const w = Math.sqrt(area * PLAN_ASPECT);
-  const d = area / w;
+  /* `dims` es para las zonas: la de estar de un salón-comedor no es un
+   * rectángulo de proporción corriente sacado de sus m², es el trozo que
+   * queda de la estancia al apartar el comedor. Sin esto, la retícula se
+   * calcularía sobre un rectángulo que no es el que dibuja el plano, y el
+   * texto y el dibujo dirían separaciones distintas. */
+  const w = dims ? dims.w : Math.sqrt(area * PLAN_ASPECT);
+  const d = dims ? dims.d : area / w;
   let best = null;
 
   for (const x of axisSpreads(w)) {
@@ -2898,7 +3155,7 @@ function openPlanLayout(area, lumens, minCount = 1, minLmPer = 0, limits = {}) {
   // el suelo de flujo, se reintenta sin él antes de cambiar de criterio: es
   // una preferencia, no un requisito. Y si aun así no hay nada, se reparte
   // como el resto de la casa antes que devolver un informe sin plano.
-  if (!best && minLmPer) return openPlanLayout(area, lumens, minCount, 0, limits);
+  if (!best && minLmPer) return openPlanLayout(area, lumens, minCount, 0, limits, dims);
   if (!best) return planLayout(area, lumens, minCount);
 
   const { x, y, n } = best;
@@ -2950,6 +3207,9 @@ function planLayout(area, lumens, minCount = 1) {
 }
 
 const fmtM = (n) => n.toFixed(1).replace(".", ",");
+// Los m² de una zona son un número redondo o casi: "14,0 m²" se lee como una
+// precisión que no tenemos, y encima es una estimación. Se dice "14 m²".
+const fmtArea = (n) => fmtM(n).replace(/,0$/, "");
 const fmtCm = (m) => `${Math.round((m * 100) / 5) * 5} cm`;
 
 // La separación que se dice en el texto es siempre la que dibuja el plano de
@@ -3190,6 +3450,377 @@ function BedroomZoneScheme({ layers }) {
   );
 }
 
+/* ---------------------------------------------------------------------------
+ * LAS PIEZAS DEL SALÓN Y DEL SALÓN-COMEDOR
+ *
+ * Tres bloques, en este orden: qué zonas hay, cuánta luz pone cada capa, y
+ * dónde va. El orden importa: quien lee tiene que entender que su estancia se
+ * ha partido en dos ANTES de ver un número de lúmenes que ya no cuadra con
+ * multiplicar los metros por los lm/m².
+ */
+
+/* Zona de estar y zona de comedor, con el aviso delante y no en letra
+ * pequeña al final: el corte lo ha estimado Nemul, no lo ha medido nadie. */
+function LivingZonesBlock({ layers }) {
+  const { zones, estar, dining } = layers;
+  return (
+    <div data-pdf-keep>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Las dos zonas de tu salón-comedor</p>
+      <div className="flex flex-col gap-3 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
+        <div className="flex gap-3">
+          {[
+            { Icon: Sofa, name: "Zona de estar", area: zones.estar, lux: estar.lux, lm: estar.need },
+            { Icon: UtensilsCrossed, name: "Zona de comedor", area: zones.comedor, lux: dining.lux, lm: dining.need },
+          ].map((z) => (
+            <div key={z.name} className="flex-1 rounded-xl p-3.5" style={{ backgroundColor: COLORS.bgAlt }}>
+              <z.Icon size={18} color={COLORS.accent} strokeWidth={1.6} />
+              <p className="font-body t-small font-medium mt-2" style={{ color: COLORS.text }}>{z.name}</p>
+              <p className="font-body t-caption mt-0.5" style={{ color: COLORS.subtext }}>unos {fmtArea(z.area)} m² · {z.lux} lm/m²</p>
+              <p className="font-display mt-1.5" style={{ color: COLORS.text, fontSize: 22, lineHeight: 1.1 }}>{z.lm.toLocaleString("es-ES")} lm</p>
+            </div>
+          ))}
+        </div>
+        <p className="font-body t-body" style={{ color: COLORS.text }}>
+          Cada zona se calcula con su propio nivel: la de estar pide una luz cómoda para estar y moverse, y la mesa pide algo más de luz sobre una superficie mucho más pequeña. Por eso el total no sale de multiplicar tus metros por un único número.
+        </p>
+      </div>
+      <p className="font-body t-small mt-2.5 rounded-lg p-3" style={{ color: COLORS.text, backgroundColor: COLORS.bgAlt }}>
+        <span className="font-medium">Este reparto de metros es una estimación de Nemul, no una medida de tu casa.</span> No te hemos preguntado el tamaño de tu mesa ni dónde está, así que hemos supuesto que el comedor ocupa alrededor de una tercera parte de la estancia, que es lo que suele ocupar una mesa con las sillas retiradas y paso alrededor. Lo que sí sabemos de tu mesa es la forma, y eso es lo que decide la solución de luz sobre ella.
+      </p>
+    </div>
+  );
+}
+
+/* De dónde sale la luz. Una fila por capa, con lo que aporta cada una, y la
+ * general al principio porque es la que se lleva el resto. */
+function LivingLayerBlock({ layers }) {
+  const { estar, dining, grid, onlyLights, isDining } = layers;
+
+  const ceilingLm = onlyLights ? estar.generalLm : grid.totalLm;
+  const ceilingLabel = onlyLights
+    ? "Luz general — tus puntos actuales"
+    : `Luz general — ${grid.n} downlights de ${grid.lmPer} lm`;
+
+  const rows = [
+    { label: ceilingLabel, lm: ceilingLm },
+    ...estar.ambient.map((a) => ({ label: `${a.label} — 1 × ${a.lm} lm`, lm: a.lm, soft: true })),
+    ...(estar.accent ? [{ label: `Acento — tira LED, ${estar.accent.lm} lm`, lm: estar.accent.lm, soft: true }] : []),
+    ...(dining ? [{ label: `Sobre la mesa — ${dining.pieces > 1 ? `${dining.pieces} × ${dining.pendantPer}` : `${dining.pendantPer}`} lm`, lm: dining.pendantTotal, dining: true }] : []),
+    ...(dining && dining.fillPieces ? [{ label: `Borde del comedor — ${dining.fillPieces} × ${dining.fillPer} lm`, lm: dining.fillTotal, dining: true }] : []),
+  ];
+  const total = rows.reduce((acc, r) => acc + r.lm, 0);
+
+  /* El total de las capas casi nunca cae clavado en lo que pedían las zonas,
+   * y cuando se aleja de verdad hay que decir por qué. Pasa sobre todo en
+   * estancias pequeñas con muchas capas activas: una lámpara de lectura da
+   * 450 lm tenga el salón 12 o 40 m², así que en uno pequeño esas piezas se
+   * comen la cuenta. No se recorta la lámpara para cuadrar el número —una
+   * lámpara de lectura de 380 lm no lee—: se explica que van reguladas. */
+  const need = estar.need + (dining ? dining.need : 0);
+  const drift = Math.abs(total / need - 1) > 0.1;
+
+  return (
+    <div>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>De dónde sale la luz</p>
+      <div className="flex flex-col gap-2.5 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
+        <LayerBar parts={rows.map((r) => ({ lm: r.lm }))} />
+        {rows.map((r, i) => (
+          <div key={i} className="flex items-baseline justify-between gap-3">
+            <p className="font-body t-small" style={{ color: COLORS.subtext }}>{r.label}</p>
+            <p className="font-body t-small font-medium shrink-0" style={{ color: COLORS.text }}>{r.lm.toLocaleString("es-ES")} lm</p>
+          </div>
+        ))}
+        <div style={{ borderTop: `1px solid ${COLORS.border}`, paddingTop: 10 }}>
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="font-body t-small font-semibold" style={{ color: COLORS.text }}>Total</p>
+            <p className="font-body t-small font-semibold shrink-0" style={{ color: COLORS.text }}>{total.toLocaleString("es-ES")} lm</p>
+          </div>
+        </div>
+        <p className="font-body t-small italic" style={{ color: COLORS.subtext }}>
+          {onlyLights
+            ? `Los ${estar.generalLm.toLocaleString("es-ES")} lm de la luz general se reparten entre los puntos de techo que ya tienes${isDining ? ", todos ellos en la zona de estar" : ""}. No hace falta que todos den lo mismo: lo que conviene mantener es el total de la capa.`
+            : "El flujo de cada capa es la propuesta; el modelo concreto lo eliges tú. Lo que conviene mantener es el total de cada capa, no el número exacto de piezas."}
+        </p>
+        {drift && (
+          <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
+            {total > need
+              ? `La suma pasa de los ${need.toLocaleString("es-ES")} lm que pedían las zonas. Ya hemos simplificado lo que se podía simplificar; lo que queda es lo que has pedido, y una lámpara de lectura da ${LIVING_READING_LM} lm tenga tu salón los metros que tenga. Bajarla para cuadrar la cifra sería dejarte sin poder leer. Va regulada: solo estará a plena potencia cuando la uses.`
+              : `La suma se queda algo por debajo de los ${need.toLocaleString("es-ES")} lm de referencia porque las luminarias vienen en escalones de flujo: este es el reparto real más cercano.`}
+          </p>
+        )}
+      </div>
+
+      <p className="font-body t-caption mt-2.5" style={{ color: COLORS.subtext }}>
+        La luz general no es toda la luz de la estancia. Se dimensionan primero las capas que existen de verdad según lo que has contestado —las lámparas, el acento{isDining ? ", la mesa" : ""}— y la general se queda con el resto. Es lo que permite que el techo vaya despejado: aquí, {onlyLights ? `${grid.n} zonas de luz` : `${grid.n} downlights`} en vez de llenarlo de agujeros.
+      </p>
+
+      {estar.simplified.length > 0 && (
+        <>
+          <p className="font-body t-eyebrow mt-4 mb-2.5" style={{ color: COLORS.accent }}>Capas que hemos simplificado</p>
+          <div className="flex flex-col gap-2.5 rounded-xl p-4" style={{ backgroundColor: COLORS.bgAlt }}>
+            <p className="font-body t-small" style={{ color: COLORS.text }}>
+              Por los metros que tiene la estancia, hemos juntado capas en vez de amontonarlas. Lo que has pedido sigue estando: la luz general{isDining ? ", la mesa" : ""} y, si lees aquí, la lámpara de lectura no se tocan.
+            </p>
+            {estar.simplified.map((c) => (
+              <div key={c.id} className="flex items-start gap-3">
+                <div className="w-1.5 h-1.5 rounded-full mt-2 shrink-0" style={{ backgroundColor: COLORS.accent }} />
+                <p className="font-body t-small" style={{ color: COLORS.subtext }}>{c.text}</p>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {(estar.ambient.length > 0 || estar.accent) && (
+        <>
+          <p className="font-body t-eyebrow mt-4 mb-2.5" style={{ color: COLORS.accent }}>{isDining ? "Las capas de la zona de estar" : "Las otras capas del salón"}</p>
+          <div className="flex flex-col gap-2.5 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
+            {estar.ambient.map((a) => (
+              <div key={a.id} className="flex items-start gap-3">
+                <Lightbulb size={15} color={COLORS.accent} strokeWidth={1.8} className="shrink-0 mt-0.5" />
+                <p className="font-body t-small" style={{ color: COLORS.text }}>
+                  <span className="font-medium">{a.label} — {a.lm} lm{a.dimmable ? ", regulable" : ""}</span>
+                  <span style={{ color: COLORS.subtext }}>, {a.detail}</span>
+                </p>
+              </div>
+            ))}
+            {estar.accent && (
+              <div className="flex items-start gap-3">
+                <Sparkles size={15} color={COLORS.accent} strokeWidth={1.8} className="shrink-0 mt-0.5" />
+                <p className="font-body t-small" style={{ color: COLORS.text }}>
+                  <span className="font-medium">{estar.accent.label} — {estar.accent.lm} lm</span>
+                  <span style={{ color: COLORS.subtext }}>, {estar.accent.detail}</span>
+                </p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* El alzado de la mesa. Es el único dibujo del informe que se mira de lado, y
+ * está aquí por una medida concreta: la altura del colgante.
+ *
+ * Se acota DESDE EL TABLERO. Desde el suelo habría que saber lo que mide la
+ * mesa y restar, y eso convierte una comprobación de treinta segundos con un
+ * metro en una cuenta. Y hasta la parte inferior de la luminaria, que es el
+ * borde que aparece en el campo de visión de quien se sienta enfrente. */
+function DiningPendantElevation({ dining }) {
+  const W = 300, H = 150;
+  const TABLE_Y = 118, TABLE_X0 = 52, TABLE_X1 = 268;
+  const LAMP_Y = 46;
+  const n = dining.pieces;
+  const xs = Array.from({ length: n }, (_, i) => TABLE_X0 + ((TABLE_X1 - TABLE_X0) * (2 * i + 1)) / (2 * n));
+
+  return (
+    <div data-pdf-keep>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>A qué altura va el colgante</p>
+      <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
+        <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" role="img"
+          aria-label={`Alzado orientativo: ${n === 1 ? "el colgante" : `los ${n} colgantes`} a ${PENDANT_H_TEXT} sobre el tablero de la mesa, medidos hasta la parte inferior de la luminaria`}
+          style={{ display: "block", width: "100%", height: "auto" }}>
+          {/* techo */}
+          <line x1="20" y1="14" x2={W - 20} y2="14" stroke={COLORS.text} strokeWidth="2" />
+          {xs.map((x, i) => (
+            <g key={i}>
+              <line x1={x} y1="14" x2={x} y2={LAMP_Y - 10} stroke={COLORS.subtext} strokeWidth="1.2" />
+              <path d={`M${x - 17},${LAMP_Y} L${x},${LAMP_Y - 14} L${x + 17},${LAMP_Y} Z`} fill={COLORS.bulb} stroke={COLORS.text} strokeWidth="1.5" strokeLinejoin="round" />
+              <path d={`M${x - 17},${LAMP_Y} L${x - 34},${TABLE_Y} L${x + 34},${TABLE_Y} L${x + 17},${LAMP_Y} Z`} fill={COLORS.bulb} opacity="0.16" />
+            </g>
+          ))}
+
+          {/* mesa: tablero y patas */}
+          <rect x={TABLE_X0} y={TABLE_Y} width={TABLE_X1 - TABLE_X0} height="7" rx="2" fill={COLORS.bgAlt} stroke={COLORS.text} strokeWidth="1.6" />
+          <line x1={TABLE_X0 + 16} y1={TABLE_Y + 7} x2={TABLE_X0 + 16} y2={H - 8} stroke={COLORS.text} strokeWidth="1.6" />
+          <line x1={TABLE_X1 - 16} y1={TABLE_Y + 7} x2={TABLE_X1 - 16} y2={H - 8} stroke={COLORS.text} strokeWidth="1.6" />
+
+          {/* la cota: del tablero a la parte inferior de la luminaria */}
+          <g stroke={COLORS.text} strokeWidth="1.2" fill="none">
+            <line x1="30" y1={LAMP_Y} x2="30" y2={TABLE_Y} />
+            <line x1="24" y1={LAMP_Y} x2="36" y2={LAMP_Y} />
+            <line x1="24" y1={TABLE_Y} x2="36" y2={TABLE_Y} />
+          </g>
+          {/* guías finas hasta los dos extremos que se están midiendo */}
+          <g stroke={COLORS.subtext} strokeWidth="0.9" strokeDasharray="3 3">
+            <line x1="30" y1={LAMP_Y} x2={xs[0] - 17} y2={LAMP_Y} />
+            <line x1="30" y1={TABLE_Y} x2={TABLE_X0} y2={TABLE_Y} />
+          </g>
+          <g transform={`rotate(-90 44 ${(LAMP_Y + TABLE_Y) / 2})`}>
+            <rect x="14" y={(LAMP_Y + TABLE_Y) / 2 - 8} width="60" height="16" rx="8" fill={COLORS.text} />
+            <text x="44" y={(LAMP_Y + TABLE_Y) / 2 + 4} textAnchor="middle" fontFamily="Montserrat, sans-serif" fontSize="10" fontWeight="600" fill="#FFF7E8">
+              {PENDANT_H_TEXT}
+            </text>
+          </g>
+
+          <text x={(TABLE_X0 + TABLE_X1) / 2} y={H - 1} textAnchor="middle" fontFamily="Montserrat, sans-serif" fontSize="9.5" fill={COLORS.subtext}>
+            el tablero de tu mesa
+          </text>
+        </svg>
+        <p className="font-body t-body mt-3" style={{ color: COLORS.text }}>
+          <span className="font-medium">{PENDANT_H_TEXT} sobre el tablero</span>, medidos desde la superficie de la mesa hasta la parte inferior de la luminaria. No lo midas desde el suelo: cada mesa tiene una altura distinta y lo que importa es el hueco que queda libre por encima de los platos.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* El plano de dos zonas.
+ *
+ * Lo que hace distinto a este plano del de cualquier otra estancia: la
+ * retícula se dibuja SOLO dentro de la zona de estar, y alrededor de la mesa
+ * hay una corona en la que no entra ningún foco general. Esa corona no es
+ * decoración del dibujo, es la regla: si la mesa ya tiene su colgante, un
+ * downlight encima le añade una segunda sombra y le quita el papel de zona.
+ *
+ * Todo lo que aquí es geometría —el rectángulo, el corte entre zonas, el
+ * tamaño de la mesa— es estimación. Se dice debajo, con esas palabras. */
+function LivingZonePlan({ layers }) {
+  const { plan, grid, dining, onlyLights, estar } = layers;
+  const { roomW, roomD, diningDepth, estarW } = plan;
+
+  const PAD = 22, BOX_W = 300;
+  const BOX_H = Math.max(130, Math.min(240, Math.round((BOX_W * roomD) / roomW)));
+  const vbW = PAD * 2 + BOX_W, vbH = BOX_H + PAD * 2 + 20;
+  const sx = BOX_W / roomW, sy = BOX_H / roomD;          // escala px por metro
+  const X = (m) => PAD + m * sx;
+  const Y = (m) => PAD + m * sy;
+
+  const splitX = X(estarW);
+
+  // Retícula de la zona de estar, con sus propias cotas y márgenes.
+  const gx = (c) => X(grid.cols > 1 ? grid.mx + c * grid.sx : estarW / 2);
+  const gy = (r) => Y(grid.rows > 1 ? grid.my + r * grid.sy : roomD / 2);
+  const dots = [];
+  for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) dots.push({ c, r });
+
+  /* La mesa se dibuja a escala de la zona, no de una medida que nadie nos ha
+   * dado: ocupa poco más de la mitad del comedor en las dos direcciones, que
+   * es lo que deja el paso de las sillas. Es una referencia visual. */
+  const tW = diningDepth * 0.55;
+  const tL = Math.min(roomD * 0.45, 1.7);
+  const tCx = estarW + diningDepth / 2;
+  const tCy = roomD / 2;
+  const round = dining.shape === "redonda";
+
+  const keep = LIVING_TABLE_KEEPOUT_M;
+  const kx0 = X(tCx - tW / 2 - keep), kx1 = Math.min(X(tCx + tW / 2 + keep), PAD + BOX_W);
+  const ky0 = Math.max(Y(tCy - tL / 2 - keep), PAD), ky1 = Math.min(Y(tCy + tL / 2 + keep), PAD + BOX_H);
+
+  const n = dining.pieces;
+  const pend = Array.from({ length: n }, (_, i) => tCy - tL / 2 + (tL * (2 * i + 1)) / (2 * n));
+  // El relleno va justo por fuera de la corona, y nunca pegado al muro.
+  const fillOff = tL / 2 + keep + 0.2;
+  const clampY = (m) => Math.min(Math.max(m, 0.35), roomD - 0.35);
+  const fills = dining.fillPieces ? [clampY(tCy - fillOff), clampY(tCy + fillOff)] : [];
+
+  return (
+    <div data-pdf-keep>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>
+        {onlyLights ? "Cómo se reparte la luz entre las dos zonas" : "Dónde va cada cosa"}
+      </p>
+      <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
+        <svg viewBox={`0 0 ${vbW} ${vbH}`} xmlns="http://www.w3.org/2000/svg" role="img"
+          aria-label={`Plano orientativo visto desde arriba, con la zona de estar y la zona de comedor separadas. ${onlyLights ? "" : `${grid.n} focos generales repartidos solo por la zona de estar. `}${n === 1 ? "Un colgante" : `${n} colgantes`} sobre la mesa, y ninguna luz general dentro de la mesa ni a menos de ${Math.round(keep * 100)} cm de su borde.`}
+          style={{ display: "block", width: "100%", height: "auto" }}>
+          <defs>
+            <radialGradient id="nemul-zone-pool">
+              <stop offset="0" stopColor={COLORS.bulb} stopOpacity="0.42" />
+              <stop offset="1" stopColor={COLORS.bulb} stopOpacity="0" />
+            </radialGradient>
+          </defs>
+
+          <rect x={PAD} y={PAD} width={BOX_W} height={BOX_H} rx="4" fill="#FFFDF8" stroke={COLORS.text} strokeWidth="2" />
+          <rect x={splitX} y={PAD} width={PAD + BOX_W - splitX} height={BOX_H} fill={COLORS.bgAlt} opacity="0.75" />
+          <line x1={splitX} y1={PAD} x2={splitX} y2={PAD + BOX_H} stroke={COLORS.subtext} strokeWidth="1.6" strokeDasharray="7 5" />
+
+          {/* corona sin luz general */}
+          <rect x={kx0} y={ky0} width={kx1 - kx0} height={ky1 - ky0} rx="4" fill="none" stroke={COLORS.warning} strokeWidth="1.3" strokeDasharray="6 4" />
+
+          {/* retícula general: solo en la zona de estar, y solo si hay obra */}
+          {!onlyLights && dots.map(({ c, r }, i) => (
+            <circle key={`pool${i}`} cx={gx(c)} cy={gy(r)} r={Math.min(grid.cols > 1 ? grid.sx * sx : BOX_W, grid.rows > 1 ? grid.sy * sy : BOX_H) * 0.6} fill="url(#nemul-zone-pool)" />
+          ))}
+          {!onlyLights && dots.map(({ c, r }, i) => (
+            <circle key={`d${i}`} cx={gx(c)} cy={gy(r)} r="6.5" fill={COLORS.bulb} stroke={COLORS.text} strokeWidth="1.6" />
+          ))}
+
+          {/* la mesa */}
+          {round
+            ? <circle cx={X(tCx)} cy={Y(tCy)} r={Math.min((tW / 2) * sx, (tL / 2) * sy)} fill={COLORS.bgAlt} stroke={COLORS.text} strokeWidth="1.5" />
+            : <rect x={X(tCx - tW / 2)} y={Y(tCy - tL / 2)} width={tW * sx} height={tL * sy} rx="3" fill={COLORS.bgAlt} stroke={COLORS.text} strokeWidth="1.5" />}
+
+          {/* colgantes */}
+          {pend.map((m, i) => (
+            <g key={`c${i}`}>
+              <circle cx={X(tCx)} cy={Y(m)} r="15" fill={COLORS.bulb} opacity="0.34" />
+              <circle cx={X(tCx)} cy={Y(m)} r="7.5" fill={COLORS.bulb} stroke={COLORS.text} strokeWidth="1.7" />
+            </g>
+          ))}
+          {/* relleno del borde, fuera de la mesa */}
+          {fills.map((m, i) => (
+            <circle key={`f${i}`} cx={X(tCx)} cy={Y(m)} r="4.5" fill="#FFFDF8" stroke={COLORS.subtext} strokeWidth="1.6" />
+          ))}
+
+          {/* cotas de la retícula del estar */}
+          {!onlyLights && grid.cols >= 2 && (
+            <>
+              <g stroke={COLORS.text} strokeWidth="1.1" fill="none">
+                <line x1={gx(0)} y1={PAD - 9} x2={gx(1)} y2={PAD - 9} strokeDasharray="3 2" />
+                <line x1={gx(0)} y1={PAD - 13} x2={gx(0)} y2={PAD - 5} />
+                <line x1={gx(1)} y1={PAD - 13} x2={gx(1)} y2={PAD - 5} />
+              </g>
+              <rect x={(gx(0) + gx(1)) / 2 - 27} y={PAD - 20} width="54" height="15" rx="7" fill={COLORS.text} />
+              <text x={(gx(0) + gx(1)) / 2} y={PAD - 9} textAnchor="middle" fontFamily="Montserrat, sans-serif" fontSize="9.5" fontWeight="600" fill="#FFF7E8">{fmtM(grid.sx)} m</text>
+            </>
+          )}
+
+          <text x={PAD + BOX_W / 2} y={vbH - 4} textAnchor="middle" fontFamily="Montserrat, sans-serif" fontSize="9.5" fill={COLORS.subtext}>
+            {layers.zones.estar + layers.zones.comedor} m² · unos {fmtM(roomW)} × {fmtM(roomD)} m
+          </text>
+        </svg>
+
+        <p className="font-body t-caption text-center mt-1" style={{ color: COLORS.subtext }}>
+          A la izquierda, la zona de estar ({fmtArea(estar.area)} m²). A la derecha, la de comedor ({fmtArea(dining.area)} m²).
+        </p>
+
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
+          {!onlyLights && (
+            <div className="flex items-center gap-2">
+              <span className="rounded-full" style={{ width: 11, height: 11, backgroundColor: COLORS.bulb, boxShadow: `inset 0 0 0 1.4px ${COLORS.text}` }} />
+              <span className="font-body t-caption" style={{ color: COLORS.subtext }}>{grid.n} focos de {grid.lmPer} lm · solo en la zona de estar</span>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <span className="rounded-full" style={{ width: 13, height: 13, backgroundColor: COLORS.bulb, boxShadow: `inset 0 0 0 1.6px ${COLORS.text}` }} />
+            <span className="font-body t-caption" style={{ color: COLORS.subtext }}>{n === 1 ? `1 colgante de ${dining.pendantPer} lm` : `${n} colgantes de ${dining.pendantPer} lm`}</span>
+          </div>
+          {dining.fillPieces > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="rounded-full" style={{ width: 11, height: 11, backgroundColor: "#FFFDF8", boxShadow: `inset 0 0 0 1.6px ${COLORS.subtext}` }} />
+              <span className="font-body t-caption" style={{ color: COLORS.subtext }}>{dining.fillPieces} puntos de borde de {dining.fillPer} lm</span>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <span style={{ width: 13, height: 11, border: `1.3px dashed ${COLORS.warning}`, borderRadius: 2 }} />
+            <span className="font-body t-caption" style={{ color: COLORS.subtext }}>sin luz general: la mesa y {Math.round(keep * 100)} cm alrededor</span>
+          </div>
+        </div>
+
+        <p className="font-body t-small italic mt-2.5" style={{ color: COLORS.subtext }}>
+          {onlyLights
+            ? `Aquí no hay retícula dibujada a propósito: dijiste que solo vas a cambiar las luminarias, así que tus puntos ya están donde están. Lo que sí dice el plano es que los ${estar.generalLm.toLocaleString("es-ES")} lm de luz general son de la zona de estar, y que la mesa se resuelve aparte.`
+            : `Los focos generales se reparten solo por la zona de estar, a unos ${spacingText(grid)} y a unos ${marginText(grid)} de las paredes. Ninguno entra en el recuadro discontinuo.`}
+        </p>
+        <p className="font-body t-small mt-2.5 rounded-lg p-3" style={{ color: COLORS.text, backgroundColor: COLORS.bgAlt }}>
+          <span className="font-medium">El dibujo es orientativo.</span> El rectángulo, el corte entre las dos zonas y el tamaño de la mesa los ha estimado Nemul a partir de tus metros cuadrados: no sabemos la forma real de tu salón-comedor ni dónde tienes puesta la mesa. Lo que sí puedes llevarte tal cual es el criterio: la luz general por la zona de estar, la mesa con su propia luminaria, y nada de la general encima de la mesa.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function CeilingPlan({ grid, onlyLights = false }) {
   const { area, w, d, n, cols, rows, sx, sy, mx, my } = grid;
   const PAD = 20;
@@ -3419,7 +4050,12 @@ function ColorTempBlock({ roomId, tempK, extra, sameToneAs }) {
 }
 
 function TechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
-  const { tempK, lumens, grid, area, lux, tips, mistakes } = generateLivingReport(answers);
+  // room.id importa: es lo que distingue el salón del salón-comedor, y con él
+  // si el informe habla o no de la zona de comedor.
+  // room.id importa: es lo que distingue el salón del salón-comedor, y con él
+  // si la estancia se parte en dos zonas o se calcula como una sola.
+  const { tempK, grid, tips, mistakes, layers } = generateLivingReport(answers, room.id);
+  const onlyLights = answers.renovationStatus === "onlyLights";
   const { Icon } = room;
   return (
     <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
@@ -3435,9 +4071,15 @@ function TechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) 
         <div className="px-5 pb-5 flex flex-col gap-5">
           <ColorTempBlock roomId={room.id} tempK={tempK} sameToneAs={sameToneAs} />
 
-          <CalculationBlock area={area} lux={lux} lumens={lumens} grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} />
+          {layers.isDining && <LivingZonesBlock layers={layers} />}
 
-          <CeilingPlan grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} />
+          <LivingLayerBlock layers={layers} />
+
+          {layers.isDining
+            ? <LivingZonePlan layers={layers} />
+            : <CeilingPlan grid={grid} onlyLights={onlyLights} />}
+
+          {layers.isDining && <DiningPendantElevation dining={layers.dining} />}
 
           <TipsList tips={tips} />
 
