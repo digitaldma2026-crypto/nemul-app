@@ -3751,7 +3751,16 @@ function LayerRow({ id, label, hint, lm, first }) {
 function LivingLayerBlock({ layers }) {
   const { estar, dining, grid, onlyLights, isDining } = layers;
 
-  const generalLm = onlyLights ? estar.generalLm : grid.totalLm;
+  /* Dos cifras distintas, y hasta ahora se enseñaba una sola.
+   *
+   * La NECESIDAD sale de multiplicar los metros por los lm/m². La PROPUESTA es
+   * lo que dan los focos elegidos, y casi nunca coincide: los downlights vienen
+   * en escalones de flujo, así que 2.115 lm en cuatro puntos acaban siendo
+   * 4 x 500 = 2.000. Enseñar "14,1 m² · 150 lm/m²" encima de "2.000 lm" es una
+   * contradicción a la vista de cualquiera que multiplique. */
+  const needLm = estar.generalLm;
+  const proposalLm = grid.totalLm;
+  const showProposal = !onlyLights && proposalLm !== needLm;
 
   const extras = [
     ...estar.ambient.map((a) => ({
@@ -3771,11 +3780,12 @@ function LivingLayerBlock({ layers }) {
       <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
         <div className="px-4 pt-4 pb-3">
           <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
-            {isDining ? `Zona de estar · ${fmtArea(estar.area)} m² · ${estar.lux} lm/m²` : `${fmtArea(estar.area)} m² · ${estar.lux} lm/m²`}
+            {isDining ? `Zona de estar · ${fmtArea(estar.area)} m² × ${estar.lux} lm/m²` : `${fmtArea(estar.area)} m² × ${estar.lux} lm/m²`}
           </p>
           <p className="font-display mt-1" style={{ color: COLORS.text, fontSize: 32, lineHeight: 1.1 }}>
-            {generalLm.toLocaleString("es-ES")} lm
+            {needLm.toLocaleString("es-ES")} lm
           </p>
+          <p className="font-body t-caption" style={{ color: COLORS.subtext }}>necesidad calculada</p>
         </div>
         {/* Sin repetir la cifra: ya está arriba en grande. Esta línea dice
             de dónde sale, no cuánto es. */}
@@ -3783,12 +3793,16 @@ function LivingLayerBlock({ layers }) {
           <Lightbulb size={16} color={COLORS.bulb} strokeWidth={1.9} className="shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="font-body t-body" style={{ color: COLORS.text }}>
-              {onlyLights ? "Repartidos entre tus puntos de techo" : `${grid.n} downlights de ${grid.lmPer} lm`}
+              {onlyLights ? "Repartidos entre tus puntos de techo" : `Propuesta: ${grid.n} downlights de ${grid.lmPer} lm`}
             </p>
             <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
               {isDining ? "solo por la zona de estar: la mesa tiene su propia luz" : "la luz de fondo, la que enciendes al entrar"}
+              {showProposal ? " · los focos vienen en escalones de flujo, así que la propuesta no cae clavada" : ""}
             </p>
           </div>
+          {showProposal && (
+            <p className="font-body t-body font-medium shrink-0" style={{ color: COLORS.text }}>{proposalLm.toLocaleString("es-ES")} lm</p>
+          )}
         </div>
       </div>
 
@@ -4214,7 +4228,11 @@ function TechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) 
  * focos del techo no se encienden a la vez ni suman una cifra útil. */
 function KitchenLayerBlock({ layers, area, onlyLights }) {
   const { generalLux, generalLm, grid, task, reinforcements, island } = layers;
-  const ceilingLm = onlyLights ? generalLm : grid.totalLm;
+  // Necesidad y propuesta son dos cifras distintas: la primera es los metros
+  // por los lm/m², la segunda lo que dan los focos, que vienen en escalones.
+  const needLm = generalLm;
+  const proposalLm = grid.totalLm;
+  const showProposal = !onlyLights && proposalLm !== needLm;
 
   const work = [];
   if (task.mode === "underCabinet") {
@@ -4241,21 +4259,26 @@ function KitchenLayerBlock({ layers, area, onlyLights }) {
       <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Iluminación general</p>
       <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
         <div className="px-4 pt-4 pb-3">
-          <p className="font-body t-caption" style={{ color: COLORS.subtext }}>{fmtArea(area)} m² · {generalLux} lm/m²</p>
+          <p className="font-body t-caption" style={{ color: COLORS.subtext }}>{fmtArea(area)} m² × {generalLux} lm/m²</p>
           <p className="font-display mt-1" style={{ color: COLORS.text, fontSize: 32, lineHeight: 1.1 }}>
-            {ceilingLm.toLocaleString("es-ES")} lm
+            {needLm.toLocaleString("es-ES")} lm
           </p>
+          <p className="font-body t-caption" style={{ color: COLORS.subtext }}>necesidad calculada</p>
         </div>
         <div className="flex items-start gap-3 px-4 py-3" style={{ borderTop: `1px solid ${COLORS.border}` }}>
           <Lightbulb size={16} color={COLORS.bulb} strokeWidth={1.9} className="shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="font-body t-body" style={{ color: COLORS.text }}>
-              {onlyLights ? "Repartidos entre tus puntos de techo" : `${grid.n} downlights de ${grid.lmPer} lm`}
+              {onlyLights ? "Repartidos entre tus puntos de techo" : `Propuesta: ${grid.n} downlights de ${grid.lmPer} lm`}
             </p>
             <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
               moverse, ver el conjunto y abrir un armario: la encimera no depende de esto
+              {showProposal ? " · los focos vienen en escalones de flujo, así que la propuesta no cae clavada" : ""}
             </p>
           </div>
+          {showProposal && (
+            <p className="font-body t-body font-medium shrink-0" style={{ color: COLORS.text }}>{proposalLm.toLocaleString("es-ES")} lm</p>
+          )}
         </div>
       </div>
 
