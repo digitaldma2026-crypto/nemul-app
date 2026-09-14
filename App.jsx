@@ -584,7 +584,7 @@ const fmtDim = (n) => (Math.round(n * 100) / 100).toString().replace(".", ",");
 const LIVING_ACTIVITY_OPTIONS = [
   { id: "read", label: "Leer", Icon: BookOpen },
   { id: "tv", label: "Ver la televisión", Icon: Tv },
-  { id: "relax", label: "Estar y conversar", Icon: Sofa },
+  { id: "relax", label: "Relajarte y conversar", Icon: Sofa },
 ];
 
 const SALON_SIZE_OPTIONS = [
@@ -710,7 +710,7 @@ function livingLayers(area, answers = {}, roomId = "living") {
     ambient.push({
       id: "lectura", lm: LIVING_READING_LM, dimmable: true,
       label: "Luz de lectura",
-      detail: "junto al sofá y por detrás del hombro, con la fuente de luz por debajo de la altura de los ojos al sentarse: sirve un pie, una lámpara de sobremesa o un aplique orientable, según dónde te sientes",
+      detail: "Colócala junto a la zona de lectura, con una luz cómoda y regulable.",
     });
   }
   ambient.push({
@@ -723,7 +723,7 @@ function livingLayers(area, answers = {}, roomId = "living") {
   if (activities.includes("relax")) {
     ambient.push({
       id: "relax", lm: LIVING_AMBIENT_PIECE_LM, dimmable: true,
-      label: "Segundo punto de ambiente",
+      label: "Luz ambiental adicional",
       detail: "una lámpara más, baja y cálida, para las noches en las que la luz general sobra",
     });
   }
@@ -839,7 +839,7 @@ function generateLivingReport(answers = {}, roomId = "living") {
   tips.push("Evita colocar focos justo encima del sofá o de donde os sentéis: desde ahí el foco queda en el campo de visión y deslumbra.");
 
   // ---------- capas de la zona de estar ----------
-  if (activities.includes("read")) tips.push(`La luz de lectura pide unos ${LIVING_READING_LM} lm y un regulador: a plena potencia para leer, atenuada el resto del tiempo. Va junto al sofá y por detrás del hombro, no enfrente. Un pie es lo más cómodo si lees en distintos sitios; si siempre lees en el mismo, un aplique de pared libera suelo.`);
+  if (activities.includes("read")) tips.push("Coloca una luz específica junto a la zona de lectura y, si es posible, regulable.");
   if (activities.includes("tv")) tips.push("Dirige la luz general lejos de la pantalla del televisor para evitar reflejos molestos.");
   if (estar.accent) tips.push(`Una tira LED de unos ${estar.accent.lm} lm en el mueble de televisión, oculta tras el canto, aporta profundidad y suaviza el contraste entre la pantalla encendida y la pared oscura.`);
   if (activities.includes("relax")) tips.push("Que la luz de ambiente sea regulable: es lo que permite pasar de un salón luminoso a uno de sobremesa sin cambiar ninguna bombilla.");
@@ -879,7 +879,7 @@ function generateLivingReport(answers = {}, roomId = "living") {
   const mistakes = [
     `Evita depender de una única lámpara en el centro del ${room}, ya que genera una luz plana y deja las esquinas apagadas.`,
     "Evita mezclar temperaturas de color muy diferentes en la misma estancia, ya que el contraste hace que el conjunto se perciba desordenado.",
-    "Evita colocar todos los focos pegados a las paredes, ya que iluminan más el muro que la zona donde realmente se hace vida.",
+    "Evita colocar todos los focos pegados a las paredes, ya que iluminan más el muro que la zona principal de uso.",
   ];
   if (dining) mistakes.push("Evita cubrir la mesa con focos generales del techo además del colgante, ya que duplicar la luz cenital sobre el mismo sitio marca ojeras en la cara de quien come y deja la mesa sin identidad propia dentro del espacio.");
   if (activities.includes("tv")) mistakes.push("Evita dirigir la luz directamente hacia la pantalla del televisor, ya que produce reflejos que obligan a forzar la vista.");
@@ -1444,9 +1444,10 @@ const PROBLEM_REACTIONS = {
   living: {
     cold: "Bajaremos el tono hacia una luz más cálida y sumaremos lámparas que se puedan regular.",
     dim: "Antes de subir la potencia del techo, repartiremos la luz en varias capas.",
-    flat: "Ese es justo el problema que resolvemos: repartir la luz en varios puntos en vez de uno.",
-    glare: "Apartaremos los puntos de luz de donde os sentáis y buscaremos luz indirecta.",
+    flat: "En este caso conviene repartir mejor la luz: en varios puntos en vez de uno.",
+    glare: "Evita que la luz te dé directamente cuando estás sentado y añade luz indirecta.",
     decor: "Reservaremos una capa para el detalle: luz de acento y lámparas con presencia.",
+    unsure: "Sin problema: nos guiamos por el resto de tus respuestas para orientarte.",
   },
   bathroom: {
     shadows: "Vamos a iluminar el espejo desde ambos lados, no solo desde arriba.",
@@ -1492,11 +1493,12 @@ const lightStep = { key: "light", title: "¿Qué iluminación tiene?", subtitle:
 
 const PROBLEM_OPTIONS = {
   living: [
-    { id: "cold", label: "La luz se ve fría o poco acogedora" },
-    { id: "dim", label: "Se queda corto de luz" },
-    { id: "flat", label: "Todo depende de la lámpara del centro" },
+    { id: "cold", label: "La luz se ve demasiado fría" },
+    { id: "dim", label: "Me falta luz" },
+    { id: "flat", label: "Solo tengo una luz general" },
     { id: "glare", label: "Deslumbra al sentarse o ver la tele" },
-    { id: "decor", label: "Busco algo más decorativo" },
+    { id: "decor", label: "Quiero un ambiente más cálido y relajante" },
+    { id: "unsure", label: "No estoy segura, quiero orientación" },
   ],
   bathroom: [
     { id: "shadows", label: "Tengo sombras en el espejo" },
@@ -3865,7 +3867,7 @@ function ExistingPointsNote({ points, generalLm }) {
               Repártelos entre los {points}{cuatroOMas ? " o más" : ""} puntos que ya tienes: unos <strong>{per.toLocaleString("es-ES")} lm por punto</strong>. No hace falta que todos den lo mismo; lo que cuenta es acercarse al total.
             </p>
             <p className="font-body t-caption mt-2" style={{ color: COLORS.subtext }}>
-              Si algún punto queda lejos de donde hacéis vida, baja su flujo y compensa con una lámpara de pie o de mesa en esa zona.
+              Si algún punto queda lejos de la zona principal de uso, baja su flujo y compensa con una lámpara de pie o de mesa en esa zona.
             </p>
           </>
         ) : (
@@ -3901,7 +3903,7 @@ function CeilingAdviceBlock({ grid, roomLabel, avoid = [] }) {
           </p>
         </div>
         <p className="font-body t-body mt-3" style={{ color: COLORS.text }}>
-          Para {roomLabel} recomendamos aproximadamente <strong>{n} puntos de luz general de unos {lmPer.toLocaleString("es-ES")} lm cada uno</strong>. Distribúyelos por la zona donde se hace vida, no repartidos por igual sobre toda la superficie.
+          Para {roomLabel} recomendamos aproximadamente <strong>{n} puntos de luz general de unos {lmPer.toLocaleString("es-ES")} lm cada uno</strong>. Distribúyelos por la zona principal de uso, no repartidos por igual sobre toda la superficie.
         </p>
         {avoid.length > 0 && (
           <div className="mt-2.5">
@@ -3916,7 +3918,7 @@ function CeilingAdviceBlock({ grid, roomLabel, avoid = [] }) {
           </div>
         )}
         <p className="font-body t-small italic mt-2.5" style={{ color: COLORS.subtext }}>
-          No te damos distancias exactas ni un plano: no sabemos dónde están tus muebles, las puertas, las vigas ni por dónde se pasa. El número y el flujo sí son la parte que se puede calcular.
+          No te damos distancias exactas ni un plano: no sabemos dónde están tus muebles, las puertas, las vigas ni las zonas de paso. El número y el flujo sí son la parte que se puede calcular.
         </p>
       </div>
     </div>
@@ -4058,7 +4060,7 @@ function LivingLayerBlock({ layers }) {
       id: a.id,
       label: a.id === "lectura" ? "Luz de lectura" : a.label,
       lm: a.lm,
-      hint: { lectura: "junto al sofá, por detrás del hombro y regulable", relax: "un punto bajo y cálido, regulable" }[a.id] || "en el extremo opuesto del sofá, regulable",
+      hint: { lectura: "junto a la zona de lectura, regulable", relax: "un punto bajo y cálido, regulable" }[a.id] || "en el extremo opuesto del sofá, regulable",
     })),
     ...(estar.accent ? [{ id: "acento", label: "Luz de acento TV", lm: estar.accent.lm, hint: "tira LED oculta tras el canto del mueble" }] : []),
     ...(dining ? [{ id: "mesa", label: "Luz sobre la mesa", lm: dining.pendantTotal, hint: `${dining.pieces > 1 ? `${dining.pieces} colgantes de ${dining.pendantPer} lm` : `un colgante de ${dining.pendantPer} lm`}, a ${PENDANT_H_TEXT} del tablero` }] : []),
