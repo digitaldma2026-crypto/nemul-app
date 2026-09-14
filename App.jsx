@@ -2018,7 +2018,7 @@ function bedroomLayerTips(layers, grid) {
   }
   if (layers.mode === "uno") {
     tips.push(layers.singlePointStrained
-      ? `Un único punto de techo se queda corto para los ${layers.generalLm.toLocaleString("es-ES")} lm que pide esta habitación: una luminaria sola de ese flujo deslumbra al mirar hacia arriba desde la cama. Sin obra, la salida es aprovechar ese mismo punto con un carril, una suspensión de varios brazos o un plafón de varios focos, que reparten el flujo en vez de concentrarlo.`
+      ? `Un único punto de techo se queda corto para los ${layers.generalLm.toLocaleString("es-ES")} lm que le tocan a la luz general de techo: una luminaria sola de ese flujo deslumbra al mirar hacia arriba desde la cama. Sin obra, la salida es aprovechar ese mismo punto con un carril, una suspensión de varios brazos o un plafón de varios focos, que reparten el flujo en vez de concentrarlo.`
       : "Con un solo punto de techo, elige una luminaria que reparta la luz en vez de concentrarla —difusor opaco, varios focos o luz indirecta hacia el techo— para no tener un foco intenso justo en el campo de visión desde la cama.");
   }
   return tips;
@@ -3819,9 +3819,14 @@ function BedroomLayerBlock({ area, lux, layers, grid }) {
   // En reforma el techo aporta lo que dan los focos elegidos, que es lo que
   // se instala de verdad; en los demás modos, su parte del reparto.
   const ceilingLm = mode === "reforma" && grid ? grid.totalLm : generalLm;
+  /* "Luz general" queda reservada para el techo, que es lo que ese término
+   * significa en el salón, la cocina y el resto del informe. La suma de techo
+   * y cabecera es "luz ambiente", nunca "general": llamar general a las dos
+   * cosas era pedirle a quien lee que adivinara cuál de los dos sentidos
+   * aplicaba en cada línea. */
   const ceilingLabel = mode === "reforma" && grid
-    ? `Techo — ${grid.n} downlights de ${grid.lmPer} lm`
-    : mode === "uno" ? "Techo — tu punto actual" : "Techo — tus puntos actuales";
+    ? `Luz general de techo — ${grid.n} downlights de ${grid.lmPer} lm`
+    : mode === "uno" ? "Luz general de techo — tu punto actual" : "Luz general de techo — tus puntos actuales";
 
   // El "2 x 150" solo se enseña cuando multiplica los 300 que aporta. Si leer
   // pide lámparas más potentes, esa cifra se va al bloque de lectura.
@@ -3840,17 +3845,17 @@ function BedroomLayerBlock({ area, lux, layers, grid }) {
 
   return (
     <div>
-      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Necesidad general</p>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Necesidad de luz ambiente</p>
       <div className="flex flex-col gap-3 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
         <StatRow label="Superficie" value={`${fmtArea(area)} m²`} />
         <StatRow label="Nivel recomendado" value={`${lux} lm/m²`} />
-        <StatRow label="Luz general" value={`≈ ${need.toLocaleString("es-ES")} lm`} />
-        {local.length > 0 && (
-          <p className="font-body t-small italic ml-9" style={{ color: COLORS.subtext }}>Las luces localizadas van aparte.</p>
-        )}
+        <StatRow label="Luz ambiente total" value={`≈ ${need.toLocaleString("es-ES")} lm`} />
+        <p className="font-body t-small italic ml-9" style={{ color: COLORS.subtext }}>
+          No sale toda del techo: esta cifra se reparte entre la luz general de techo y la cabecera, que es la que se lleva la diferencia.{local.length > 0 ? " Las luces localizadas van aparte y no entran en este reparto." : ""}
+        </p>
       </div>
 
-      <p className="font-body t-eyebrow mt-4 mb-2.5" style={{ color: COLORS.accent }}>De dónde sale esa luz</p>
+      <p className="font-body t-eyebrow mt-4 mb-2.5" style={{ color: COLORS.accent }}>Cómo se reparte esa luz ambiente</p>
       <div className="flex flex-col gap-2.5 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
         <LayerBar parts={[{ lm: ceilingLm }, { lm: bedsideAmbient }]} />
         <Row label={ceilingLabel} value={`${ceilingLm.toLocaleString("es-ES")} lm`} />
@@ -3922,7 +3927,7 @@ function BedroomLayerBlock({ area, lux, layers, grid }) {
  * Un solo punto es el caso interesante: no se le pide que dé el total él solo
  * —a esa potencia y a esa altura, deslumbra— sino que se dice para qué llega
  * y qué lo acompaña. */
-function ExistingPointsNote({ points, generalLm }) {
+function ExistingPointsNote({ points, generalLm, caption = "es la luz general que pide la estancia" }) {
   const total = generalLm.toLocaleString("es-ES");
   const per = points && points > 1 ? roundLm(generalLm / points, 50) : null;
   const cuatroOMas = points === 4;
@@ -3938,7 +3943,7 @@ function ExistingPointsNote({ points, generalLm }) {
           </p>
         </div>
         <p className="font-body t-caption mt-1" style={{ color: COLORS.subtext }}>
-          es la luz general que pide la estancia
+          {caption}
         </p>
 
         {points === 1 ? (
@@ -4729,7 +4734,8 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameTon
               ? <CeilingAdviceBlock grid={grid} roomLabel="este dormitorio"
                   avoid={["en la vertical de la cama: tumbada, un foco encima deslumbra"]} />
             : layers.mode === "uno" ? <BedroomZoneScheme layers={layers} />
-            : <ExistingPointsNote points={points} generalLm={layers.generalLm} />
+            : <ExistingPointsNote points={points} generalLm={layers.generalLm}
+                caption="es la luz general de techo, la parte de la luz ambiente que no cubre la cabecera" />
           ) : room.id === "terrace" ? (
             <div data-pdf-keep>
               <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Zonas a iluminar</p>
