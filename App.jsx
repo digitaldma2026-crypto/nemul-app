@@ -140,7 +140,6 @@ const ROOMS = [
   { id: "kitchenOpen", label: "Cocina abierta al salón", Icon: ChefHat },
   { id: "bedroom", label: "Dormitorio", Icon: BedDouble },
   { id: "bathroom", label: "Baño", Icon: Bath },
-  { id: "dining", label: "Comedor", Icon: UtensilsCrossed },
   { id: "hallway", label: "Pasillo", Icon: DoorOpen },
   { id: "closet", label: "Vestidor", Icon: Shirt },
   { id: "terrace", label: "Terraza", Icon: TreePine },
@@ -156,12 +155,19 @@ function loadSavedPlans() {
     const raw = localStorage.getItem("nemul_savedPlans");
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return parsed.map((p) => ({
-      id: p.id,
-      savedAt: new Date(p.savedAt),
-      rooms: (p.roomIds || []).map((rid) => ROOMS.find((r) => r.id === rid)).filter(Boolean),
-      answersByRoom: p.answersByRoom || {},
-    }));
+    return parsed
+      .map((p) => ({
+        id: p.id,
+        savedAt: new Date(p.savedAt),
+        rooms: (p.roomIds || []).map((rid) => ROOMS.find((r) => r.id === rid)).filter(Boolean),
+        answersByRoom: p.answersByRoom || {},
+      }))
+      /* Un plan sin estancias reconocibles no se puede pintar: PlanCard lee
+       * `rooms[0].label` y se cae, y con él la pantalla de inicio entera. Pasa
+       * cuando retiramos una estancia del catálogo —el "Comedor" suelto, por
+       * ejemplo— y alguien tenía un plan guardado de esa estancia. Mejor que
+       * ese plan desaparezca de la lista a que la app no arranque. */
+      .filter((p) => p.rooms.length > 0);
   } catch {
     return [];
   }
@@ -439,8 +445,23 @@ const ROOM_LUX_BY_LIGHT = {
    * arriba, que es justo lo que la propia lista de errores del baño desaconseja.
    * Ahora el techo hace de fondo y el espejo tiene sus apliques. */
   bathroom: { bright: 180, moderate: 200, low: 230 },
+  // No es una estancia: es la ZONA de comedor del salón-comedor, que pide
+  // más luz que la de estar porque en la mesa se come y se trabaja. La lee
+  // livingZones con getLux("dining"). No la borres al limpiar el comedor.
   dining: { bright: 175, moderate: 200, low: 225 },
-  closet: { bright: 225, moderate: 250, low: 275 },
+  /* Baja un escalón desde 225/250/275, que era el valor más alto de toda la
+   * app —por encima del baño y del despacho— para una estancia cuyas dos
+   * tareas reales ya no dependen del techo: ver dentro de los armarios lo
+   * resuelve la tira interior, y verte la ropa puesta, los apliques del
+   * espejo. Al techo le queda moverse por el vestidor y alcanzar los módulos
+   * abiertos.
+   *
+   * No baja más porque un vestidor rinde mal: es pequeño, tiene mucho muro por
+   * metro de suelo y la ropa absorbe, así que estos 225 se quedan en unos 85
+   * lux reales. Y porque con armarios abiertos no hay capa interior: ahí el
+   * techo sigue siendo la única luz sobre la ropa, y un recorte grande
+   * castigaría justo ese caso. */
+  closet: { bright: 200, moderate: 225, low: 250 },
   terrace: { bright: 80, moderate: 100, low: 120 },
   // El despacho tiene DOS capas y esta tabla solo calcula la primera: la luz
   // general de la estancia. Antes ponía 300-400 lm/m², que son los 500 lux que
@@ -799,6 +820,13 @@ function generateLivingReport(answers = {}, roomId = "living") {
   if (renovationStatus === "renovation") tips.push(`Como vas a reformar desde cero, aprovecha para dejar previstos circuitos independientes${dining ? " —general del estar, colgante de la mesa y ambiente— " : " "}y reguladores de intensidad.`);
   if (onlyLights) tips.push("Como solo vas a cambiar las luminarias, prioriza soluciones que aprovechen los puntos de luz ya existentes, como sustituir un plafón por un foco orientable en el mismo lugar.");
 
+  /* Lo primero que se responde en el bloque final es lo que la usuaria ha
+   * dicho que le pasa. Va etiquetado, no adivinado: pickTopTips ordena por
+   * rango y `fix` encabeza siempre. */
+  if (PROBLEM_INSIGHT.living[answers.problem]) {
+    tips.push({ text: PROBLEM_INSIGHT.living[answers.problem], rank: TIP_RANK.problem });
+  }
+
   const mistakes = [
     `Evita depender de una única lámpara en el centro del ${room}, ya que genera una luz plana y deja las esquinas apagadas.`,
     "Evita mezclar temperaturas de color muy diferentes en la misma estancia, ya que el contraste hace que el conjunto se perciba desordenado.",
@@ -808,7 +836,13 @@ function generateLivingReport(answers = {}, roomId = "living") {
   if (activities.includes("tv")) mistakes.push("Evita dirigir la luz directamente hacia la pantalla del televisor, ya que produce reflejos que obligan a forzar la vista.");
   if (ceiling === "vigas") mistakes.push("No es recomendable empotrar focos en las vigas de madera sin consultarlo antes con un instalador, ya que son elementos estructurales y no siempre admiten perforaciones.");
 
-  return { tempK, lumens, grid, area, lux, layers, tips: [...new Set(tips)], mistakes: [...new Set(mistakes)] };
+  // Con plano a la vista, los consejos que recitan sus medidas sobran.
+  const hasPlan = !layers.isDining || !onlyLights;
+  return {
+    tempK, lumens, grid, area, lux, layers,
+    tips: pickTopTips(tips, hasPlan ? ["reticula"] : []),
+    mistakes: [...new Set(mistakes)],
+  };
 }
 
 // ---------- Cocina ----------
@@ -1267,20 +1301,6 @@ const DINING_SHAPE_OPTIONS = [
   { id: "cuadrada", label: "Cuadrada" },
 ];
 
-const DINING_SEATS_OPTIONS = [
-  { id: "pocas", label: "2 personas" },
-  { id: "varias", label: "3–4 personas" },
-  { id: "muchas", label: "5 o más" },
-];
-
-const DINING_SIZE_OPTIONS = [
-  { id: "small", label: "Pequeño", hint: "Menos de 10 m²", area: 8 },
-  { id: "medium", label: "Mediano", hint: "10–16 m²", area: 13 },
-  { id: "large", label: "Grande", hint: "16–24 m²", area: 20 },
-  { id: "xl", label: "Extra grande", hint: "Más de 24 m²", area: 28 },
-];
-const DINING_AREA_BY_SIZE = Object.fromEntries(DINING_SIZE_OPTIONS.map((o) => [o.id, o.area]));
-
 const CLOSET_TYPE_OPTIONS = [
   { id: "abierto", label: "Abiertos" },
   { id: "cerrado", label: "Con puertas" },
@@ -1370,19 +1390,19 @@ function activityStep(roomId, subtitle) {
 // "problema a resolver" en cada habitación — el mismo guiño de razonamiento
 // que ya se probó y validó en Cocina.
 const PROBLEM_REACTIONS = {
+  living: {
+    cold: "Bajaremos el tono hacia una luz más cálida y sumaremos lámparas que se puedan regular.",
+    dim: "Antes de subir la potencia del techo, repartiremos la luz en varias capas.",
+    flat: "Ese es justo el problema que resolvemos: repartir la luz en varios puntos en vez de uno.",
+    glare: "Apartaremos los puntos de luz de donde os sentáis y buscaremos luz indirecta.",
+    decor: "Reservaremos una capa para el detalle: luz de acento y lámparas con presencia.",
+  },
   bathroom: {
     shadows: "Vamos a iluminar el espejo desde ambos lados, no solo desde arriba.",
     cold: "Bajaremos el tono general hacia un blanco más cálido.",
     night: "Añadiremos una luz muy tenue, independiente de la principal, para la noche.",
     spa: "Priorizaremos luz cálida y regulable para ese ambiente de spa.",
     renovating: "Con reforma desde cero, separaremos en circuitos el espejo, la zona húmeda (si la tienes) y la general.",
-  },
-  dining: {
-    badLight: "Vamos a centrar un punto de luz directo sobre la mesa.",
-    noAmbience: "Añadiremos un regulador para bajar la intensidad según la ocasión.",
-    pendant: "La lámpara colgante irá a la altura justa para no bloquear la vista entre comensales.",
-    elegant: "Combinaremos la luz de la mesa con algún punto cálido adicional en la sala.",
-    renovating: "Con reforma desde cero, dejaremos prevista una toma en el techo, centrada sobre la mesa.",
   },
   closet: {
     colors: "Cambiaremos a una luz blanca neutra para que veas los colores reales de la ropa.",
@@ -1420,18 +1440,18 @@ function problemStep(roomId) {
 const lightStep = { key: "light", title: "¿Qué iluminación tiene?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS };
 
 const PROBLEM_OPTIONS = {
+  living: [
+    { id: "cold", label: "La luz se ve fría o poco acogedora" },
+    { id: "dim", label: "Se queda corto de luz" },
+    { id: "flat", label: "Todo depende de la lámpara del centro" },
+    { id: "glare", label: "Deslumbra al sentarse o ver la tele" },
+    { id: "decor", label: "Busco algo más decorativo" },
+  ],
   bathroom: [
     { id: "shadows", label: "Tengo sombras en el espejo" },
     { id: "cold", label: "La luz es demasiado fría o clínica" },
     { id: "night", label: "Me falta luz para las rutinas nocturnas" },
     { id: "spa", label: "Quiero un ambiente de spa" },
-    { id: "renovating", label: "Estoy reformando desde cero", Icon: Hammer },
-  ],
-  dining: [
-    { id: "badLight", label: "La mesa se ve mal iluminada" },
-    { id: "noAmbience", label: "Falta ambiente para las cenas" },
-    { id: "pendant", label: "Quiero instalar una lámpara colgante" },
-    { id: "elegant", label: "Busco algo más elegante" },
     { id: "renovating", label: "Estoy reformando desde cero", Icon: Hammer },
   ],
   closet: [
@@ -1501,24 +1521,15 @@ const EXTRA_INSIGHT = {
       no: "Al conectar pocos espacios, un interruptor simple en cada extremo puede ser suficiente, sin necesidad de automatizarlo.",
     },
   },
+  /* Ya no hay estancia "Comedor", pero esta clave sigue viva: la zona de
+   * comedor del salón-comedor lee `EXTRA_INSIGHT.dining.shape` para adaptar la
+   * luz de la mesa a su forma. Lo que se ha ido son las claves que colgaban de
+   * preguntas que ya no existen (uso diario, comensales, colgante decorativo). */
   dining: {
-    daily: {
-      si: "Como lo usas todos los días, prioriza una luz cómoda para el uso diario por encima de un efecto muy decorativo.",
-      no: "Al usarlo de forma ocasional, puedes permitirte una propuesta más decorativa, pensada para momentos especiales.",
-    },
     shape: {
       redonda: "Con mesa redonda, un único punto de luz centrado sobre ella suele ser suficiente y queda más equilibrado visualmente.",
       rectangular: "Con mesa rectangular, dos o tres puntos en línea reparten mejor la luz que un único punto central.",
       cuadrada: "Con mesa cuadrada, un punto centrado o un colgante de varias luces cubre bien la mesa sin dejar las esquinas oscuras.",
-    },
-    seats: {
-      pocas: "Para dos personas, no necesitas mucha potencia: prioriza el ambiente sobre la cantidad de luz.",
-      varias: "Para 3–4 personas, asegúrate de que la luz cubra bien toda la mesa, no solo el centro.",
-      muchas: "Para 5 o más personas, reparte la luz en varios puntos: un único foco central dejará los extremos de la mesa en sombra.",
-    },
-    pendant: {
-      si: "Si quieres una lámpara decorativa sobre la mesa, cuélgala entre 70 y 90 cm sobre la superficie para iluminar bien sin bloquear la vista.",
-      no: "Sin lámpara decorativa, unos downlights orientables sobre la mesa cumplen la misma función de forma más discreta.",
     },
   },
   closet: {
@@ -1576,20 +1587,26 @@ const LIGHT_INSIGHT = {
 };
 
 
+/* El salón-comedor pregunta lo mismo que el salón: son los problemas de una
+ * zona de estar, y la mesa ya tiene sus propias preguntas. Sin este alias,
+ * problemStep() le pasaría `options: undefined` y la pantalla saldría vacía. */
+PROBLEM_OPTIONS.livingDining = PROBLEM_OPTIONS.living;
+PROBLEM_REACTIONS.livingDining = PROBLEM_REACTIONS.living;
+
 const PROBLEM_INSIGHT = {
+  living: {
+    cold: "Si la luz se ve fría, mira los kelvin de las bombillas que ya tienes: por encima de 3000 K un salón se vuelve luz de oficina. Cambiar solo las bombillas a 2700–3000 K arregla esto sin tocar nada más, y las lámparas de lectura y de ambiente conviene tenerlas reguladas para bajarlas de noche.",
+    dim: "Si te quedas corto de luz, la salida no es subir la potencia del techo: una general más fuerte aplana la estancia y cansa la vista. Rinde más una lámpara de pie o de sobremesa en la esquina que se te queda oscura, que es justo donde falta.",
+    flat: "Reparte esa misma luz entre varios puntos en vez de uno, y súmale dos lámparas bajas: una junto al sofá y otra en el extremo contrario. Llenan la altura media de la estancia, que es donde una lámpara de techo no llega, y son lo que más cambia un salón sin tocar la instalación.",
+    glare: "Si la luz deslumbra, casi nunca es que sobre: es que la estás viendo de frente. Aparta los puntos del sofá y del eje de la tele, y cambia lo que quede en el campo de visión por luz indirecta —rebotada en techo o pared— o por focos con la fuente hundida y el interior oscuro.",
+    decor: "Para un salón más decorativo, la luz de acento hace más que una lámpara cara: una tira oculta tras el mueble, un bañador sobre una estantería o un foco a un cuadro dan profundidad. Déjala en su propio interruptor para encenderla sola por la noche.",
+  },
   bathroom: {
     shadows: "Para eliminar las sombras del espejo, coloca la luz a ambos lados del rostro en lugar de un único punto cenital.",
     cold: "Si la luz se siente demasiado fría, baja la temperatura de color general hacia un blanco más cálido y neutro.",
     night: "Para las rutinas nocturnas, añade una luz muy tenue independiente de la luz principal del baño.",
     spa: "Para un ambiente de spa, prioriza luz cálida y regulable, y valora añadir una vela o luz indirecta en la zona húmeda.",
     renovating: "Como estás reformando desde cero, separa en circuitos distintos el espejo, la zona húmeda (si la tienes) y la luz general.",
-  },
-  dining: {
-    badLight: "Para que la mesa se vea bien iluminada, centra un punto de luz directamente sobre ella, no solo la luz general de la sala.",
-    noAmbience: "Para dar más ambiente a las cenas, añade un regulador que te permita bajar la intensidad según la ocasión.",
-    pendant: "Si vas a instalar una lámpara colgante, cuélgala entre 70 y 90 cm sobre la mesa para que ilumine bien sin bloquear la vista.",
-    elegant: "Para un aspecto más elegante, combina la luz de la mesa con algún punto cálido adicional en el resto de la sala.",
-    renovating: "Como estás reformando desde cero, deja prevista una toma de corriente en el techo, centrada sobre la mesa.",
   },
   closet: {
     colors: "Si no distingues bien los colores, cambia a una luz blanca neutra de alta fidelidad de color sobre la zona de la ropa.",
@@ -1627,6 +1644,53 @@ const PROBLEM_INSIGHT = {
 // Motor de cálculo compartido: dormitorio, baño, comedor, vestidor y terraza
 // reutilizan los mismos textos ya redactados en getReport() como "consejos",
 // y solo cambia cómo se calculan los números (m², lux de referencia y temperatura).
+/* ===========================================================================
+ * CRITERIO DE ILUMINACIÓN POR CAPAS — vale para toda estancia, presente o futura
+ * ===========================================================================
+ *
+ * Todas las estancias de Nemul se han ido corrigiendo por el mismo motivo: un
+ * nivel de TAREA aplicado a la superficie del SUELO, con el resultado de que
+ * toda la luz tenía que salir de downlights. La cocina pedía 350 lm/m² para
+ * ver la encimera y llenaba el techo de doce focos; el baño pedía 250 para
+ * verte la cara y hacía lo mismo; el despacho pedía los 500 lux de la mesa
+ * para la habitación entera. En los tres casos el techo no podía hacer ese
+ * trabajo aunque quisiera: te pones tú entre el foco y la encimera, y a un
+ * espejo le ilumina la coronilla, no la cara.
+ *
+ * De ahí estas cinco reglas. Al añadir una estancia nueva, se aplican antes de
+ * escribir la primera pregunta.
+ *
+ * 1. PRIMERO LAS CAPAS, DESPUÉS LOS NÚMEROS. Se mira para qué se usa la
+ *    estancia y de ahí salen sus capas: general/ambiental, tarea/funcional y
+ *    acento/decorativa. Casi ninguna necesita las tres. Una capa existe porque
+ *    el cuestionario dice que esa necesidad existe, nunca para completar una
+ *    cifra: si nadie ha dicho que se maquilla, no hay capa de maquillaje.
+ *
+ * 2. LOS lm/m² SON SOLO DE LA GENERAL. Es la luz de fondo, la de moverse y ver
+ *    el conjunto. Las capas funcionales NO se suman a ella ni se restan de
+ *    ella: son escenas distintas y casi nunca están todas encendidas a la vez.
+ *    Por eso el informe no enseña un "total de lúmenes necesarios".
+ *
+ * 3. NADIE PROPONE PUNTOS QUE NO LE HAN PEDIDO. Con `renovationStatus` en
+ *    "onlyLights" el plano deja de titularse "Dónde colocar los focos" y pasa
+ *    a "Distribución ideal de la luz": el mismo dibujo, pero leído como el
+ *    objetivo de luz a alcanzar con las luminarias que ya cuelgan, no como una
+ *    obra. Donde Nemul tampoco sabe la posición de las zonas —el salón-comedor
+ *    sin reforma— no se dibuja planta ninguna. Ver CeilingPlan.
+ *
+ * 4. UNA COSA SE DICE UNA VEZ. Si una recomendación ya va en su capa, no se
+ *    repite como consejo suelto. Es la razón de que el despacho no tenga
+ *    consejos de lámpara de mesa: los da TaskLightingBlock.
+ *
+ * 5. CADA ESTANCIA A LO SUYO. Las capas salen de la función real del espacio,
+ *    no de copiar el reparto del salón. Un vestidor no necesita luz de acento;
+ *    necesita ver el color de la ropa y el fondo de los armarios.
+ *
+ * Las reglas ya afinadas de salón, salón-comedor, dormitorio, cocina y baño
+ * mandan sobre este texto: esto es el criterio de partida, no una capa por
+ * encima que las reescriba.
+ * ======================================================================== */
+
 const ROOM_TECH_CONFIG = {
   bedroom: {
     areaMap: BEDROOM_AREA_BY_SIZE,
@@ -1646,6 +1710,18 @@ const ROOM_TECH_CONFIG = {
     areaMap: BATHROOM_AREA_BY_SIZE,
     defaultArea: 6,
     minDownlights: 2,
+    /* Retícula relajada, la misma del dormitorio, la cocina y el salón. Su
+     * techo dejó de ser la única luz cuando el espejo y la zona húmeda pasaron
+     * a ser capas propias, así que ya no tiene que garantizar la uniformidad
+     * él solo. Con la estricta, un baño de 3,6 x 2,5 m pedía SEIS downlights
+     * de 300 lm a 1,2 m entre sí: un techo agujereado para iluminar una
+     * estancia donde la cara la resuelven los apliques.
+     *
+     * No se toca ningún tope: `minDownlights: 2` deja que salgan dos cuando la
+     * geometría los admite —un aseo estrecho— y tres o cuatro cuando hacen
+     * falta de verdad. El número lo decide la planta, no una cuota. */
+    openGrid: true,
+    limits: BEDROOM_GRID_LIMITS,
     /* 3000 K siempre. Antes salía a 4000 K salvo con bañera, spa o "la luz es
      * demasiado fría", que es tanto como decir que el baño por defecto es un
      * quirófano y que hay que pedir que no lo sea.
@@ -1657,16 +1733,22 @@ const ROOM_TECH_CONFIG = {
      * que tiene los suyos. */
     getTempK: () => 3000,
   },
-  dining: {
-    areaMap: DINING_AREA_BY_SIZE,
-    defaultArea: 13,
-    minDownlights: 2,
-    getTempK: () => 2700,
-  },
   closet: {
     areaMap: CLOSET_AREA_BY_SIZE,
     defaultArea: 6,
     minDownlights: 2,
+    /* Era la última estancia con la retícula estricta, y se notaba: un vestidor
+     * de 3,5 x 2,2 m pedía SEIS downlights de 300 lm para 7,7 m². Con la
+     * relajada —la misma del baño, el dormitorio, la cocina, el salón y el
+     * despacho— salen cuatro de 400 lm. Mismos lúmenes, la mitad de agujeros.
+     *
+     * Aquí el argumento es todavía más claro que en el baño: el techo de un
+     * vestidor ya no tiene que garantizar la uniformidad él solo desde que el
+     * interior de los armarios y el espejo son capas propias. No se toca
+     * ningún tope: en un vestidor estrecho siguen saliendo dos puntos, y
+     * cuatro donde la planta los pide. */
+    openGrid: true,
+    limits: BEDROOM_GRID_LIMITS,
     getTempK: () => 4000,
   },
   terrace: {
@@ -1703,11 +1785,6 @@ const ROOM_TECH_MISTAKES = {
     "Evita diferencias marcadas de temperatura de color entre la zona del espejo y el resto del baño, ya que el contraste altera la percepción del tono de piel.",
     "Evita dejar el lavabo sin un punto de luz propio, ya que es la zona de mayor uso; un downlight de haz algo cerrado la enmarca y aporta luz general al baño.",
     "Evita empotrar luminarias directamente en el techo de la ducha, ya que quedan expuestas al vapor; suele funcionar mejor una luz indirecta con tiras led estancas (IP67) ocultas en un foseado o una hornacina.",
-  ],
-  dining: [
-    "Evita colgar la lámpara a más de 90 cm sobre la mesa, ya que la luz se dispersa y deja de cumplir su función sobre la superficie.",
-    "Evita iluminar únicamente el centro de una mesa grande, ya que los extremos quedan en sombra.",
-    "No conviene depender solo de la luz general difusa, ya que sin un punto centrado sobre la mesa el comedor se percibe plano.",
   ],
   closet: [
     "Evita la luz muy cálida como única fuente, ya que distorsiona el color real de la ropa al vestirte.",
@@ -1938,6 +2015,57 @@ function bathroomLayers(area, answers = {}, generalTempK = 4000) {
   return { mirror, wet, night, generalTempK };
 }
 
+/* ---------- Vestidor: capas ------------------------------------------------
+ *
+ * Un vestidor no se ilumina como una habitación pequeña: se ilumina como un
+ * expositor. Lo que hay que ver no está en el suelo sino en vertical —la ropa
+ * colgada— y buena parte está dentro de un mueble, donde no llega ningún
+ * downlight por muchos que se pongan. Por eso el techo se queda con la luz
+ * general y aparecen dos capas propias: el interior de los módulos cerrados y
+ * el espejo, que es donde de verdad se decide si la ropa se ve bien.
+ *
+ * No hay capa de acento: en un vestidor no hay nada que realzar. Regla 5. */
+
+// Metro lineal de armario. Nemul no lo pregunta —serían dos preguntas más para
+// una estancia que casi nadie planifica— así que lo estima de las medidas, como
+// hace la cocina con la encimera, y el informe lo dice con todas las letras.
+const CLOSET_RUN_SHARE = 0.8;        // de las dos paredes largas, descontando paso y puerta
+const CLOSET_INTERIOR_LM_PER_M = 250; // tira LED dentro del módulo
+const CLOSET_MIRROR_PIECE_LM = 300;   // por lado, a la altura de los ojos
+const CLOSET_CLOSED_SHARE = { cerrado: 1, mixto: 0.5, abierto: 0 };
+
+function closetLayers(area, answers = {}, dims = null) {
+  const w = dims ? dims.w : Math.sqrt(area * PLAN_ASPECT);
+  const closedShare = CLOSET_CLOSED_SHARE[answers.type] ?? 0;
+
+  let interior = null;
+  if (closedShare > 0) {
+    const run = Math.round(2 * w * CLOSET_RUN_SHARE * closedShare * 10) / 10;
+    interior = {
+      run,
+      lm: roundLm(run * CLOSET_INTERIOR_LM_PER_M, 50),
+      detail: `tira LED continua dentro de cada módulo cerrado, en el canto delantero del lateral y no en el fondo, para que la luz caiga sobre la ropa y no detrás de ella. Con detector de puerta se enciende sola`,
+      estimate: `unos ${fmtM(run)} m de armario cerrado, estimados por Nemul a partir de las medidas`,
+    };
+  }
+
+  // "planeo" también cuenta: el momento de dejar la instalación prevista es
+  // antes de colgar el espejo, no después de abrir la pared.
+  const mirror = answers.mirror === "tengo" || answers.mirror === "planeo"
+    ? {
+        pieces: 2,
+        per: CLOSET_MIRROR_PIECE_LM,
+        lm: CLOSET_MIRROR_PIECE_LM * 2,
+        cri: 90,
+        detail: answers.mirror === "planeo"
+          ? "dos puntos a los lados de donde vaya el espejo, a la altura de los ojos, con la instalación dejada antes de colgarlo"
+          : "dos apliques a los lados del espejo, a la altura de los ojos, nunca un único punto cenital: desde arriba la barbilla y los ojos quedan en sombra y la ropa se juzga mal",
+      }
+    : null;
+
+  return { interior, mirror };
+}
+
 function generateGenericTechnicalReport(roomId, answers = {}) {
   const cfg = ROOM_TECH_CONFIG[roomId];
   // Las medidas cuando las hay; el tramo, para los planes ya guardados.
@@ -1954,6 +2082,8 @@ function generateGenericTechnicalReport(roomId, answers = {}) {
   // El baño tiene sus propias capas y no comparte la maquinaria del dormitorio:
   // van en su propio campo para no tocar el reparto de la retícula.
   const bath = roomId === "bathroom" ? bathroomLayers(area, answers, tempK) : null;
+  // El vestidor: interior de armario y espejo son capas, no consejos sueltos.
+  const closet = roomId === "closet" ? closetLayers(area, answers, dm) : null;
   const grid = cfg.ambient
     ? ambientLayout(area, lumens, cfg.minDownlights)
     : layers
@@ -1966,11 +2096,23 @@ function generateGenericTechnicalReport(roomId, answers = {}) {
         ? openPlanLayout(area, lumens, cfg.minDownlights, cfg.minLmPerPoint, cfg.limits, dm)
         : planLayout(area, lumens, cfg.minDownlights, dm);
 
-  const tips = getReport(roomId, answers);
+  const tips = getRankedReport(roomId, answers);
   if (layers) tips.push(...bedroomLayerTips(layers, grid));
-  if (roomId === "office") tips.push(...officeTaskTips(lux));
+  /* Aquí había un `tips.push(...officeTaskTips(lux))` llamando a una función
+   * que no existe en ninguna parte: el informe del despacho se caía entero con
+   * un ReferenceError en cuanto se desplegaba, y el build no lo veía porque es
+   * un fallo de ejecución, no de sintaxis. No se reescribe la función: lo que
+   * iba a decir ya lo dice TaskLightingBlock, con sus lúmenes y su CRI. Un
+   * consejo se da una vez (regla 4). */
   const mistakes = ROOM_TECH_MISTAKES[roomId] || [];
-  return { tempK, lumens, grid, area, lux, tips, mistakes, layers, bath };
+  return {
+    tempK, lumens, grid, area, lux, mistakes, layers, bath, closet,
+    tips: pickTopTips(tips, [
+      ...(TIPS_COVERED_BY_LAYERS[roomId] || []),
+      // Igual que en el salón: si hay plano, sus medidas ya están dichas.
+      ...(grid && !cfg.ambient ? ["reticula"] : []),
+    ]),
+  };
 }
 
 /* Salón y salón-comedor comparten las mismas preguntas, no el mismo recorrido.
@@ -2015,6 +2157,11 @@ const livingFlow = (roomId) => (answers = {}) => {
         cuadrada: "Con mesa cuadrada, un colgante centrado o de varias luces cubre bien toda la superficie.",
       } },
     ] : []),
+    /* El salón era la única estancia que no preguntaba qué falla. Sin este
+     * dato sus recomendaciones eran las mismas para todo el mundo: valían
+     * igual para quien tiene la luz fría que para quien no llega a la
+     * esquina. Va al final, como en el resto del cuestionario. */
+    problemStep(roomId),
   ];
 };
 
@@ -2089,20 +2236,6 @@ const ROOM_FLOWS = {
     problemStep("bathroom"),
     renovationStep,
   ],
-  dining: [
-    { key: "daily", title: "¿Lo utilizas todos los días?", subtitle: "Cambia si priorizamos lo cómodo o lo decorativo.", type: "single", layout: "list", options: YES_NO_OPTIONS },
-    { key: "shape", title: "¿La mesa es redonda, rectangular o cuadrada?", subtitle: "La forma cambia cómo repartimos la luz.", type: "single", layout: "list", options: DINING_SHAPE_OPTIONS, reactions: {
-      redonda: "Con mesa redonda, un único punto centrado suele ser suficiente y queda muy equilibrado.",
-      rectangular: "Con mesa rectangular, dos o tres puntos en línea reparten mejor la luz.",
-      cuadrada: "Con mesa cuadrada, un colgante centrado o de varias luces cubre bien toda la superficie.",
-    } },
-    { key: "dims", title: "¿Cuánto mide aproximadamente el comedor?", subtitle: "A ojo está bien: no hace falta sacar el metro.", info: "Con el largo y el ancho, Nemul calcula la superficie y también la forma del comedor, que es lo que decide cómo se reparten los puntos de luz. En un comedor suelen recomendarse entre 150 y 200 lm/m².", type: "dims" },
-    { key: "seats", title: "¿Cuántas personas suelen comer?", subtitle: "Un cálculo aproximado está bien.", type: "single", layout: "list", options: DINING_SEATS_OPTIONS },
-    { key: "pendant", title: "¿Quieres una lámpara decorativa sobre la mesa?", subtitle: "Como una lámpara colgante.", type: "single", layout: "list", options: YES_NO_OPTIONS },
-    lightStep,
-    problemStep("dining"),
-    renovationStep,
-  ],
   closet: [
     { key: "type", title: "¿Cómo son los armarios del vestidor?", subtitle: "Solo para decidir la iluminación interior del armario.", type: "single", layout: "list", options: CLOSET_TYPE_OPTIONS, reactions: {
       abierto: "Con armarios abiertos, la luz general ya alcanza la ropa; reforzaremos sobre todo el espejo, si tienes uno.",
@@ -2163,37 +2296,158 @@ function getFlowForRoom(roomId, answers) {
   return typeof flow === "function" ? flow(answers || {}) : flow;
 }
 
-function getReport(roomId, answers = {}) {
+/* ===========================================================================
+ * LAS RECOMENDACIONES: TRES, LAS QUE IMPORTAN
+ * ===========================================================================
+ *
+ * El bloque venía creciendo con la estancia: un salón-comedor podía sacar diez
+ * consejos, y a partir del cuarto ya nadie lee. Peor aún, varios repetían lo
+ * que el propio informe acababa de decir en el cálculo o en las capas —la
+ * altura del colgante salía en la capa "Luz sobre la mesa" y otra vez abajo—,
+ * así que el bloque más largo era también el que menos añadía.
+ *
+ * Ahora salen tres como mucho, y solo si de verdad aportan: si únicamente hay
+ * dos consejos útiles, se enseñan dos. No se rellena.
+ *
+ * El orden de importancia es el mismo en todas las estancias:
+ *   0. responder al problema que ha marcado la usuaria,
+ *   1. corregir otro error que estropee la instalación,
+ *   2. mejorar lo funcional de esa estancia en concreto,
+ *   3. confort, ambiente o estética.
+ *
+ * El rango viene de DÓNDE sale el consejo, que es un dato exacto y no una
+ * adivinanza sobre el texto: lo que responde a "¿qué quieres solucionar?" es
+ * por definición un error a corregir, y lo que sale de la luz natural o del
+ * tipo de obra es contexto. Solo los informes que arman sus consejos a mano
+ * —salón y cocina— caen en la heurística de texto de tipRank(). */
+
+const TIP_MAX = 3;
+
+/* `problem` va por delante de `fix` porque no todos los errores pesan igual:
+ * el que la usuaria ha marcado en "¿qué te gustaría solucionar?" es el motivo
+ * por el que está aquí, y tiene que abrir el bloque. Sin separarlo, competía
+ * de tú a tú con los avisos genéricos y perdía por orden de redacción: en un
+ * salón con la luz fría salían antes el aviso del sofá y el de la luz natural,
+ * y su respuesta quedaba la tercera. */
+const TIP_RANK = { problem: 0, fix: 1, functional: 2, comfort: 3 };
+
+// Un consejo por tema. Cuando dos hablan de lo mismo se queda el mejor
+// colocado, que es el más concreto: no se fusionan textos a la fuerza, porque
+// pegar dos frases da una tercera peor que las dos.
+const TIP_TOPICS = [
+  /* El plano ya dice las separaciones, el margen a pared y que es orientativo.
+   * Repetirlo debajo en palabras era el duplicado más descarado del informe:
+   * "unos 1,9 m entre focos y 2,0 m entre filas" aparecía dos veces seguidas,
+   * una en el dibujo y otra como consejo. */
+  ["reticula", /retícula|esquema del plano|entre focos|entre filas/i],
+  ["deslumbramiento", /deslumbr|en el campo de visión|molesta a la vista/i],
+  ["espejo", /espej|maquill|afeit|rostro|barbilla/i],
+  ["armario", /armario|módulo|vestidor|la ropa/i],
+  ["encimera", /encimera|bajo mueble|muebles altos/i],
+  ["mesa", /\bla mesa\b|colgante|comensal|tablero/i],
+  ["tv", /televisor|\bla tele\b/i],
+  ["escritorio", /escritorio|pantalla|videollamada|flexo/i],
+  ["humeda", /ducha|bañera|zona húmeda|IP\d/i],
+  ["nocturna", /nocturna|luz muy tenue/i],
+  ["cabecera", /cabecera|mesita|la cama/i],
+  ["sensor", /sensor|detector de movimiento/i],
+  ["techo", /falso techo|pladur|empotr|foseado|carril/i],
+  ["circuitos", /circuito|regulador|regulable/i],
+  ["natural", /luz natural/i],
+  ["tono", /temperatura de color|blanco (más )?(cálid|neutr)|\d{4} ?K/i],
+];
+
+function tipTopic(text) {
+  const hit = TIP_TOPICS.find(([, re]) => re.test(text));
+  // Sin tema reconocido cada consejo va por libre: es preferible dejar pasar
+  // dos parecidos que descartar uno bueno por un falso positivo.
+  return hit ? hit[0] : null;
+}
+
+const TIP_FIX_RE = /^evita|no conviene|nunca |en lugar de|deslumbr|sombra|reflej|contraluz|ojeras|no dependas/i;
+const TIP_COMFORT_RE = /acogedor|ambiente|decorativ|elegante|estétic|relaj|spa|sobremesa|apetecible/i;
+
+function tipRank(text) {
+  if (TIP_FIX_RE.test(text)) return TIP_RANK.fix;
+  if (TIP_COMFORT_RE.test(text)) return TIP_RANK.comfort;
+  return TIP_RANK.functional;
+}
+
+/* `covered` son los temas que el informe ya ha explicado más arriba, en una
+ * capa o en el cálculo. Repetirlos abajo no informa: gasta uno de los tres
+ * huecos en algo que la usuaria acaba de leer. */
+function pickTopTips(tips, covered = []) {
+  const seen = new Set();
+  return (tips || [])
+    .map((t) => (typeof t === "string" ? { text: t, rank: tipRank(t) } : t))
+    .filter((t) => t && t.text)
+    .map((t, i) => ({ ...t, topic: tipTopic(t.text), i }))
+    /* Lo que la usuaria ha pedido arreglar no se descarta nunca por estar el
+     * tema tratado más arriba: es el motivo por el que ha rellenado el
+     * cuestionario. En un vestidor con armarios cerrados, "no veo bien los
+     * colores de la ropa" caía aquí —habla de ropa, y la capa de armario ya
+     * hablaba de ropa— y el bloque se quedaba con la luz natural y el aviso de
+     * la reforma: dos avisos de contexto en lugar de la respuesta. */
+    .filter((t) => t.rank <= TIP_RANK.fix || !(t.topic && covered.includes(t.topic)))
+    // Por rango primero y, dentro del mismo rango, en el orden en que el
+    // informe los fue redactando: así el corte es estable entre visitas.
+    .sort((a, b) => a.rank - b.rank || a.i - b.i)
+    .filter((t) => {
+      if (!t.topic) return true;
+      if (seen.has(t.topic)) return false;
+      seen.add(t.topic);
+      return true;
+    })
+    .slice(0, TIP_MAX)
+    .map((t) => t.text);
+}
+
+// Temas que cada estancia ya resuelve arriba, en sus capas o en su cálculo.
+const TIPS_COVERED_BY_LAYERS = {
+  closet: ["armario", "espejo"],
+  bathroom: ["espejo", "humeda", "nocturna"],
+  office: ["escritorio"],
+};
+
+/* Devuelve los consejos con su rango de origen, que es lo que permite ordenar
+ * sin adivinar. getReport() sigue devolviendo texto plano para quien solo
+ * quiere leerlos. */
+function getRankedReport(roomId, answers = {}) {
   const parts = [];
+  const add = (text, rank) => { if (text) parts.push({ text, rank }); };
+
   if (roomId === "hallway") {
-    // Abre el informe del pasillo: es la idea que cambia el planteamiento
-    // antes de entrar en longitudes y sensores.
-    parts.push("En un pasillo no siempre es necesario instalar iluminación en el techo. Un foseado lineal, balizas, apliques de pared o tiras LED en el rodapié pueden guiar el recorrido con una luz uniforme, evitando deslumbramientos y creando un ambiente más agradable.");
-    if (HALLWAY_LENGTH_INSIGHT[answers.length]) parts.push(HALLWAY_LENGTH_INSIGHT[answers.length]);
-    if (LIGHT_INSIGHT[answers.light]) parts.push(LIGHT_INSIGHT[answers.light]);
-    if (HALLWAY_SENSOR_INSIGHT[answers.sensor]) parts.push(HALLWAY_SENSOR_INSIGHT[answers.sensor]);
+    add("En un pasillo no siempre es necesario instalar iluminación en el techo. Un foseado lineal, balizas, apliques de pared o tiras LED en el rodapié pueden guiar el recorrido con una luz uniforme, evitando deslumbramientos y creando un ambiente más agradable.", TIP_RANK.functional);
+    add(HALLWAY_LENGTH_INSIGHT[answers.length], TIP_RANK.functional);
+    add(LIGHT_INSIGHT[answers.light], TIP_RANK.comfort);
+    add(HALLWAY_SENSOR_INSIGHT[answers.sensor], TIP_RANK.functional);
   } else {
-    if (roomId === "closet" && CLOSET_TYPE_INSIGHT[answers.type]) parts.push(CLOSET_TYPE_INSIGHT[answers.type]);
-    (answers.activities || []).forEach((a) => {
-      const dict = ACTIVITY_INSIGHT[roomId] || {};
-      if (dict[a]) parts.push(dict[a]);
-    });
-    if (LIGHT_INSIGHT[answers.light]) parts.push(LIGHT_INSIGHT[answers.light]);
+    if (roomId === "closet") add(CLOSET_TYPE_INSIGHT[answers.type], TIP_RANK.functional);
+    (answers.activities || []).forEach((a) => add((ACTIVITY_INSIGHT[roomId] || {})[a], TIP_RANK.functional));
+    add(LIGHT_INSIGHT[answers.light], TIP_RANK.comfort);
   }
-  if (CEILING_INSIGHT[answers.ceiling]) parts.push(CEILING_INSIGHT[answers.ceiling]);
+  // El techo condiciona lo que se puede instalar: es funcional, no ambiente.
+  add(CEILING_INSIGHT[answers.ceiling], TIP_RANK.functional);
+
   const extra = EXTRA_INSIGHT[roomId];
-  if (extra) {
-    Object.keys(extra).forEach((key) => {
-      const val = answers[key];
-      if (val && extra[key][val]) parts.push(extra[key][val]);
-    });
-  }
-  const problemDict = PROBLEM_INSIGHT[roomId] || {};
-  if (problemDict[answers.problem]) parts.push(problemDict[answers.problem]);
+  if (extra) Object.keys(extra).forEach((key) => {
+    const val = answers[key];
+    if (val && extra[key][val]) add(extra[key][val], TIP_RANK.functional);
+  });
+
+  // Lo que la usuaria ha dicho que quiere solucionar. Es, literalmente, el
+  // error a corregir: encabeza siempre.
+  add((PROBLEM_INSIGHT[roomId] || {})[answers.problem], TIP_RANK.problem);
+
   const renovationDict = roomId === "bedroom" ? BEDROOM_RENOVATION_INSIGHT : RENOVATION_INSIGHT;
-  if (renovationDict[answers.renovationStatus]) parts.push(renovationDict[answers.renovationStatus]);
-  if (parts.length === 0) parts.push("Con lo que nos cuentes de este espacio, Nemul preparará un estudio de iluminación a medida.");
+  add(renovationDict[answers.renovationStatus], TIP_RANK.comfort);
+
+  if (parts.length === 0) add("Con lo que nos cuentes de este espacio, Nemul preparará un estudio de iluminación a medida.", TIP_RANK.functional);
   return parts;
+}
+
+function getReport(roomId, answers = {}) {
+  return getRankedReport(roomId, answers).map((t) => t.text);
 }
 
 function formatDate(d) {
@@ -2835,7 +3089,7 @@ const SCENE_LIGHT = {
 const SCENE_KIND_BY_ROOM = {
   living: "lounge", livingDining: "lounge",
   kitchen: "kitchen", kitchenOpen: "kitchen",
-  bedroom: "bedroom", bathroom: "bathroom", dining: "dining",
+  bedroom: "bedroom", bathroom: "bathroom",
   closet: "closet", office: "office", terrace: "terrace",
 };
 
@@ -2891,22 +3145,6 @@ const SCENE_ART = {
       <line x1="90" y1="71" x2="90" y2="86" />
       <line x1="26" y1="32" x2="26" y2="54" />
       <path d="M19 32h14" />
-    </>
-  ),
-  dining: (
-    <>
-      <line x1="0" y1="86" x2="150" y2="86" />
-      <rect x="30" y="60" width="90" height="5" rx="2" />
-      <line x1="40" y1="65" x2="40" y2="86" />
-      <line x1="110" y1="65" x2="110" y2="86" />
-      <line x1="75" y1="8" x2="75" y2="30" />
-      <path d="M62 44l13-14 13 14z" />
-      <path d="M24 86V64" />
-      <path d="M18 64h12" />
-      <path d="M24 52v12" />
-      <path d="M126 86V64" />
-      <path d="M120 64h12" />
-      <path d="M126 52v12" />
     </>
   ),
   closet: (
@@ -2991,7 +3229,7 @@ function sceneTrio(tempK) {
 const SCENE_ROOM_NAME = {
   living: "Tu salón", livingDining: "Tu salón-comedor", kitchen: "Tu cocina",
   kitchenOpen: "Tu cocina", bedroom: "Tu dormitorio", bathroom: "Tu baño",
-  dining: "Tu comedor", closet: "Tu vestidor", office: "Tu despacho",
+  closet: "Tu vestidor", office: "Tu despacho",
   terrace: "Tu terraza",
 };
 
@@ -3019,7 +3257,6 @@ const SCENE_FOOT = {
   kitchen: "En la cocina interesa ver bien lo que cortas: una luz más blanca marca mejor los detalles y el color real de los alimentos.",
   bedroom: "En el dormitorio la luz debe invitar a parar: cuanto más cálida, más fácil es desconectar antes de dormir.",
   bathroom: "En el baño hace falta ver con precisión para afeitarse o maquillarse, pero sin que parezca un quirófano.",
-  dining: "Sobre la mesa, una luz cálida hace que la comida se vea apetecible y que la sobremesa se alargue.",
   closet: "En el vestidor conviene una luz bastante neutra: es la única forma de ver el color real de la ropa antes de salir.",
   office: "Para trabajar, una luz más blanca mantiene despierto; la cálida de más da sensación de sobremesa.",
   terrace: "Fuera, la luz cálida es la que hace que apetezca quedarse cuando ya ha anochecido.",
@@ -4456,7 +4693,7 @@ function KitchenReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
 }
 
 function RoomReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
-  const insights = getReport(room.id, answers);
+  const insights = pickTopTips(getRankedReport(room.id, answers));
   // Este informe era el único sin "Errores que debes evitar", así que salía
   // más pobre que el resto al ponerlos uno al lado de otro.
   const mistakes = ROOM_TECH_MISTAKES[room.id] || [];
@@ -4530,8 +4767,74 @@ function BathroomLayerBlock({ bath, area, lux, grid, onlyLights }) {
               {onlyLights ? "Repartidos entre tus puntos de techo" : `Propuesta: ${grid.n} downlights de ${grid.lmPer} lm`}
             </p>
             <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
-              la luz de fondo: moverse y ver el conjunto. La cara no depende de esto
-              {showProposal ? " · los focos vienen en escalones de flujo, así que la propuesta no cae clavada" : ""}
+              Iluminación general para moverte y ver bien el espacio. La iluminación del espejo se calcula aparte.
+              {showProposal ? " Los focos vienen en escalones de flujo, así que la propuesta no cae clavada." : ""}
+            </p>
+          </div>
+          {showProposal && (
+            <p className="font-body t-body font-medium shrink-0" style={{ color: COLORS.text }}>{proposalLm.toLocaleString("es-ES")} lm</p>
+          )}
+        </div>
+      </div>
+
+      <p className="font-body t-eyebrow mt-4 mb-1" style={{ color: COLORS.accent }}>Capas funcionales</p>
+      <p className="font-body t-caption mb-2.5" style={{ color: COLORS.subtext }}>
+        No se suman a la general: cada una se enciende cuando hace falta.
+      </p>
+      <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
+        {rows.map((r, i) => (
+          <div key={r.id} className="flex items-start gap-3 px-4 py-3"
+            style={{ borderTop: i === 0 ? "none" : `1px solid ${COLORS.border}` }}>
+            <r.Icon size={16} color={COLORS.bulb} strokeWidth={1.9} className="shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="font-body t-body" style={{ color: COLORS.text }}>{r.label}</p>
+              <p className="font-body t-caption" style={{ color: COLORS.subtext }}>{r.hint}</p>
+            </div>
+            <p className="font-body t-body font-medium shrink-0" style={{ color: COLORS.text }}>{r.lm.toLocaleString("es-ES")} lm</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ClosetLayerBlock({ closet, area, lux, grid, onlyLights }) {
+  const { interior, mirror } = closet;
+  const needLm = Math.round((lux * area) / 100) * 100;
+  const proposalLm = grid.totalLm;
+  const showProposal = !onlyLights && proposalLm !== needLm;
+
+  const rows = [
+    ...(interior ? [{
+      id: "armario", Icon: Shirt, label: `Interior de los armarios — ${interior.lm.toLocaleString("es-ES")} lm`, lm: interior.lm,
+      hint: `${interior.detail}. Son ${interior.estimate}, a unos ${CLOSET_INTERIOR_LM_PER_M} lm por metro`,
+    }] : []),
+    ...(mirror ? [{
+      id: "espejo", Icon: Sparkles, label: `Espejo — ${mirror.pieces} × ${mirror.per} lm`, lm: mirror.lm,
+      hint: `${mirror.detail}. CRI ≥ ${mirror.cri}: por debajo de ahí los colores de la ropa se juzgan mal y es justo para lo que sirve esta luz`,
+    }] : []),
+  ];
+
+  return (
+    <div>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Iluminación general</p>
+      <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
+        <div className="px-4 pt-4 pb-3">
+          <p className="font-body t-caption" style={{ color: COLORS.subtext }}>{fmtArea(area)} m² × {lux} lm/m²</p>
+          <p className="font-display mt-1" style={{ color: COLORS.text, fontSize: 32, lineHeight: 1.1 }}>
+            {needLm.toLocaleString("es-ES")} lm
+          </p>
+          <p className="font-body t-caption" style={{ color: COLORS.subtext }}>necesidad calculada</p>
+        </div>
+        <div className="flex items-start gap-3 px-4 py-3" style={{ borderTop: `1px solid ${COLORS.border}` }}>
+          <Lightbulb size={16} color={COLORS.bulb} strokeWidth={1.9} className="shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="font-body t-body" style={{ color: COLORS.text }}>
+              {onlyLights ? "Repartidos entre tus puntos de techo" : `Propuesta: ${grid.n} downlights de ${grid.lmPer} lm`}
+            </p>
+            <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
+              Iluminación general para moverte y ver el conjunto del vestidor. El interior de los armarios y el espejo se calculan aparte.
+              {showProposal ? " Los focos vienen en escalones de flujo, así que la propuesta no cae clavada." : ""}
             </p>
           </div>
           {showProposal && (
@@ -4562,7 +4865,7 @@ function BathroomLayerBlock({ bath, area, lux, grid, onlyLights }) {
 }
 
 function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
-  const { tempK, lumens, grid, area, lux, tips, mistakes, layers, bath } = generateGenericTechnicalReport(room.id, answers);
+  const { tempK, lumens, grid, area, lux, tips, mistakes, layers, bath, closet } = generateGenericTechnicalReport(room.id, answers);
   const { Icon } = room;
   return (
     <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
@@ -4582,6 +4885,8 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameTon
             <BedroomLayerBlock area={area} lux={lux} layers={layers} grid={grid} />
           ) : bath ? (
             <BathroomLayerBlock bath={bath} area={area} lux={lux} grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} />
+          ) : closet && (closet.interior || closet.mirror) ? (
+            <ClosetLayerBlock closet={closet} area={area} lux={lux} grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} />
           ) : (
             <CalculationBlock
               area={area} lux={lux} lumens={lumens} grid={grid}
@@ -4621,7 +4926,7 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameTon
   );
 }
 
-const GENERIC_TECH_ROOMS = ["bedroom", "bathroom", "dining", "closet", "terrace", "office"];
+const GENERIC_TECH_ROOMS = ["bedroom", "bathroom", "closet", "terrace", "office"];
 
 function ReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
   if (room.id === "living" || room.id === "livingDining") return <TechnicalReportCard room={room} answers={answers} expanded={expanded} onToggle={onToggle} sameToneAs={sameToneAs} />;
@@ -5927,7 +6232,15 @@ export default function NemulApp() {
   const [viewingPlanId, setViewingPlanId] = useState(null);
   const [freeRoomId, setFreeRoomId] = useState(() => {
     try {
-      return localStorage.getItem("nemul_freeRoomId") || null;
+      const saved = localStorage.getItem("nemul_freeRoomId");
+      /* Si la estancia gratuita guardada ya no está en el catálogo, se descarta
+       * y la usuaria vuelve a elegir. Sin esto queda encerrada: todas las
+       * estancias salen con candado —ninguna coincide con la suya— y "Continuar
+       * gratis" abre una pantalla en blanco, porque no hay estancia que montar. */
+      if (saved && ROOMS.some((r) => r.id === saved)) return saved;
+      // Y se borra, para no volver a leer lo mismo en cada visita.
+      if (saved) localStorage.removeItem("nemul_freeRoomId");
+      return null;
     } catch {
       return null;
     }
