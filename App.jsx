@@ -1487,7 +1487,7 @@ const PROBLEM_REACTIONS = {
 };
 
 function problemStep(roomId) {
-  return { key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: PROBLEM_OPTIONS[roomId], reactions: PROBLEM_REACTIONS[roomId] };
+  return { key: "problem", title: "¿Qué te gustaría mejorar?", subtitle: "Elige lo que más se acerque a lo que buscas.", type: "single", layout: "list", options: PROBLEM_OPTIONS[roomId], reactions: PROBLEM_REACTIONS[roomId] };
 }
 const lightStep = { key: "light", title: "¿Qué iluminación tiene?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS };
 
@@ -2223,7 +2223,7 @@ const ROOM_FLOWS = {
     },
     { key: "light", title: "¿Cuánta luz natural recibe la cocina durante el día?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
     {
-      key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: KITCHEN_PROBLEM_OPTIONS,
+      key: "problem", title: "¿Qué te gustaría mejorar?", subtitle: "Elige lo que más se acerque a lo que buscas.", type: "single", layout: "list", options: KITCHEN_PROBLEM_OPTIONS,
       reactions: KITCHEN_PROBLEM_REACTIONS,
     },
     renovationStep,
@@ -2236,7 +2236,7 @@ const ROOM_FLOWS = {
     { key: "upperCabinets", title: "¿Tienes muebles altos?", subtitle: "Esto nos dice dónde puede faltar luz sobre la encimera.", type: "single", layout: "list", options: KITCHEN_UPPER_CABINETS_OPTIONS },
     { key: "light", title: "¿Cuánta luz natural recibe la cocina durante el día?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
     { key: "adjoiningStyle", title: "¿Qué ambiente tiene el salón con el que se conecta?", subtitle: "Así coordinamos la luz entre ambas zonas.", type: "single", layout: "grid", options: STYLE_OPTIONS },
-    { key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: KITCHEN_PROBLEM_OPTIONS, reactions: KITCHEN_PROBLEM_REACTIONS },
+    { key: "problem", title: "¿Qué te gustaría mejorar?", subtitle: "Elige lo que más se acerque a lo que buscas.", type: "single", layout: "list", options: KITCHEN_PROBLEM_OPTIONS, reactions: KITCHEN_PROBLEM_REACTIONS },
     renovationStep,
     ...existingPointsStep(answers),
   ],
