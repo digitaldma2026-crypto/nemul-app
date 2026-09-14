@@ -242,11 +242,19 @@ const CEILING_INSIGHT = {
   noSe: "Antes de instalar focos empotrados, confirma con un instalador qué tipo de techo tienes.",
 };
 
-// Mejora universal: en qué fase está el proyecto cambia mucho la recomendación.
+/* La primera pregunta de las diez estancias, y la misma en todas.
+ *
+ * Había tres redacciones distintas para lo mismo —"¿Qué quieres hacer?" en
+ * salón y dormitorio, "¿Estás reformando la estancia o solo quieres mejorar la
+ * iluminación?" en el resto— y tres juegos de etiquetas, uno de ellos con el
+ * nombre de la estancia dentro. Mientras cada una iba en un punto distinto del
+ * cuestionario apenas se notaba; ahora que abren las diez, se notaría mucho. */
 const RENOVATION_STATUS_OPTIONS = [
-  { id: "renovation", label: "Estoy haciendo una reforma", Icon: Hammer },
-  { id: "onlyLights", label: "Solo quiero cambiar las luces", Icon: Lightbulb },
+  { id: "renovation", label: "Reformar desde cero", Icon: Hammer },
+  { id: "onlyLights", label: "Mejorar la iluminación actual", Icon: Lightbulb },
 ];
+const RENOVATION_STEP_TITLE = "¿Qué quieres hacer?";
+const RENOVATION_STEP_SUBTITLE = "Esto decide si nos adaptamos a lo que ya hay o podemos diseñar de cero.";
 /* ===========================================================================
  * LOS DOS RECORRIDOS
  * ===========================================================================
@@ -315,8 +323,8 @@ const existingPointsStep = (answers) =>
 
 const renovationStep = {
   key: "renovationStatus",
-  title: "¿Estás reformando la estancia o solo quieres mejorar la iluminación?",
-  subtitle: "Esto cambia bastante nuestra recomendación.",
+  title: RENOVATION_STEP_TITLE,
+  subtitle: RENOVATION_STEP_SUBTITLE,
   type: "single",
   layout: "list",
   options: RENOVATION_STATUS_OPTIONS,
@@ -726,13 +734,11 @@ function livingLayers(area, answers = {}, roomId = "living") {
     ambient.push({
       id: "lectura", lm: LIVING_READING_LM, dimmable: true,
       label: "Luz de lectura",
-      detail: "Colócala junto a la zona de lectura, con una luz cómoda y regulable.",
     });
   }
   ambient.push({
     id: "ambiente", lm: LIVING_AMBIENT_PIECE_LM, dimmable: true,
     label: "Lámpara de ambiente",
-    detail: "de sobremesa o de pie, en el extremo opuesto del sofá, para que la luz venga de dos sitios y no de uno",
   });
   // Quien dice que el salón es sobre todo para descansar pide luz repartida y
   // baja, no un foco más: se le da una segunda pieza en vez de subir el techo.
@@ -740,11 +746,10 @@ function livingLayers(area, answers = {}, roomId = "living") {
     ambient.push({
       id: "relax", lm: LIVING_AMBIENT_PIECE_LM, dimmable: true,
       label: "Luz ambiental adicional",
-      detail: "una lámpara más, baja y cálida, para las noches en las que la luz general sobra",
     });
   }
   let accent = activities.includes("tv")
-    ? { lm: LIVING_ACCENT_LM, label: "Acento", detail: "una tira LED en el mueble de la televisión, oculta tras el canto: da profundidad y evita el contraste duro entre la pantalla y la pared" }
+    ? { lm: LIVING_ACCENT_LM, label: "Acento" }
     : null;
 
   /* ---------- General y complementarias son dos cosas distintas ----------
@@ -950,14 +955,12 @@ const KITCHEN_PROBLEM_OPTIONS = [
   { id: "shadows", label: "La encimera tiene sombras" },
   { id: "visibility", label: "No veo bien cuando cocino" },
   { id: "modern", label: "Quiero una cocina más moderna" },
-  { id: "onlyLighting", label: "Solo quiero cambiar la iluminación" },
 ];
 
 const KITCHEN_PROBLEM_REACTIONS = {
   shadows: "Entendido: vamos a poner luz directa sobre la encimera, no solo general.",
   visibility: "Vamos a priorizar visibilidad sobre ambiente en la zona de trabajo.",
   modern: "Buscamos un aspecto más moderno sin sacrificar función.",
-  onlyLighting: "Solo cambiar la iluminación: nos vamos a adaptar a lo que ya existe.",
 };
 
 const KITCHEN_SIZE_OPTIONS = [
@@ -1007,7 +1010,6 @@ const KITCHEN_PROBLEM_SENTENCE = {
   shadows: "Ya que la encimera tiene sombras, dirige puntos de luz independientes directamente sobre la zona de trabajo, no solo luz general desde el techo.",
   visibility: "Como no ves bien al cocinar, sube la intensidad de la luz sobre la encimera por encima de lo habitual, en un tono blanco neutro.",
   modern: "Para lograr un aspecto más moderno, combina downlights empotrados con un detalle de luz LED bajo los muebles altos.",
-  onlyLighting: "Ya que solo vas a cambiar la iluminación, prioriza soluciones sin obra, como focos de superficie o tiras adhesivas regulables.",
 };
 
 function joinNatural(items) {
@@ -1094,6 +1096,22 @@ const KITCHEN_SINK_LM = 400;
 const KITCHEN_HOB_LM = 400;
 const KITCHEN_CORNER_LM = 300;
 const KITCHEN_ISLAND_PIECE_LM = 500;
+const KITCHEN_AMBIENT_LM = 300;
+
+/* TRES TEMPERATURAS, UNA POR CAPA
+ *
+ * La cocina tenía un solo kelvin para todo, y por eso cualquier respuesta lo
+ * movía entero: decir "quiero una cocina elegante" bajaba a 2700 K la luz con
+ * la que se corta. Ahora cada capa lleva la suya y ninguna pregunta puede
+ * mover la general, que es la base funcional de la estancia. */
+const KITCHEN_GENERAL_TEMP_K = 3000;
+const KITCHEN_TASK_TEMP_K = 4000;
+const KITCHEN_WARM_TEMP_K = 2700;
+// "all" es "Todo lo anterior": incluye la elegancia y la familia, así que
+// hereda su tono cálido igual que hereda el criterio de la luz de trabajo.
+const KITCHEN_WARM_PRIORITIES = ["elegant", "family", "all"];
+const kitchenWarmAmbient = (priorities = []) =>
+  KITCHEN_WARM_PRIORITIES.some((x) => priorities.includes(x));
 
 function kitchenLayers(area, answers = {}, tempK = 3000) {
   const { layout, upperCabinets, light, multiZone } = answers;
@@ -1147,6 +1165,7 @@ function kitchenLayers(area, answers = {}, tempK = 3000) {
   }
 
   // ---------- 4. isla o península ----------
+  const warmAmbient = kitchenWarmAmbient(answers.priorities);
   let island = null;
   if (layout === "isla" || layout === "peninsula") {
     const pieces = layout === "isla" ? 2 : (w * 0.45 < 1.2 ? 1 : 2);
@@ -1154,19 +1173,43 @@ function kitchenLayers(area, answers = {}, tempK = 3000) {
       kind: layout, pieces,
       lmPer: KITCHEN_ISLAND_PIECE_LM,
       lm: pieces * KITCHEN_ISLAND_PIECE_LM,
+      // Los colgantes ya son la capa de ambiente de esta cocina: si lo que se
+      // busca es elegancia o estar en familia, se quedan cálidos y regulables.
+      tempK: warmAmbient ? KITCHEN_WARM_TEMP_K : KITCHEN_GENERAL_TEMP_K,
+      dimmable: warmAmbient,
     };
   }
 
-  return { generalLux, generalLm, grid, task, reinforcements, island, hasUpper, multiZone: !!multiZone, tempK };
+  /* ---------- 5. ambiente ----------
+   *
+   * Solo cuando no hay isla ni península que haga ese papel, y solo si la
+   * usuaria ha pedido elegancia o estar en familia. Va sin ubicación: Nemul no
+   * ha preguntado si hay mesa, ni barra, ni rincón, y no se la va a inventar.
+   * Es una capa que se ofrece, no un sitio que se señala. */
+  const ambient = !island && warmAmbient
+    ? { lm: KITCHEN_AMBIENT_LM, tempK: KITCHEN_WARM_TEMP_K, dimmable: true }
+    : null;
+
+  return { generalLux, generalLm, grid, task, reinforcements, island, ambient, hasUpper, multiZone: !!multiZone, tempK };
 }
 
 function generateKitchenReport(answers = {}) {
   const { layout, priorities = [], upperCabinets, multiZone, size, tallCeiling, light, problem, renovationStatus, adjoiningStyle } = answers;
 
-  let tempK = 3000;
-  if (priorities.includes("practical") || priorities.includes("comfortable")) tempK = 4000;
-  else if (priorities.includes("elegant")) tempK = 2700;
-  if (problem === "shadows" || problem === "visibility" || problem === "modern") tempK = 4000;
+  /* "Todo lo anterior" es su propio id: no contiene ni "practical" ni
+   * "comfortable", así que quien lo marcaba quedaba fuera de este grupo y
+   * pedirlo todo contaba menos que pedir una sola cosa. */
+  const workFirst = ["practical", "comfortable", "all"].some((p) => priorities.includes(p));
+
+  /* La temperatura sale de lo que la usuaria dice que le importa, y de nada
+   * más. Aquí había una cuarta línea que subía a 4000 K con tres de las
+   * respuestas de "¿qué te gustaría mejorar?". Mientras esa pregunta tenía
+   * también una opción de reforma y otra de solo cambiar luces, servía de
+   * matiz; al quedarse con tres opciones que la disparaban todas, pasaba a
+   * imponer 4000 K a cualquier cocina y dejaba "elegante" sin efecto posible. */
+  // La general es la base funcional de una cocina y no la mueve ninguna
+  // respuesta. Lo que la prioridad ajusta es la capa de ambiente.
+  const tempK = KITCHEN_GENERAL_TEMP_K;
 
   const area = roomArea(answers, KITCHEN_AREA_BY_SIZE[size] || 11);
   const layers = kitchenLayers(area, answers, tempK);
@@ -1195,13 +1238,16 @@ function generateKitchenReport(answers = {}) {
   // Este consejo antes solo lo veía quien elegía exactamente 3,00 m. Ahora
   // llega a cualquier techo por encima de 2,70, que es cuando empieza a notarse.
   if (tallCeiling) distribution.push("Con un techo alto, valora downlights de mayor potencia o un ángulo de haz más cerrado para que la luz llegue bien hasta la encimera.");
-  distribution.push(`Temperatura recomendada: ${tempK} K.`);
+  const ambientK = layers.island ? layers.island.tempK : (layers.ambient ? layers.ambient.tempK : null);
+  distribution.push(`Temperatura recomendada: ${tempK} K en la luz general y ${KITCHEN_TASK_TEMP_K} K en la de trabajo${
+    ambientK ? (ambientK === tempK ? ". La de ambiente va al mismo tono que la general" : `, y ${ambientK} K en la de ambiente`) : ""
+  }.`);
   distribution.push("Índice de reproducción cromática: CRI ≥ 90, para ver bien el color real de los alimentos.");
 
   const priorityLabels = priorities.map((p) => KITCHEN_PRIORITY_LABEL[p]).filter(Boolean);
   const priorityIntro = priorityLabels.length ? joinNatural(priorityLabels) : "usar bien la cocina cada día";
   const layoutPhrase = KITCHEN_LAYOUT_PHRASE[layout] || "tiene una distribución propia";
-  const goalPhrase = (priorities.includes("practical") || priorities.includes("comfortable"))
+  const goalPhrase = workFirst
     ? "mejorar la visibilidad durante la preparación de alimentos"
     : "crear un ambiente agradable para desayunar o reunirte con la familia";
 
@@ -1209,7 +1255,21 @@ function generateKitchenReport(answers = {}) {
   // "Se recomienda" en vez de "te recomendamos": el informe es orientativo y
   // cada cocina real tiene condiciones que el cuestionario no ve. Suena a
   // criterio profesional, no a norma cerrada.
-  sentences.push(`Como para ti lo más importante es ${priorityIntro}, y tu cocina ${layoutPhrase}, se recomienda una iluminación general en torno a ${tempK}K para ${goalPhrase}.`);
+  /* La frase decía "se recomienda una iluminación general en torno a 4000K
+   * para mejorar la visibilidad al cocinar": llamaba general a un número que
+   * justificaba por el trabajo. Son dos capas y ahora se dicen por separado. */
+  sentences.push(`Como para ti lo más importante es ${priorityIntro}, y tu cocina ${layoutPhrase}, la luz general va en torno a ${tempK} K: es el tono de fondo, el que enciendes al entrar y el que convive con el resto de la casa.`);
+  /* Cuidado con goalPhrase: tiene dos versiones y solo una habla de cocinar.
+   * Colgar la otra de la capa de encimera producía "para crear un ambiente
+   * agradable para desayunar está la capa de encimera", que no se sostiene.
+   * Cada objetivo va con la capa que lo resuelve. */
+  sentences.push(workFirst
+    ? `Para ${goalPhrase} está la capa de encimera, a ${KITCHEN_TASK_TEMP_K} K y con CRI ≥ 90: es luz localizada, en su propio interruptor, y por eso puede ser más blanca sin volver fría la cocina entera.`
+    : `Ver bien lo que cortas lo resuelve la capa de encimera, a ${KITCHEN_TASK_TEMP_K} K y con CRI ≥ 90: es luz localizada, en su propio interruptor, y por eso puede ser más blanca sin volver fría la cocina entera.`);
+  const warmLayer = layers.island && layers.island.dimmable ? layers.island : layers.ambient;
+  if (warmLayer) {
+    sentences.push(`Y para ${workFirst ? "que apetezca quedarse cuando ya no se está cocinando" : goalPhrase} está la capa de ambiente, a ${warmLayer.tempK} K y regulable: es la que se queda encendida cuando apagas la general.`);
+  }
 
   // La zona de trabajo se deduce de la distribución, que ya distingue isla y
   // península. La casilla de "varias zonas" añade su consejo encima, porque
@@ -1249,7 +1309,8 @@ function generateKitchenReport(answers = {}) {
   // antes solo lo veía quien elegía "Voy a hacer una reforma" como problema, y
   // quien decía "la encimera tiene sombras" y reformaba igual no lo veía nunca.
   if (renovationStatus === "renovation") sentences.push("Como vas a hacer una reforma completa, aprovecha para dejar circuitos independientes para la zona de trabajo, la isla o península, y la luz general.");
-  if (renovationStatus === "onlyLights" && problem !== "onlyLighting") sentences.push("Ya que solo vas a cambiar la iluminación, prioriza soluciones sin obra que aprovechen los puntos ya existentes.");
+  // Igual que el de reforma: sale del recorrido, no de la pregunta de mejorar.
+  if (renovationStatus === "onlyLights") sentences.push("Ya que solo vas a cambiar la iluminación, prioriza soluciones sin obra, como focos de superficie o tiras adhesivas regulables.");
 
   if (light === "low") sentences.push("Como la cocina recibe poca luz natural, compensa con un tono algo más intenso durante el día.");
   else if (light === "bright") sentences.push("Como recibe mucha luz natural, reserva esta intensidad sobre todo para las horas sin sol.");
@@ -1260,7 +1321,7 @@ function generateKitchenReport(answers = {}) {
 
   const mistakes = [
     "Evita concentrar toda la luz en un único punto central, ya que tu propio cuerpo proyectará sombra sobre la encimera al cocinar.",
-    "Evita diferencias muy marcadas de temperatura de color entre las distintas zonas de la cocina.",
+    "Evita mezclar temperaturas de color distintas en luces que hacen lo mismo y se ven a la vez, como dos puntos del techo o dos tramos de la misma encimera. Que la general y la de trabajo tengan tonos distintos no es un error: son capas con funciones distintas y encendidos independientes.",
     "Evita iluminar la zona de trabajo únicamente con luz cálida, ya que dificulta apreciar el color real de los alimentos y el punto de cocción.",
   ];
   if (upperCabinets && upperCabinets !== "no") mistakes.push("Evita dejar los muebles altos sin iluminación debajo, ya que proyectan sombra justo sobre la superficie de trabajo.");
@@ -1268,7 +1329,7 @@ function generateKitchenReport(answers = {}) {
   // quien lo leía igual que estaba.
   if (layout === "isla") mistakes.push("Evita instalar las lámparas a menos de 75 cm de la encimera, ya que pueden producir deslumbramientos y obstaculizar la visión entre las personas situadas a ambos lados de la isla.");
   else if (layout === "peninsula") mistakes.push("Evita instalar las lámparas a menos de 75 cm de la encimera, ya que pueden producir deslumbramientos y quedar dentro del campo de visión desde el resto de la cocina.");
-  if (problem === "onlyLighting") mistakes.push("No conviene elegir soluciones que requieran romper alicatado o encimera, ya que encarecen mucho una intervención pensada sin obra.");
+  if (renovationStatus === "onlyLights") mistakes.push("No conviene elegir soluciones que requieran romper alicatado o encimera, ya que encarecen mucho una intervención pensada sin obra.");
   if (adjoiningStyle) mistakes.push("Evita una temperatura de luz muy distinta entre la cocina y el salón, ya que en un espacio abierto el contraste se percibe con mucha más fuerza que entre habitaciones separadas.");
 
   return { tempK, lumens, grid, area, lux, layers, distribution, narrative: sentences.join(" "), mistakes: [...new Set(mistakes)] };
@@ -1295,27 +1356,12 @@ const BEDROOM_ACTIVITY_OPTIONS = [
  * el mueble, no la luz que hay que darle. Lo que sí decide es la pregunta
  * siguiente —dentro, delante o nada—, que es la que enciende la capa. */
 
-/* Lo primero que se pregunta, porque condiciona todo lo demás: si solo se van
- * a cambiar luminarias, Nemul respeta la instalación que hay; si hay reforma,
- * puede diseñar puntos nuevos. La clave sigue siendo `renovationStatus`, la
- * misma que el resto de la casa, para no duplicar la lógica de los consejos.
- * Lo que cambia son los textos, que aquí hablan del dormitorio. */
-const livingProjectOptions = (roomWord) => [
-  { id: "onlyLights", label: "Solo mejorar o cambiar la iluminación", Icon: Lightbulb },
-  { id: "renovation", label: `Estoy reformando el ${roomWord}`, Icon: Hammer },
-];
-
 // Igual que en el dormitorio: sin "con vigas", que se resuelve como un techo
 // liso y solo añadía una opción más que decidir.
 const LIVING_CEILING_OPTIONS = [
   { id: "liso", label: "Techo liso" },
   { id: "pladur", label: "Falso techo / pladur" },
   { id: "noSe", label: "No lo sé" },
-];
-
-const BEDROOM_PROJECT_OPTIONS = [
-  { id: "onlyLights", label: "Solo mejorar o cambiar la iluminación", Icon: Lightbulb },
-  { id: "renovation", label: "Estoy reformando el dormitorio", Icon: Hammer },
 ];
 
 // Sin "con vigas": en un dormitorio la decisión útil es si hay cámara donde
@@ -2173,7 +2219,7 @@ const livingFlow = (roomId) => (answers = {}) => {
   const isDining = roomId === "livingDining";
   const room = isDining ? "salón-comedor" : "salón";
   return [
-    { key: "renovationStatus", title: "¿Qué quieres hacer?", subtitle: "Esto decide si nos adaptamos a lo que ya hay o podemos diseñar de cero.", type: "single", layout: "list", options: livingProjectOptions(room), reactions: {
+    { key: "renovationStatus", title: RENOVATION_STEP_TITLE, subtitle: RENOVATION_STEP_SUBTITLE, type: "single", layout: "list", options: RENOVATION_STATUS_OPTIONS, reactions: {
       onlyLights: "Perfecto: respetaremos los puntos de luz que ya tienes y completaremos con luminarias que no necesiten obra.",
       renovation: "Entonces podemos diseñar la distribución desde cero, sin depender de dónde estén los puntos actuales.",
     } },
@@ -2207,6 +2253,7 @@ const ROOM_FLOWS = {
   living: livingFlow("living"),
   livingDining: livingFlow("livingDining"),
   kitchen: (answers = {}) => [
+    renovationStep,
     {
       key: "layout", title: "¿Qué distribución tiene tu cocina?", subtitle: "Elige la forma que más se parece a la tuya.", type: "single", layout: "grid", options: KITCHEN_LAYOUT_OPTIONS,
       reactions: KITCHEN_LAYOUT_REACTIONS,
@@ -2227,10 +2274,10 @@ const ROOM_FLOWS = {
       key: "problem", title: "¿Qué te gustaría mejorar?", subtitle: "Elige lo que más se acerque a lo que buscas.", type: "single", layout: "list", options: KITCHEN_PROBLEM_OPTIONS,
       reactions: KITCHEN_PROBLEM_REACTIONS,
     },
-    renovationStep,
     ...existingPointsStep(answers),
   ],
   kitchenOpen: (answers = {}) => [
+    renovationStep,
     { key: "layout", title: "¿Qué distribución tiene tu cocina?", subtitle: "Elige la forma que más se parece a la tuya.", type: "single", layout: "grid", options: KITCHEN_LAYOUT_OPTIONS, reactions: KITCHEN_LAYOUT_REACTIONS, extra: KITCHEN_MULTI_ZONE_EXTRA },
     { key: "dims", title: "¿Cuánto mide aproximadamente la zona de cocina?", subtitle: "Solo la parte de cocina, sin el salón al que se abre.", info: "Con el largo y el ancho, Nemul calcula la superficie y también la forma de la zona, que es lo que decide cómo se reparten los focos. Para una cocina suelen recomendarse entre 300 y 400 lm/m² según la luz natural.", type: "dims", extra: TALL_CEILING_EXTRA },
     { key: "priorities", title: "¿Qué es lo más importante para ti en la cocina?", subtitle: "Puedes elegir varias opciones.", type: "multi", layout: "list", options: KITCHEN_PRIORITY_OPTIONS },
@@ -2238,7 +2285,6 @@ const ROOM_FLOWS = {
     { key: "light", title: "¿Cuánta luz natural recibe la cocina durante el día?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
     { key: "adjoiningStyle", title: "¿Qué ambiente tiene el salón con el que se conecta?", subtitle: "Así coordinamos la luz entre ambas zonas.", type: "single", layout: "grid", options: STYLE_OPTIONS },
     { key: "problem", title: "¿Qué te gustaría mejorar?", subtitle: "Elige lo que más se acerque a lo que buscas.", type: "single", layout: "list", options: KITCHEN_PROBLEM_OPTIONS, reactions: KITCHEN_PROBLEM_REACTIONS },
-    renovationStep,
     ...existingPointsStep(answers),
   ],
   /* El dormitorio pregunta primero qué se va a hacer, porque de eso depende
@@ -2246,7 +2292,7 @@ const ROOM_FLOWS = {
    * puntos hay es decisiva y el informe no dibujará ninguna retícula; si hay
    * reforma, esa pregunta sobra. Ver bedroomLayers. */
   bedroom: (answers = {}) => [
-    { key: "renovationStatus", title: "¿Qué quieres hacer?", subtitle: "Esto decide si nos adaptamos a lo que ya hay o podemos diseñar de cero.", type: "single", layout: "list", options: BEDROOM_PROJECT_OPTIONS, reactions: {
+    { key: "renovationStatus", title: RENOVATION_STEP_TITLE, subtitle: RENOVATION_STEP_SUBTITLE, type: "single", layout: "list", options: RENOVATION_STATUS_OPTIONS, reactions: {
       onlyLights: "Perfecto: respetaremos los puntos de luz que ya tienes y completaremos con luminarias que no necesiten obra.",
       renovation: "Entonces podemos diseñar la distribución desde cero, sin depender de dónde estén los puntos actuales.",
     } },
@@ -2258,6 +2304,7 @@ const ROOM_FLOWS = {
     { key: "closetLight", title: "¿Quieres iluminar especialmente el armario?", subtitle: "Ideal si te vistes ahí mismo.", type: "single", layout: "list", options: CLOSET_LIGHT_OPTIONS },
   ],
   bathroom: (answers = {}) => [
+    renovationStep,
     { key: "type", title: "¿Qué tipo de baño es?", subtitle: "Esto cambia cuántas zonas de luz necesitas.", type: "single", layout: "list", options: BATHROOM_TYPE_OPTIONS, reactions: {
       aseo: "Al ser un aseo, con un buen punto sobre el espejo y otro general bastará.",
       completo: "En un baño completo, vamos a diferenciar la luz del espejo, la ducha o bañera, y la general.",
@@ -2268,10 +2315,10 @@ const ROOM_FLOWS = {
     { key: "nightlight", title: "¿Te gustaría una luz nocturna automática?", subtitle: "Para las visitas nocturnas al baño.", type: "single", layout: "list", options: YES_NO_OPTIONS },
     lightStep,
     problemStep("bathroom"),
-    renovationStep,
     ...existingPointsStep(answers),
   ],
   closet: (answers = {}) => [
+    renovationStep,
     { key: "type", title: "¿Cómo son los armarios del vestidor?", subtitle: "Solo para decidir la iluminación interior del armario.", type: "single", layout: "list", options: CLOSET_TYPE_OPTIONS, reactions: {
       abierto: "Con armarios abiertos, la luz general ya alcanza la ropa; reforzaremos sobre todo el espejo, si tienes uno.",
       cerrado: "Con armarios de puertas, añadiremos luz interior en cada módulo para que no quede oscuro el fondo.",
@@ -2285,10 +2332,10 @@ const ROOM_FLOWS = {
     { key: "dims", title: "¿Cuánto mide aproximadamente el vestidor?", subtitle: "A ojo está bien: no hace falta sacar el metro.", info: "Con el largo y el ancho, Nemul calcula la superficie y también la forma del vestidor, que es lo que decide cómo se reparten los puntos de luz. Aquí conviene entre 250 y 300 lm/m² para ver bien los colores.", type: "dims" },
     lightStep,
     problemStep("closet"),
-    renovationStep,
     ...existingPointsStep(answers),
   ],
   terrace: (answers = {}) => [
+    renovationStep,
     activityStep("terrace", "Puedes elegir varias opciones."),
     { key: "covered", title: "¿Está cubierta o descubierta?", subtitle: "Esto determina qué luminarias puedes usar.", type: "single", layout: "list", options: TERRACE_COVERED_OPTIONS, reactions: {
       cubierta: "Al estar cubierta, podemos usar luminarias de interior, siempre protegidas de la humedad.",
@@ -2298,10 +2345,10 @@ const ROOM_FLOWS = {
     { key: "night", title: "¿La usas principalmente de noche?", subtitle: "Cambia cuánto peso le damos a la luz artificial.", type: "single", layout: "list", options: YES_NO_OPTIONS },
     lightStep,
     problemStep("terrace"),
-    renovationStep,
     ...existingPointsStep(answers),
   ],
   hallway: (answers = {}) => [
+    renovationStep,
     { key: "length", title: "¿Qué longitud tiene aproximadamente?", subtitle: "Un cálculo aproximado está bien.", type: "single", layout: "grid", options: HALLWAY_LENGTH_OPTIONS, reactions: {
       corto: "Al ser corto, un único punto centrado probablemente sea suficiente.",
       medio: "Con longitud media, repartiremos dos puntos para no dejar zonas oscuras.",
@@ -2311,10 +2358,10 @@ const ROOM_FLOWS = {
     { key: "sensor", title: "¿Quieres sensor de movimiento?", subtitle: "Ideal para pasillos que se cruzan de paso.", type: "single", layout: "list", options: HALLWAY_SENSOR_OPTIONS },
     { key: "connects", title: "¿Conecta muchas habitaciones?", subtitle: "Cuantas más conecte, más se usará.", type: "single", layout: "list", options: YES_NO_OPTIONS },
     problemStep("hallway"),
-    renovationStep,
     ...existingPointsStep(answers),
   ],
   office: (answers = {}) => [
+    renovationStep,
     { key: "deskPosition", title: "¿Dónde está el escritorio respecto a la ventana?", subtitle: "Esto determina el riesgo de reflejos en la pantalla.", type: "single", layout: "list", options: DESK_POSITION_OPTIONS, reactions: {
       frente: "Con el escritorio frente a la ventana, cuidaremos que la luz no te deslumbre al mirar la pantalla.",
       espaldas: "De espaldas a la ventana, evitaremos que la luz se refleje en tu pantalla.",
@@ -2325,7 +2372,6 @@ const ROOM_FLOWS = {
     { key: "light", title: "¿Cuánta luz natural recibe durante el día?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
     { key: "videoCalls", title: "¿Haces videollamadas con frecuencia?", subtitle: "Para adaptar la iluminación de tu zona de trabajo.", type: "single", layout: "list", options: YES_NO_OPTIONS },
     problemStep("office"),
-    renovationStep,
     ...existingPointsStep(answers),
   ],
 };
@@ -3319,7 +3365,7 @@ function sceneVerdict(stop, tempK, stops) {
 
 const SCENE_FOOT = {
   lounge: "En un salón buscamos una luz cálida: acogedora por la noche, sin llegar al tono anaranjado.",
-  kitchen: "En la cocina interesa ver bien lo que cortas: una luz más blanca marca mejor los detalles y el color real de los alimentos.",
+  kitchen: "La luz de fondo de una cocina se lleva mejor cálida: es la que convive con el resto de la casa. Ver bien lo que cortas lo resuelve la encimera con su propia luz, más blanca.",
   bedroom: "En el dormitorio la luz debe invitar a parar: cuanto más cálida, más fácil es desconectar antes de dormir.",
   bathroom: "En el baño hace falta ver con precisión para afeitarse o maquillarse, pero sin que parezca un quirófano.",
   closet: "En el vestidor conviene una luz bastante neutra: es la única forma de ver el color real de la ropa antes de salir.",
@@ -3330,7 +3376,11 @@ const SCENE_FOOT = {
 // Pieza D del prototipo: la misma estancia con tres tonos. Es lo que hace
 // que alguien que no sabe qué es un kelvin entienda la recomendación sin
 // leer una sola palabra.
-function LightScenes({ roomId, tempK }) {
+/* `note` la pasa la cocina: allí las tres muestras comparan solo la luz
+ * general, y sin decirlo parecería que 4000 K está descartado cuando es
+ * justo lo que recomendamos para la encimera. Con nota, los pies dejan de
+ * juzgar ("Demasiado cálida") y solo sitúan ("más cálida"). */
+function LightScenes({ roomId, tempK, note }) {
   const kind = SCENE_KIND_BY_ROOM[roomId] || "lounge";
   const stops = sceneTrio(tempK);
   const mine = SCENE_ROOM_NAME[roomId] || "Lo recomendado";
@@ -3341,7 +3391,9 @@ function LightScenes({ roomId, tempK }) {
         <div className="flex gap-2">
           {stops.map((stop) => {
             const isMine = stop === tempK;
-            const verdict = sceneVerdict(stop, tempK, stops);
+            const verdict = note
+              ? (stop < tempK ? "Más cálida" : "Más neutra")
+              : sceneVerdict(stop, tempK, stops);
             return (
               <div key={stop} className="flex-1 text-center">
                 <div
@@ -3357,13 +3409,16 @@ function LightScenes({ roomId, tempK }) {
                   className="font-body t-caption mt-1.5"
                   style={{ color: isMine ? COLORS.text : COLORS.subtext, fontWeight: isMine ? 600 : 400 }}
                 >
-                  {isMine ? mine : verdict}
+                  {isMine ? (note ? "Recomendada para la luz general" : mine) : verdict}
                 </p>
                 <p className="font-body" style={{ fontSize: 10, lineHeight: 1.4, color: COLORS.subtext }}>{stop} K</p>
               </div>
             );
           })}
         </div>
+        {note && (
+          <p className="font-body t-small mt-3" style={{ color: COLORS.text }}>{note}</p>
+        )}
         <p className="font-body t-small italic mt-3" style={{ color: COLORS.subtext }}>{SCENE_FOOT[kind]}</p>
       </div>
     </div>
@@ -3537,7 +3592,7 @@ function LightingBasicsView({ terms }) {
         <div>
           <p className="font-body t-small font-medium" style={{ color: COLORS.text }}>Un downlight es un foco empotrado en el techo</p>
           <p className="font-body t-small mt-1" style={{ color: COLORS.subtext }}>
-            Queda a ras, sin sobresalir, y lanza la luz hacia abajo. Es lo que en casa se llama «los focos del techo». Se reparten separados entre sí para que la luz llegue por igual a toda la estancia.
+            Queda a ras, sin sobresalir, y lanza la luz hacia abajo. Es lo que en casa se llama «los focos del techo». Se ponen varios repartidos por la estancia, en lugar de una sola lámpara en el centro.
           </p>
         </div>
       </div>
@@ -4217,14 +4272,17 @@ function TipsList({ tips }) {
 
 // La "Recomendación general" de las tres tarjetas técnicas: el número, la
 // frase que lo traduce, la barra y las escenas. Antes era solo el número.
-function ColorTempBlock({ roomId, tempK, extra, sameToneAs }) {
+function ColorTempBlock({ roomId, tempK, extra, sameToneAs, tempLabel = "Temperatura de color", layerNote, sceneNote }) {
   return (
     <>
       <div data-pdf-keep>
         <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Recomendación general</p>
         <div className="flex flex-col gap-2 rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
-          <StatRow label="Temperatura de color" value={`${tempK} K`} />
+          <StatRow label={tempLabel} value={`${tempK} K`} />
           <p className="font-body t-small italic mt-1" style={{ color: COLORS.subtext }}>{describeTempK(tempK)}</p>
+          {layerNote && (
+            <p className="font-body t-small" style={{ color: COLORS.text }}>{layerNote}</p>
+          )}
           {extra}
           {sameToneAs ? (
             <p className="font-body t-small italic" style={{ color: COLORS.subtext }}>
@@ -4235,7 +4293,7 @@ function ColorTempBlock({ roomId, tempK, extra, sameToneAs }) {
           )}
         </div>
       </div>
-      {!sameToneAs && <LightScenes roomId={roomId} tempK={tempK} />}
+      {!sameToneAs && <LightScenes roomId={roomId} tempK={tempK} note={sceneNote} />}
     </>
   );
 }
@@ -4292,7 +4350,7 @@ function TechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) 
  * y los refuerzos por otro. Sin fila de total: la tira de la encimera y los
  * focos del techo no se encienden a la vez ni suman una cifra útil. */
 function KitchenLayerBlock({ layers, area, track }) {
-  const { generalLux, generalLm, grid, task, reinforcements, island } = layers;
+  const { generalLux, generalLm, grid, task, reinforcements, island, ambient } = layers;
   // Necesidad y propuesta son dos cifras distintas: la primera es los metros
   // por los lm/m², la segunda lo que dan los focos, que vienen en escalones.
   const needLm = generalLm;
@@ -4303,21 +4361,23 @@ function KitchenLayerBlock({ layers, area, track }) {
   if (task.mode === "underCabinet") {
     work.push({
       id: "encimera", label: "Encimera — tira LED bajo mueble", lm: task.lm,
-      hint: `unos ${fmtDim(task.runM)} m de frente × ${task.lmPerM} lm/m, CRI ≥ 90, en el borde delantero del mueble${task.uncoveredM > 0.4 ? `. Los otros ${fmtDim(task.uncoveredM)} m de encimera no tienen mueble alto: van con focos orientables adelantados` : ""}`,
+      hint: `unos ${fmtDim(task.runM)} m de frente × ${task.lmPerM} lm/m, ${KITCHEN_TASK_TEMP_K} K y CRI ≥ 90, en el borde delantero del mueble${task.uncoveredM > 0.4 ? `. Los otros ${fmtDim(task.uncoveredM)} m de encimera no tienen mueble alto: van con focos orientables adelantados` : ""}`,
     });
   } else {
     work.push({
       id: "encimera", label: "Encimera — focos orientables", lm: task.lm,
-      hint: `${task.pieces} puntos de ${task.lmPer} lm adelantados hacia el borde. Sin muebles altos no hay dónde poner tira, y esta solución es menos eficaz`,
+      hint: `${task.pieces} puntos de ${task.lmPer} lm a ${KITCHEN_TASK_TEMP_K} K y CRI ≥ 90, adelantados hacia el borde. Sin muebles altos no hay dónde poner tira, y esta solución es menos eficaz`,
     });
   }
   if (island) {
     work.push({
       id: "isla", label: island.kind === "isla" ? "Isla" : "Península", lm: island.lm,
-      hint: `${island.pieces} colgantes de ${island.lmPer} lm, a ${PENDANT_H_TEXT} de la encimera`,
+      hint: `${island.pieces} colgantes de ${island.lmPer} lm a ${island.tempK} K, a ${PENDANT_H_TEXT} de la encimera${island.dimmable ? ", y regulables: son los que se quedan encendidos cuando apagas la general" : ""}`,
     });
   }
-  reinforcements.forEach((r) => work.push({ id: r.id, label: r.label, lm: r.lm, hint: r.hint }));
+  reinforcements.forEach((r) => work.push({
+    id: r.id, label: r.label, lm: r.lm, hint: `${r.hint}. ${KITCHEN_TASK_TEMP_K} K, como el resto de la luz de trabajo`,
+  }));
 
   return (
     <div>
@@ -4364,6 +4424,27 @@ function KitchenLayerBlock({ layers, area, track }) {
           </div>
         ))}
       </div>
+      {ambient && (
+        <>
+          <p className="font-body t-eyebrow mt-4 mb-1" style={{ color: COLORS.accent }}>Luz de ambiente</p>
+          <p className="font-body t-caption mb-2.5" style={{ color: COLORS.subtext }}>
+            Opcional, y la única cálida de la cocina.
+          </p>
+          <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
+            <div className="flex items-start gap-3 px-4 py-3">
+              <Lightbulb size={16} color={COLORS.bulb} strokeWidth={1.9} className="shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="font-body t-body" style={{ color: COLORS.text }}>Un punto cálido regulable</p>
+                <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
+                  {ambient.tempK} K y regulable, para dejarlo encendido cuando apagas la general. No te decimos dónde: no sabemos si tienes mesa, barra o un rincón, y eso lo ves tú mejor que nosotros
+                </p>
+              </div>
+              <p className="font-body t-body font-medium shrink-0" style={{ color: COLORS.text }}>{ambient.lm.toLocaleString("es-ES")} lm</p>
+            </div>
+          </div>
+        </>
+      )}
+
       <p className="font-body t-small mt-2.5 rounded-lg p-3" style={{ color: COLORS.text, backgroundColor: COLORS.bgAlt }}>
         <span className="font-medium">Los {fmtDim(task.runM)} m de encimera son una estimación de Nemul.</span> Salen de la forma que has elegido y de las medidas de la estancia; no te hemos preguntado cuánto mide tu frente de trabajo. Ajusta los metros de tira a lo que tengas de verdad, manteniendo los {task.lmPerM ?? KITCHEN_TASK_LM_PER_M} lm por metro.
       </p>
@@ -4373,6 +4454,7 @@ function KitchenLayerBlock({ layers, area, track }) {
 
 function KitchenReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
   const { tempK, grid, area, layers, distribution, narrative, mistakes } = generateKitchenReport(answers);
+  const ambientTempK = layers.island ? layers.island.tempK : (layers.ambient ? layers.ambient.tempK : null);
   const track = reportTrack(answers);
   const points = existingPoints(answers);
   const { Icon } = room;
@@ -4392,6 +4474,9 @@ function KitchenReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
             roomId={room.id}
             tempK={tempK}
             sameToneAs={sameToneAs}
+            tempLabel="Temperatura de color · luz general"
+            layerNote={`Es el tono del techo, no el de toda la cocina: la luz de trabajo va a ${KITCHEN_TASK_TEMP_K} K${ambientTempK ? ` y la de ambiente a ${ambientTempK} K` : ""}. Cada capa lleva el suyo más abajo.`}
+            sceneNote="Las tres comparan solo la luz general. Las otras capas tienen su propia temperatura y no salen aquí."
           />
 
           <KitchenLayerBlock layers={layers} area={area} track={track} />
