@@ -247,6 +247,72 @@ const RENOVATION_STATUS_OPTIONS = [
   { id: "renovation", label: "Estoy haciendo una reforma", Icon: Hammer },
   { id: "onlyLights", label: "Solo quiero cambiar las luces", Icon: Lightbulb },
 ];
+/* ===========================================================================
+ * LOS DOS RECORRIDOS
+ * ===========================================================================
+ *
+ * Nemul responde a dos encargos que no se parecen en nada:
+ *
+ *   MEJORA  — "tengo esto y quiero que dé mejor luz". La instalación es un
+ *             dato, no una variable. Se parte de los puntos que hay y se dice
+ *             qué colgar de ellos y qué lámparas añadir. No se calcula ninguna
+ *             retícula: proponer una sería proponer obra que nadie ha pedido.
+ *
+ *   REFORMA — "voy a abrir el techo". Aquí sí se diseña la distribución.
+ *
+ * Antes esto era un `onlyLights` que viajaba por todo el árbol de componentes
+ * y, al llegar abajo, cambiaba las palabras: la misma retícula se llamaba
+ * "focos" o "zonas de luz" según el caso. El propio código lo decía —"El
+ * número es el mismo; lo que cambia es qué promete"—. Un salón de 20 m² recibía
+ * seis puntos de techo en los dos recorridos, porque solo había un motor.
+ *
+ * Ahora el recorrido se decide UNA vez, aquí, y cada informe conmuta bloques
+ * enteros. Lo que comparten es lo que de verdad es común: kelvin, CRI, las
+ * necesidades de cada estancia y sus capas. Lo que cambia son los puntos. */
+const TRACK = { mejora: "mejora", reforma: "reforma" };
+
+function reportTrack(answers = {}) {
+  return answers.renovationStatus === "renovation" ? TRACK.reforma : TRACK.mejora;
+}
+
+/* Cuántos puntos hay ya en el techo. Antes solo se preguntaba "uno o varios",
+ * y solo en salón y dormitorio; el salón además tiraba la respuesta sin usarla.
+ * Con el número exacto se puede decir cuánta luz debe dar cada punto. */
+const EXISTING_POINTS_OPTIONS = [
+  { id: "1", label: "Uno" },
+  { id: "2", label: "Dos" },
+  { id: "3", label: "Tres" },
+  { id: "4+", label: "Cuatro o más" },
+];
+
+function existingPoints(answers = {}) {
+  const v = answers.ceilingPoints;
+  if (v === "4+") return 4;
+  // Planes guardados con la escala vieja: "uno" era un número, "varios" no.
+  if (v === "uno") return 1;
+  if (v === "varios") return null;
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+const ceilingPointsStep = {
+  key: "ceilingPoints",
+  title: "¿Cuántos puntos de luz tienes actualmente en el techo?",
+  subtitle: "Nos adaptaremos a los que ya existen.",
+  type: "single", layout: "list",
+  options: EXISTING_POINTS_OPTIONS,
+  reactions: {
+    "1": "Con un solo punto, esa luminaria dará la luz general y el resto lo repartiremos en otras capas.",
+    "2": "Con dos puntos, te diremos cuánta luz debe dar cada uno y con qué lámparas completar.",
+    "3": "Con tres puntos hay margen para repartir bien la luz general sin tocar la instalación.",
+    "4+": "Con cuatro o más, el techo puede resolver la luz general y las lámparas quedan para las escenas.",
+  },
+};
+
+// Solo en el recorrido de mejora: en una reforma no hay instalación que respetar.
+const existingPointsStep = (answers) =>
+  (reportTrack(answers) === TRACK.mejora ? [ceilingPointsStep] : []);
+
 const renovationStep = {
   key: "renovationStatus",
   title: "¿Estás reformando la estancia o solo quieres mejorar la iluminación?",
@@ -262,7 +328,7 @@ const RENOVATION_INSIGHT = {
   // la estancia, sin saber dónde están los puntos actuales. Prometer que se
   // adapta y enseñar debajo una retícula de seis focos deja a quien lo lee
   // pensando que tiene que abrir seis agujeros. Ahora se dice lo que es.
-  onlyLights: "Como solo vas a cambiar las luminarias, toma el cálculo y el plano como el objetivo a alcanzar, no como una obra a ejecutar: indican cuánta luz necesita la estancia y cómo debería repartirse. Con los puntos de luz que ya tienes, acércate a ese reparto sin tocar la instalación — un plafón sustituido por un foco orientable, un carril o una suspensión múltiple en el punto existente, y lámparas de pie o de mesa en las zonas donde el plano pide luz y no llega ningún punto.",
+  onlyLights: "Como vas a trabajar con la instalación que ya tienes, el objetivo es cuánta luz debe dar el techo en total, no dónde irían los puntos. Sustituye lo que cuelga de cada uno por luminarias que den el flujo indicado —un plafón por un foco orientable, un carril o una suspensión múltiple en el punto existente— y cubre con lámparas de pie o de mesa las zonas a las que no llegue ningún punto.",
 };
 
 const BEDROOM_RENOVATION_INSIGHT = {
@@ -282,31 +348,13 @@ const STYLE_OPTIONS = [
  * usa para preguntar por el ambiente del salón contiguo, pero eso solo
  * produce consejos, no temperatura. */
 // La bombilla de toda la vida, que sirve para explicar qué es un lumen. No es
-// la luminaria del proyecto: esa la decide la retícula (ver planLayout).
+// la luminaria del proyecto: ese lo decide el reparto (ver generalPoints).
 const REFERENCE_BULB_LM = 800;
 const REFERENCE_BULB_W = 8;
 
-// Criterio de reparto de downlights: de 1,20 a 1,50 m entre centros, y unos
-// 60-75 cm a las paredes como punto de partida.
-// Entre focos: 1,20-1,50 m es la franja objetivo.
-const SPACING_MIN = 1.2;
-const SPACING_MAX = 1.5;
 
-// A pared: 60-75 cm es lo recomendado, y 45-90 cm el margen excepcional. Los
-// dos extremos son topes duros, no penalizaciones: fuera de ahí no se estira
-// el margen, se cambia el número de puntos.
-//
-// Los 45 cm de suelo no son un descuido. En un eje corto —una cocina o un baño
-// de 2,07 m de fondo— obligar a 60 cm deja los focos a 87 cm entre sí, o sea
-// una retícula apretada sin motivo. Poder bajar a 45 le da aire al cálculo y
-// saca una distribución más lógica en esas estancias estrechas.
-const WALL_MARGIN_ABS_MIN = 0.45;
-const WALL_MARGIN_MIN = 0.6;
-const WALL_MARGIN_MAX = 0.75;
-const WALL_MARGIN_ABS_MAX = 0.9;
-const WALL_MARGIN_STEP = 0.05;
 
-/* Reparto de las estancias de estar (salón y salón-comedor). Ver openPlanLayout.
+/* Reparto de las estancias de estar (salón y salón-comedor). Ver generalPoints.
  *
  * Exigir 1,20-1,50 m en cada eje por separado no deja elegir: cada foco acaba
  * cubriendo entre 1,44 y 2,25 m², así que un salón de 20 m² cae por aritmética
@@ -318,16 +366,6 @@ const WALL_MARGIN_STEP = 0.05;
  * cubre cada punto: SE_* es el lado del cuadrado equivalente. 1,26 x 1,98 m
  * reparte mejor en una estancia alargada que 1,50 x 1,50, y un eje suelto no
  * sabe decirlo. */
-const SE_OPEN_MAX = 1.75;
-// Con la superficie por punto como única medida, el cálculo se iba a 2,12 m
-// entre focos: aprobaba de sobra en superficie y en el techo dejaba sombra.
-// 1,80 y no 2,00 porque arreglar el exceso de focos abriendo la retícula hasta
-// casi dos metros es cambiar un problema por el contrario. En un salón de
-// 20 m² este tope es justo lo que descarta 8 focos con las filas a 1,98 m y
-// deja 9 en 3x3, que es la retícula que de verdad queda limpia.
-const AXIS_OPEN_MAX = 1.8;
-// Y una retícula estirada —una fila de siete— también aprueba en superficie.
-const GRID_ANISO_MAX = 1.6;
 
 /* El dormitorio se reparte más suelto que el salón, y no por descuido.
  *
@@ -341,10 +379,6 @@ const GRID_ANISO_MAX = 1.6;
  * el 2 x 2 pedía 2,12 m de eje (tope 1,80) y salía estirado 1,63 (tope 1,60),
  * o sea que lo descartaban por 32 cm y por tres centésimas. Con estos topes
  * entra, y son cuatro puntos en vez de seis para la misma luz. */
-const BEDROOM_GRID_LIMITS = { axisMax: 2.4, seMax: 2.2, anisoMax: 1.9 };
-// Por encima de 900 lm un downlight doméstico hace mancha y deslumbra: es el
-// suelo del número de puntos.
-const DOWNLIGHT_LM_CAP = 900;
 
 /* Y el suelo, que faltaba. El tope de arriba obliga a poner MÁS puntos cuando
  * el total es alto; sin su pareja, nada impedía repartir un total bajo entre
@@ -355,8 +389,6 @@ const DOWNLIGHT_LM_CAP = 900;
  *
  * 300 lm es el flujo por debajo del cual un downlight deja de aportar luz
  * general y pasa a ser decorativo. */
-const DOWNLIGHT_LM_FLOOR = 300;
-
 /* La segunda capa del despacho: la mesa.
  *
  * Los 500 lux de la norma son el nivel de la SUPERFICIE DE TRABAJO, no el de
@@ -539,11 +571,20 @@ const fmtDim = (n) => (Math.round(n * 100) / 100).toString().replace(".", ",");
  * "Salón" no la hay, y en "Salón-comedor" la damos por sabida —preguntarla
  * sería pedir un dato que ya tenemos. Los planes antiguos que la guardaron
  * como actividad se siguen leyendo (ver hasDining en generateLivingReport). */
+/* Una opción = una capa. La lista no describe la estancia ("tengo zona de
+ * televisión"), nombra lo que se va a hacer en ella, porque es la actividad la
+ * que decide si esa capa existe:
+ *
+ *   leer      -> capa de lectura
+ *   ver la tele -> capa de acento tras el mueble, y la general se aparta de la pantalla
+ *   estar     -> un segundo punto de ambiente
+ *
+ * Los ids se quedan como estaban: son los que enganchan con las capas y con
+ * los planes ya guardados. Lo que cambia es cómo se pregunta. */
 const LIVING_ACTIVITY_OPTIONS = [
-  { id: "tv", label: "Tengo zona de televisión", Icon: Tv },
-  // "aquí" y no "en el salón": la misma lista se usa en el salón-comedor.
-  { id: "read", label: "Me gusta leer aquí", Icon: BookOpen },
-  { id: "relax", label: "Principalmente para descansar", Icon: Sofa },
+  { id: "read", label: "Leer", Icon: BookOpen },
+  { id: "tv", label: "Ver la televisión", Icon: Tv },
+  { id: "relax", label: "Estar y conversar", Icon: Sofa },
 ];
 
 const SALON_SIZE_OPTIONS = [
@@ -592,7 +633,7 @@ const LIVING_TEMP_K = 3000;
  * con las sillas retiradas y paso alrededor. Los topes evitan los dos
  * absurdos: un comedor de 3,6 m² donde no cabe la mesa, y uno de 12 m² que se
  * comería el salón. Todo lo que salga de aquí se presenta como orientativo.
- * Ver ZoneSplitBlock y LivingZonePlan. */
+ * Ver ZoneSplitBlock. */
 const LIVING_DINING_AREA_SHARE = 0.3;
 const LIVING_DINING_AREA_MIN = 5;
 const LIVING_DINING_AREA_MAX = 9;
@@ -603,7 +644,7 @@ const LIVING_DINING_AREA_MAX = 9;
 // en un salón grande, que no es una tira LED, es otra luz general.
 const LIVING_ACCENT_LM = 350;         // tira LED en el mueble de televisión
 const LIVING_AMBIENT_PIECE_LM = 300;  // una lámpara de pie o de sobremesa
-const LIVING_READING_LM = 450;        // el pie de lectura, regulable
+const LIVING_READING_LM = 450;        // la capa de lectura, regulable
 
 
 
@@ -634,7 +675,6 @@ const PENDANT_H_TEXT = `${PENDANT_H_MIN_CM}–${PENDANT_H_MAX_CM} cm`;
  * uniformidad de un techo que trabaja solo es lo que llenaba de agujeros el
  * salón. Con los topes del salón esa misma zona pedía seis downlights; con
  * estos, cuatro. */
-const LIVING_GRID_LIMITS = BEDROOM_GRID_LIMITS;
 // Ningún foco de la general entra en la mesa ni en su corona de 60 cm. Se
 // dice en el informe y se dibuja en el plano.
 const LIVING_TABLE_KEEPOUT_M = 0.6;
@@ -658,7 +698,8 @@ function livingLayers(area, answers = {}, roomId = "living") {
   const activities = answers.activities || [];
   const zones = livingZones(area, roomId);
   const isDining = zones.comedor > 0;
-  const onlyLights = answers.renovationStatus === "onlyLights";
+  const track = reportTrack(answers);
+  const points = existingPoints(answers);
 
   // ---------- zona de estar ----------
   const estarLux = getLux("living", answers.light);
@@ -668,8 +709,8 @@ function livingLayers(area, answers = {}, roomId = "living") {
   if (activities.includes("read")) {
     ambient.push({
       id: "lectura", lm: LIVING_READING_LM, dimmable: true,
-      label: "Pie de lectura",
-      detail: "junto al sofá y por detrás del hombro, con la pantalla por debajo de la altura de los ojos al sentarse",
+      label: "Luz de lectura",
+      detail: "junto al sofá y por detrás del hombro, con la fuente de luz por debajo de la altura de los ojos al sentarse: sirve un pie, una lámpara de sobremesa o un aplique orientable, según dónde te sientes",
     });
   }
   ambient.push({
@@ -725,7 +766,11 @@ function livingLayers(area, answers = {}, roomId = "living") {
   const roomD = dm ? dm.d : area / roomW;
   const diningDepth = isDining ? zones.comedor / roomD : 0;
   const estarDims = { w: roomW - diningDepth, d: roomD };
-  const grid = openPlanLayout(zones.estar, generalLm, 1, 200, LIVING_GRID_LIMITS, isDining || dm ? estarDims : null);
+  /* Solo se cuentan puntos si se va a abrir el techo. En mejora los puntos ya
+   * están y su número lo ha dicho la usuaria. Ver LOS DOS RECORRIDOS. */
+  const grid = track === TRACK.reforma
+    ? generalPoints(zones.estar, zones.estar * estarLux, generalLm)
+    : null;
 
   // ---------- zona de comedor ----------
   let dining = null;
@@ -747,7 +792,7 @@ function livingLayers(area, answers = {}, roomId = "living") {
   }
 
   return {
-    zones, isDining, onlyLights,
+    zones, isDining, track, points,
     plan: { roomW, roomD, diningDepth, estarW: estarDims.w },
     estar: { area: zones.estar, lux: estarLux, need: estarNeed, generalLm, ambient, ambientLm, accent, accentLm, complementaryLm },
     grid, dining,
@@ -769,28 +814,32 @@ function generateLivingReport(answers = {}, roomId = "living") {
   // Para el resto del informe, "los lúmenes de la estancia" son los de la luz
   // general. Las complementarias no se suman aquí: son escenas, no fondo.
   const lumens = layers.estar.generalLm;
-  const onlyLights = renovationStatus === "onlyLights";
+  const track = reportTrack(answers);
+  const points = existingPoints(answers);
   const room = dining ? "salón-comedor" : "salón";
 
   const tips = [];
 
   // ---------- la general de la zona de estar ----------
-  if (dining) {
-    tips.push(onlyLights
-      ? `La luz general no se reparte por toda la estancia: se reparte por la zona de estar. Son unos ${estar.generalLm.toLocaleString("es-ES")} lm sobre unos ${fmtArea(estar.area)} m², y la mesa queda fuera de ese reparto porque la resuelve su propia luminaria.`
-      : `Reparte la luz general solo por la zona de estar, siguiendo el esquema del plano: unos ${spacingText(grid)}, y a unos ${marginText(grid)} de las paredes. La zona de la mesa queda fuera de esa retícula.`);
-    tips.push(`Ningún foco de la luz general debe caer sobre la mesa ni a menos de ${Math.round(LIVING_TABLE_KEEPOUT_M * 100)} cm de su borde: si la mesa ya tiene su colgante, un downlight encima solo añade una segunda sombra y le quita el papel de zona propia.`);
-  } else {
-    tips.push(onlyLights
-      ? `Reparte la luz siguiendo el esquema del plano: unos ${spacingText(grid, true)}, y a unos ${marginText(grid)} de las paredes. Las lámparas de pie y de sobremesa que ya tienes cuentan como parte de ese reparto.`
-      : `Coloca los downlights siguiendo la retícula del plano: unos ${spacingText(grid)}, y a unos ${marginText(grid)} de las paredes.`);
+  /* Separación de recorridos: hablar de separaciones y de márgenes a pared
+   * solo tiene sentido si hay una retícula que colocar. En mejora no la hay,
+   * y el bloque de techo ya dice cuánta luz debe dar cada punto existente. */
+  /* Lo que decían estos dos consejos —separaciones, márgenes a pared, "ajusta
+   * la retícula"— era el plano puesto en palabras. Sin plano no hay nada que
+   * ajustar: el bloque de techo ya dice cuántos puntos y de qué flujo. */
+  if (track === TRACK.reforma && dining) {
+    tips.push(`La luz general es solo de la zona de estar: unos ${estar.generalLm.toLocaleString("es-ES")} lm sobre unos ${fmtArea(estar.area)} m². La mesa queda fuera, porque la resuelve su propia luminaria.`);
+  } else if (dining) {
+    tips.push(`La luz general no se reparte por toda la estancia: se reparte por la zona de estar. Son unos ${estar.generalLm.toLocaleString("es-ES")} lm sobre unos ${fmtArea(estar.area)} m², y la mesa queda fuera de ese reparto porque la resuelve su propia luminaria.`);
   }
-  tips.push(`Ajusta ${onlyLights ? "ese reparto" : "esa retícula"} a la planta real y a los muebles: es una referencia de partida, no una plantilla que haya que respetar punto por punto.`);
+  if (dining) {
+    tips.push(`Ningún foco de la luz general debe caer sobre la mesa ni a menos de ${Math.round(LIVING_TABLE_KEEPOUT_M * 100)} cm de su borde: si la mesa ya tiene su colgante, un downlight encima solo añade una segunda sombra y le quita el papel de zona propia.`);
+  }
   tips.push(`Las luces complementarias no se suman a la general: son escenas. Con todo encendido a la vez sobraría luz, así que ponlas reguladas y enciende cada una cuando toque.`);
   tips.push("Evita colocar focos justo encima del sofá o de donde os sentéis: desde ahí el foco queda en el campo de visión y deslumbra.");
 
   // ---------- capas de la zona de estar ----------
-  if (activities.includes("read")) tips.push(`El pie de lectura pide unos ${LIVING_READING_LM} lm y un regulador: a plena potencia para leer, atenuado el resto del tiempo. Colócalo junto al sofá y por detrás del hombro, no enfrente.`);
+  if (activities.includes("read")) tips.push(`La luz de lectura pide unos ${LIVING_READING_LM} lm y un regulador: a plena potencia para leer, atenuada el resto del tiempo. Va junto al sofá y por detrás del hombro, no enfrente. Un pie es lo más cómodo si lees en distintos sitios; si siempre lees en el mismo, un aplique de pared libera suelo.`);
   if (activities.includes("tv")) tips.push("Dirige la luz general lejos de la pantalla del televisor para evitar reflejos molestos.");
   if (estar.accent) tips.push(`Una tira LED de unos ${estar.accent.lm} lm en el mueble de televisión, oculta tras el canto, aporta profundidad y suaviza el contraste entre la pantalla encendida y la pared oscura.`);
   if (activities.includes("relax")) tips.push("Que la luz de ambiente sea regulable: es lo que permite pasar de un salón luminoso a uno de sobremesa sin cambiar ninguna bombilla.");
@@ -804,7 +853,7 @@ function generateLivingReport(answers = {}, roomId = "living") {
     if (dining.fillPieces) tips.push(`Añade ${dining.fillPieces} puntos de unos ${dining.fillPer} lm en el borde de la zona de comedor —o un aplique equivalente—, siempre fuera de la mesa. Sin ellos, al encender solo el colgante la mesa queda flotando en un rincón oscuro.`);
     tips.push("Mantén la misma temperatura de luz en las dos zonas: lo que separa el comedor del estar es que tiene su propio punto de luz, no un tono distinto.");
     tips.push("Deja el colgante en un circuito propio, aparte de la luz general del estar: poder cenar con la mesa encendida y el resto apagado es la mitad del valor de tener dos zonas.");
-    if (onlyLights) tips.push("El punto de techo que ya tienes casi nunca cae sobre la mesa, sino en el centro de la estancia. Sin obra, la salida es desviar el cable hasta el eje de la mesa con un gancho o un florón de desvío, o sustituir el punto por un carril que te deje mover las luminarias.");
+    if (track === TRACK.mejora) tips.push("El punto de techo que ya tienes casi nunca cae sobre la mesa, sino en el centro de la estancia. Sin obra, la salida es desviar el cable hasta el eje de la mesa con un gancho o un florón de desvío, o sustituir el punto por un carril que te deje mover las luminarias.");
   }
 
   // ---------- techo, luz natural, obra ----------
@@ -818,7 +867,7 @@ function generateLivingReport(answers = {}, roomId = "living") {
   if (light === "low") tips.push(`Como el ${room} necesita más luz, sube ligeramente los lúmenes generales calculados y refuerza también las esquinas.`);
 
   if (renovationStatus === "renovation") tips.push(`Como vas a reformar desde cero, aprovecha para dejar previstos circuitos independientes${dining ? " —general del estar, colgante de la mesa y ambiente— " : " "}y reguladores de intensidad.`);
-  if (onlyLights) tips.push("Como solo vas a cambiar las luminarias, prioriza soluciones que aprovechen los puntos de luz ya existentes, como sustituir un plafón por un foco orientable en el mismo lugar.");
+  if (track === TRACK.mejora) tips.push("Como solo vas a cambiar las luminarias, prioriza soluciones que aprovechen los puntos de luz ya existentes, como sustituir un plafón por un foco orientable en el mismo lugar.");
 
   /* Lo primero que se responde en el bloque final es lo que la usuaria ha
    * dicho que le pasa. Va etiquetado, no adivinado: pickTopTips ordena por
@@ -836,11 +885,14 @@ function generateLivingReport(answers = {}, roomId = "living") {
   if (activities.includes("tv")) mistakes.push("Evita dirigir la luz directamente hacia la pantalla del televisor, ya que produce reflejos que obligan a forzar la vista.");
   if (ceiling === "vigas") mistakes.push("No es recomendable empotrar focos en las vigas de madera sin consultarlo antes con un instalador, ya que son elementos estructurales y no siempre admiten perforaciones.");
 
-  // Con plano a la vista, los consejos que recitan sus medidas sobran.
-  const hasPlan = !layers.isDining || !onlyLights;
+  /* En reforma, el bloque de techo ya dice de qué apartarse. Los consejos que
+   * repiten eso se retiran para dejar sitio a los que aportan algo. */
+  const cubiertos = track === TRACK.reforma
+    ? ["deslumbramiento", ...((answers.activities || []).includes("tv") ? ["tv"] : [])]
+    : [];
   return {
     tempK, lumens, grid, area, lux, layers,
-    tips: pickTopTips(tips, hasPlan ? ["reticula"] : []),
+    tips: pickTopTips(tips, cubiertos),
     mistakes: [...new Set(mistakes)],
   };
 }
@@ -986,7 +1038,6 @@ const KITCHEN_GENERAL_LUX = { bright: 160, moderate: 180, low: 200 };
  * Con los topes por defecto —los estrictos— una cocina de 5,3 x 3,8 m pedía
  * 3 x 3 = nueve focos, que es volver al problema por otro camino. Con estos,
  * 3 x 2 = seis de 600 lm. */
-const KITCHEN_GRID_LIMITS = BEDROOM_GRID_LIMITS;
 
 /* Metros lineales de encimera, estimados con la forma y las medidas. Nemul no
  * los pregunta —el cuestionario ya es largo— así que sale de la distribución
@@ -1041,7 +1092,10 @@ function kitchenLayers(area, answers = {}, tempK = 3000) {
   const generalLux = KITCHEN_GENERAL_LUX[light] || KITCHEN_GENERAL_LUX.moderate;
   const heightFactor = answers.tallCeiling ? TALL_CEILING_FACTOR : 1;
   const generalLm = Math.round((generalLux * area * heightFactor) / 100) * 100;
-  const grid = openPlanLayout(area, generalLm, 4, 200, KITCHEN_GRID_LIMITS, dm);
+  // Sin reforma no se dibuja retícula: ver LOS DOS RECORRIDOS.
+  const grid = reportTrack(answers) === TRACK.reforma
+    ? generalPoints(area, generalLux * area * heightFactor, generalLm)
+    : null;
 
   // ---------- 2. trabajo ----------
   const runFn = KITCHEN_RUN_BY_LAYOUT[layout] || KITCHEN_RUN_BY_LAYOUT.lineal;
@@ -1110,12 +1164,19 @@ function generateKitchenReport(answers = {}) {
   const lumens = layers.generalLm;
 
   const distribution = [];
-  distribution.push(`${grid.n} downlights de luz general, de ${grid.lmPer} lm cada uno. La encimera no depende de ellos: tiene su propia capa.`);
-  distribution.push(`Sepáralos siguiendo la retícula del plano: unos ${spacingText(grid)}, dejando unos ${marginText(grid)} hasta las paredes.`);
-  if (task.mode === "underCabinet") {
-    distribution.push("Coloca la línea de focos generales entre 30 y 40 cm por delante de los muebles altos: así la luz cae sobre el centro de la encimera y no sobre las puertas.");
-    distribution.push("Si tienes muebles altos, la tira LED bajo mueble es la solución recomendada para iluminar correctamente la encimera: es la única que llega por delante de ti y no proyecta tu propia sombra sobre lo que cortas.");
+  /* Los dos primeros puntos describen una retícula. En el recorrido de mejora
+   * no hay ninguna, así que se habla de los puntos que ya existen. Ver LOS DOS
+   * RECORRIDOS. */
+  if (grid) {
+    distribution.push(`${grid.n} downlights de luz general, de ${grid.lmPer} lm cada uno. La encimera no depende de ellos: tiene su propia capa.`);
+    distribution.push("Repártelos por la cocina en vez de alinearlos todos en el centro, y adelántalos hacia el borde de la encimera: en la vertical del mueble alto la luz da en las puertas.");
   } else {
+    distribution.push(`Los puntos de techo que ya tienes deben dar en conjunto unos ${lumens.toLocaleString("es-ES")} lm de luz general. La encimera no depende de ellos: tiene su propia capa.`);
+  }
+  if (task.mode === "underCabinet") {
+    if (grid) distribution.push("Coloca la línea de focos generales entre 30 y 40 cm por delante de los muebles altos: así la luz cae sobre el centro de la encimera y no sobre las puertas.");
+    distribution.push("Si tienes muebles altos, la tira LED bajo mueble es la solución recomendada para iluminar correctamente la encimera: es la única que llega por delante de ti y no proyecta tu propia sombra sobre lo que cortas.");
+  } else if (grid) {
     distribution.push("Centra la línea de focos sobre la zona de trabajo principal para evitar sombras al cocinar.");
   }
   // Este consejo antes solo lo veía quien elegía exactamente 3,00 m. Ahora
@@ -1236,11 +1297,6 @@ const LIVING_CEILING_OPTIONS = [
   { id: "noSe", label: "No lo sé" },
 ];
 
-const LIVING_CEILING_POINTS_OPTIONS = [
-  { id: "uno", label: "Uno" },
-  { id: "varios", label: "Varios" },
-];
-
 const BEDROOM_PROJECT_OPTIONS = [
   { id: "onlyLights", label: "Solo mejorar o cambiar la iluminación", Icon: Lightbulb },
   { id: "renovation", label: "Estoy reformando el dormitorio", Icon: Hammer },
@@ -1257,11 +1313,6 @@ const BEDROOM_CEILING_OPTIONS = [
 // Sin "no tengo": si no hubiera ningún punto, la pregunta que toca no es esta
 // sino si va a haber obra. Y solo se pregunta cuando no hay reforma, porque
 // con reforma los puntos actuales dejan de condicionar nada.
-const BEDROOM_CEILING_POINTS_OPTIONS = [
-  { id: "uno", label: "Uno" },
-  { id: "varios", label: "Varios" },
-];
-
 const BEDROOM_SIZE_OPTIONS = [
   { id: "small", label: "Pequeño", hint: "Menos de 9 m²", area: 7 },
   { id: "medium", label: "Mediano", hint: "9–14 m²", area: 11 },
@@ -1671,12 +1722,10 @@ const PROBLEM_INSIGHT = {
  *    ella: son escenas distintas y casi nunca están todas encendidas a la vez.
  *    Por eso el informe no enseña un "total de lúmenes necesarios".
  *
- * 3. NADIE PROPONE PUNTOS QUE NO LE HAN PEDIDO. Con `renovationStatus` en
- *    "onlyLights" el plano deja de titularse "Dónde colocar los focos" y pasa
- *    a "Distribución ideal de la luz": el mismo dibujo, pero leído como el
- *    objetivo de luz a alcanzar con las luminarias que ya cuelgan, no como una
- *    obra. Donde Nemul tampoco sabe la posición de las zonas —el salón-comedor
- *    sin reforma— no se dibuja planta ninguna. Ver CeilingPlan.
+ * 3. NADIE PROPONE PUNTOS QUE NO LE HAN PEDIDO. En el recorrido de mejora no
+ *    se calcula ni se dibuja retícula: se parte de cuántos puntos hay y se
+ *    dice cuánta luz debe dar cada uno. El plano existe solo en reforma.
+ *    Ver LOS DOS RECORRIDOS y CeilingSection.
  *
  * 4. UNA COSA SE DICE UNA VEZ. Si una recomendación ya va en su capa, no se
  *    repite como consejo suelto. Es la razón de que el despacho no tenga
@@ -1702,9 +1751,6 @@ const ROOM_TECH_CONFIG = {
     // Un dormitorio es una estancia de estar: nadie trabaja bajo la retícula,
     // y el techo se mira desde la cama. Con el reparto estricto un dormitorio
     // de 17 m² salían doce focos de 200 lm, un flujo que casi no existe como
-    // producto. Ver openPlanLayout.
-    openGrid: true,
-    limits: BEDROOM_GRID_LIMITS,
   },
   bathroom: {
     areaMap: BATHROOM_AREA_BY_SIZE,
@@ -1720,8 +1766,6 @@ const ROOM_TECH_CONFIG = {
      * No se toca ningún tope: `minDownlights: 2` deja que salgan dos cuando la
      * geometría los admite —un aseo estrecho— y tres o cuatro cuando hacen
      * falta de verdad. El número lo decide la planta, no una cuota. */
-    openGrid: true,
-    limits: BEDROOM_GRID_LIMITS,
     /* 3000 K siempre. Antes salía a 4000 K salvo con bañera, spa o "la luz es
      * demasiado fría", que es tanto como decir que el baño por defecto es un
      * quirófano y que hay que pedir que no lo sea.
@@ -1747,8 +1791,6 @@ const ROOM_TECH_CONFIG = {
      * interior de los armarios y el espejo son capas propias. No se toca
      * ningún tope: en un vestidor estrecho siguen saliendo dos puntos, y
      * cuatro donde la planta los pide. */
-    openGrid: true,
-    limits: BEDROOM_GRID_LIMITS,
     getTempK: () => 4000,
   },
   terrace: {
@@ -1769,9 +1811,6 @@ const ROOM_TECH_CONFIG = {
     // reparte como el de un dormitorio: la retícula más despejada que ilumine
     // bien, no la más apretada que quepa. Con el reparto estricto, 9 m² daban
     // 3 x 2 y 20 m² daban 4 x 3 — doce focos en un despacho — porque el número
-    // de puntos salía solo de la geometría. Ver openPlanLayout.
-    openGrid: true,
-    minLmPerPoint: DOWNLIGHT_LM_FLOOR,
   },
 };
 
@@ -1871,7 +1910,7 @@ const roundLm = (lm, step) => Math.round(lm / step) * step;
  * planes guardados antes de esta pregunta no cambian de forma. */
 function bedroomCeilingMode(answers = {}) {
   if (answers.renovationStatus === "renovation") return "reforma";
-  return (answers.ceilingPoints || "varios") === "uno" ? "uno" : "varios";
+  return existingPoints(answers) === 1 ? "uno" : "varios";
 }
 
 function bedroomLayers(area, need, answers = {}) {
@@ -1932,9 +1971,6 @@ function bedroomLayerTips(layers, grid) {
     tips.push(layers.singlePointStrained
       ? `Un único punto de techo se queda corto para los ${layers.generalLm.toLocaleString("es-ES")} lm que pide esta habitación: una luminaria sola de ese flujo deslumbra al mirar hacia arriba desde la cama. Sin obra, la salida es aprovechar ese mismo punto con un carril, una suspensión de varios brazos o un plafón de varios focos, que reparten el flujo en vez de concentrarlo.`
       : "Con un solo punto de techo, elige una luminaria que reparta la luz en vez de concentrarla —difusor opaco, varios focos o luz indirecta hacia el techo— para no tener un foco intenso justo en el campo de visión desde la cama.");
-  }
-  if (grid && grid.n >= 9) {
-    tips.push(`Los ${grid.n} downlights son la retícula más despejada que cabe respetando las distancias entre focos, no la única solución posible: con la cabecera y las capas localizadas puedes poner menos focos y dejar que el resto del flujo venga de ellas.`);
   }
   return tips;
 }
@@ -2078,23 +2114,28 @@ function generateGenericTechnicalReport(roomId, answers = {}) {
   // capas que el cuestionario dice que existen, y la retícula —cuando la hay—
   // se traza solo con lo que le toca al techo.
   const tempK = cfg.getTempK(answers);
+  const track = reportTrack(answers);
+  const points = existingPoints(answers);
   const layers = roomId === "bedroom" ? bedroomLayers(area, lumens, answers) : null;
   // El baño tiene sus propias capas y no comparte la maquinaria del dormitorio:
   // van en su propio campo para no tocar el reparto de la retícula.
   const bath = roomId === "bathroom" ? bathroomLayers(area, answers, tempK) : null;
   // El vestidor: interior de armario y espejo son capas, no consejos sueltos.
   const closet = roomId === "closet" ? closetLayers(area, answers, dm) : null;
+  /* La terraza es la excepción: no tiene techo donde trazar nada, y su
+   * "reparto" son zonas del jardín, no puntos de una instalación. Vale igual
+   * en los dos recorridos.
+   *
+   * En el resto, retícula solo con reforma. El dormitorio ya lo hacía por su
+   * cuenta con `layers.mode`; ahora es la regla de la casa. */
+  /* La terraza sigue por su cuenta: no tiene techo donde poner puntos y
+   * reparte por zonas de uso. El resto solo cuenta puntos, y solo en reforma. */
   const grid = cfg.ambient
     ? ambientLayout(area, lumens, cfg.minDownlights)
-    : layers
-      // Posiciones y distancias solo con reforma: en los demás casos Nemul no
-      // sabe dónde están los puntos, y un plano se lee como si lo supiera.
-      ? (layers.mode === "reforma"
-          ? openPlanLayout(area, layers.generalLm, cfg.minDownlights, cfg.minLmPerPoint, cfg.limits, dm)
-          : null)
-      : cfg.openGrid
-        ? openPlanLayout(area, lumens, cfg.minDownlights, cfg.minLmPerPoint, cfg.limits, dm)
-        : planLayout(area, lumens, cfg.minDownlights, dm);
+    : track === TRACK.reforma
+      // El dormitorio ya ha apartado la cabecera: al techo le toca el resto.
+      ? (layers ? generalPoints(area, layers.generalLm) : generalPoints(area, lux * area, lumens))
+      : null;
 
   const tips = getRankedReport(roomId, answers);
   if (layers) tips.push(...bedroomLayerTips(layers, grid));
@@ -2106,7 +2147,7 @@ function generateGenericTechnicalReport(roomId, answers = {}) {
    * consejo se da una vez (regla 4). */
   const mistakes = ROOM_TECH_MISTAKES[roomId] || [];
   return {
-    tempK, lumens, grid, area, lux, mistakes, layers, bath, closet,
+    tempK, lumens, grid, area, lux, mistakes, layers, bath, closet, track, points,
     tips: pickTopTips(tips, [
       ...(TIPS_COVERED_BY_LAYERS[roomId] || []),
       // Igual que en el salón: si hay plano, sus medidas ya están dichas.
@@ -2136,16 +2177,10 @@ const livingFlow = (roomId) => (answers = {}) => {
     { key: "dims", title: `¿Cuánto mide aproximadamente tu ${room}?`, subtitle: "A ojo está bien: no hace falta sacar el metro.", info: `Con el largo y el ancho, Nemul calcula la superficie y también la forma de la estancia, que es lo que decide cómo se reparten los puntos de luz. En un ${room}, la luz general suele moverse entre 130 y 170 lm/m² según la luz natural que entre; las lámparas de lectura o de ambiente van aparte.`, type: "dims" },
     { key: "light", title: "¿Cuánta luz natural entra?", subtitle: "Piensa en un día normal, sin encender ninguna luz.", type: "single", layout: "list", options: LIGHT_OPTIONS },
     { key: "ceiling", title: "¿Qué tipo de techo tienes?", subtitle: "Esto determina qué soluciones de instalación son posibles.", type: "single", layout: "list", options: LIVING_CEILING_OPTIONS },
-    // Con reforma no hay instalación que respetar, así que no se pregunta.
-    ...(answers.renovationStatus === "renovation" ? [] : [
-      { key: "ceilingPoints", title: "¿Cuántos puntos de luz tienes actualmente en el techo?", subtitle: "Nos adaptaremos a los que ya existen.", type: "single", layout: "list", options: LIVING_CEILING_POINTS_OPTIONS, reactions: {
-        uno: "Con un solo punto, esa luminaria dará la luz general y el resto lo repartiremos en otras capas.",
-        varios: "Con varios puntos, te diremos cuánta luz debe salir del techo en conjunto y la repartes entre los que tienes.",
-      } },
-    ]),
-    { key: "activities", title: `¿Cómo usas tu ${room}?`, subtitle: isDining
-      ? "La zona de comedor ya la damos por hecha. Cuéntanos qué más haces aquí."
-      : "Puedes elegir varias opciones.", type: "multi", layout: "list", options: LIVING_ACTIVITY_OPTIONS },
+    ...existingPointsStep(answers),
+    { key: "activities", title: "¿Qué actividades quieres iluminar?", subtitle: isDining
+      ? "La mesa ya la damos por hecha. Dinos qué más se hace en la zona de estar."
+      : "Cada una añade su propia capa de luz. Puedes elegir varias.", type: "multi", layout: "list", options: LIVING_ACTIVITY_OPTIONS },
     /* La forma de la mesa sí cambia la propuesta: redonda pide un punto
      * centrado y rectangular dos o tres en línea. En el salón-comedor se
      * pregunta siempre; en el salón no se pregunta nunca, salvo en un plan
@@ -2168,7 +2203,7 @@ const livingFlow = (roomId) => (answers = {}) => {
 const ROOM_FLOWS = {
   living: livingFlow("living"),
   livingDining: livingFlow("livingDining"),
-  kitchen: [
+  kitchen: (answers = {}) => [
     {
       key: "layout", title: "¿Qué distribución tiene tu cocina?", subtitle: "Elige la forma que más se parece a la tuya.", type: "single", layout: "grid", options: KITCHEN_LAYOUT_OPTIONS,
       reactions: KITCHEN_LAYOUT_REACTIONS,
@@ -2190,8 +2225,9 @@ const ROOM_FLOWS = {
       reactions: KITCHEN_PROBLEM_REACTIONS,
     },
     renovationStep,
+    ...existingPointsStep(answers),
   ],
-  kitchenOpen: [
+  kitchenOpen: (answers = {}) => [
     { key: "layout", title: "¿Qué distribución tiene tu cocina?", subtitle: "Elige la forma que más se parece a la tuya.", type: "single", layout: "grid", options: KITCHEN_LAYOUT_OPTIONS, reactions: KITCHEN_LAYOUT_REACTIONS, extra: KITCHEN_MULTI_ZONE_EXTRA },
     { key: "dims", title: "¿Cuánto mide aproximadamente la zona de cocina?", subtitle: "Solo la parte de cocina, sin el salón al que se abre.", info: "Con el largo y el ancho, Nemul calcula la superficie y también la forma de la zona, que es lo que decide cómo se reparten los focos. Para una cocina suelen recomendarse entre 300 y 400 lm/m² según la luz natural.", type: "dims", extra: TALL_CEILING_EXTRA },
     { key: "priorities", title: "¿Qué es lo más importante para ti en la cocina?", subtitle: "Puedes elegir varias opciones.", type: "multi", layout: "list", options: KITCHEN_PRIORITY_OPTIONS },
@@ -2200,6 +2236,7 @@ const ROOM_FLOWS = {
     { key: "adjoiningStyle", title: "¿Qué ambiente tiene el salón con el que se conecta?", subtitle: "Así coordinamos la luz entre ambas zonas.", type: "single", layout: "grid", options: STYLE_OPTIONS },
     { key: "problem", title: "¿Qué te gustaría solucionar?", subtitle: "Elige lo que más se acerque a tu situación.", type: "single", layout: "list", options: KITCHEN_PROBLEM_OPTIONS, reactions: KITCHEN_PROBLEM_REACTIONS },
     renovationStep,
+    ...existingPointsStep(answers),
   ],
   /* El dormitorio pregunta primero qué se va a hacer, porque de eso depende
    * todo lo demás: si solo se cambian luminarias, la pregunta de cuántos
@@ -2213,13 +2250,7 @@ const ROOM_FLOWS = {
     { key: "dims", title: "¿Cuánto mide aproximadamente el dormitorio?", subtitle: "A ojo está bien: no hace falta sacar el metro.", info: "Con el largo y el ancho, Nemul calcula la superficie y también la forma de la habitación, que es lo que decide cómo se reparten los puntos de luz. En un dormitorio suelen bastar entre 130 y 170 lm/m² de luz general.", type: "dims" },
     lightStep,
     { key: "ceiling", title: "¿Qué tipo de techo tienes?", subtitle: "Esto determina qué soluciones de instalación son posibles.", type: "single", layout: "list", options: BEDROOM_CEILING_OPTIONS },
-    // Condicional: con reforma no hay nada que respetar, así que no se pregunta.
-    ...(answers.renovationStatus === "renovation" ? [] : [
-      { key: "ceilingPoints", title: "¿Cuántos puntos de luz tienes actualmente en el techo?", subtitle: "Nos adaptaremos a los que ya existen.", type: "single", layout: "list", options: BEDROOM_CEILING_POINTS_OPTIONS, reactions: {
-        uno: "Con un solo punto, esa luminaria dará la luz general y la cabecera hará el resto del trabajo.",
-        varios: "Con varios puntos, te diremos cuánta luz debe salir del techo en conjunto y la repartes entre los que tienes.",
-      } },
-    ]),
+    ...existingPointsStep(answers),
     activityStep("bedroom", "Puedes elegir varias opciones."),
     { key: "closetLight", title: "¿Quieres iluminar especialmente el armario?", subtitle: "Ideal si te vistes ahí mismo.", type: "single", layout: "list", options: CLOSET_LIGHT_OPTIONS },
   ],
@@ -2235,8 +2266,9 @@ const ROOM_FLOWS = {
     lightStep,
     problemStep("bathroom"),
     renovationStep,
+    ...existingPointsStep(answers),
   ],
-  closet: [
+  closet: (answers = {}) => [
     { key: "type", title: "¿Cómo son los armarios del vestidor?", subtitle: "Solo para decidir la iluminación interior del armario.", type: "single", layout: "list", options: CLOSET_TYPE_OPTIONS, reactions: {
       abierto: "Con armarios abiertos, la luz general ya alcanza la ropa; reforzaremos sobre todo el espejo, si tienes uno.",
       cerrado: "Con armarios de puertas, añadiremos luz interior en cada módulo para que no quede oscuro el fondo.",
@@ -2251,8 +2283,9 @@ const ROOM_FLOWS = {
     lightStep,
     problemStep("closet"),
     renovationStep,
+    ...existingPointsStep(answers),
   ],
-  terrace: [
+  terrace: (answers = {}) => [
     activityStep("terrace", "Puedes elegir varias opciones."),
     { key: "covered", title: "¿Está cubierta o descubierta?", subtitle: "Esto determina qué luminarias puedes usar.", type: "single", layout: "list", options: TERRACE_COVERED_OPTIONS, reactions: {
       cubierta: "Al estar cubierta, podemos usar luminarias de interior, siempre protegidas de la humedad.",
@@ -2263,8 +2296,9 @@ const ROOM_FLOWS = {
     lightStep,
     problemStep("terrace"),
     renovationStep,
+    ...existingPointsStep(answers),
   ],
-  hallway: [
+  hallway: (answers = {}) => [
     { key: "length", title: "¿Qué longitud tiene aproximadamente?", subtitle: "Un cálculo aproximado está bien.", type: "single", layout: "grid", options: HALLWAY_LENGTH_OPTIONS, reactions: {
       corto: "Al ser corto, un único punto centrado probablemente sea suficiente.",
       medio: "Con longitud media, repartiremos dos puntos para no dejar zonas oscuras.",
@@ -2275,8 +2309,9 @@ const ROOM_FLOWS = {
     { key: "connects", title: "¿Conecta muchas habitaciones?", subtitle: "Cuantas más conecte, más se usará.", type: "single", layout: "list", options: YES_NO_OPTIONS },
     problemStep("hallway"),
     renovationStep,
+    ...existingPointsStep(answers),
   ],
-  office: [
+  office: (answers = {}) => [
     { key: "deskPosition", title: "¿Dónde está el escritorio respecto a la ventana?", subtitle: "Esto determina el riesgo de reflejos en la pantalla.", type: "single", layout: "list", options: DESK_POSITION_OPTIONS, reactions: {
       frente: "Con el escritorio frente a la ventana, cuidaremos que la luz no te deslumbre al mirar la pantalla.",
       espaldas: "De espaldas a la ventana, evitaremos que la luz se refleje en tu pantalla.",
@@ -2288,6 +2323,7 @@ const ROOM_FLOWS = {
     { key: "videoCalls", title: "¿Haces videollamadas con frecuencia?", subtitle: "Para adaptar la iluminación de tu zona de trabajo.", type: "single", layout: "list", options: YES_NO_OPTIONS },
     problemStep("office"),
     renovationStep,
+    ...existingPointsStep(answers),
   ],
 };
 
@@ -2335,11 +2371,6 @@ const TIP_RANK = { problem: 0, fix: 1, functional: 2, comfort: 3 };
 // colocado, que es el más concreto: no se fusionan textos a la fuerza, porque
 // pegar dos frases da una tercera peor que las dos.
 const TIP_TOPICS = [
-  /* El plano ya dice las separaciones, el margen a pared y que es orientativo.
-   * Repetirlo debajo en palabras era el duplicado más descarado del informe:
-   * "unos 1,9 m entre focos y 2,0 m entre filas" aparecía dos veces seguidas,
-   * una en el dibujo y otra como consejo. */
-  ["reticula", /retícula|esquema del plano|entre focos|entre filas/i],
   ["deslumbramiento", /deslumbr|en el campo de visión|molesta a la vista/i],
   ["espejo", /espej|maquill|afeit|rostro|barbilla/i],
   ["armario", /armario|módulo|vestidor|la ropa/i],
@@ -2388,7 +2419,11 @@ function pickTopTips(tips, covered = []) {
      * colores de la ropa" caía aquí —habla de ropa, y la capa de armario ya
      * hablaba de ropa— y el bloque se quedaba con la luz natural y el aviso de
      * la reforma: dos avisos de contexto en lugar de la respuesta. */
-    .filter((t) => t.rank <= TIP_RANK.fix || !(t.topic && covered.includes(t.topic)))
+    /* Solo el problema que ha marcado la usuaria es intocable. Los avisos
+     * genéricos sí se retiran si el informe ya los ha dado más arriba: con la
+     * exención abierta a todo el rango "fix", el bloque de techo avisaba del
+     * sofá y de la tele y los dos consejos volvían a decirlo abajo. */
+    .filter((t) => t.rank === TIP_RANK.problem || !(t.topic && covered.includes(t.topic)))
     // Por rango primero y, dentro del mismo rango, en el orden en que el
     // informe los fue redactando: así el corte es estable entre visitas.
     .sort((a, b) => a.rank - b.rank || a.i - b.i)
@@ -2985,8 +3020,10 @@ function MistakesList({ mistakes }) {
 // con un número: los focos que pide la retícula y el flujo que le toca a cada
 // uno. Un rango es honesto en la cabeza de quien calcula; en la de quien
 // compra bombillas es una pregunta sin responder.
-function CalculationBlock({ area, lux, lumens, grid, onlyLights = false, ambientOnly = false }) {
-  const { n, lmPer, totalLm } = grid;
+function CalculationBlock({ area, lux, lumens, grid, track = TRACK.reforma, ambientOnly = false }) {
+  // En mejora no hay retícula: las dos últimas filas y el pie hablan de una
+  // propuesta de puntos que aquí no existe.
+  const proposes = track === TRACK.reforma && !!grid;
   return (
     <div>
       <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Cálculo realizado</p>
@@ -3006,16 +3043,13 @@ function CalculationBlock({ area, lux, lumens, grid, onlyLights = false, ambient
         {/* Quien no va a abrir puntos nuevos no necesita una lista de focos:
             necesita saber en cuántas zonas repartir la luz que ya puede
             encender. El número es el mismo; lo que cambia es qué promete. */}
-        <StatRow
-          label={onlyLights ? "Reparto orientativo" : "Propuesta"}
-          value={onlyLights ? `${n} zonas de luz de unos ${lmPer} lm` : `${n} downlights de ${lmPer} lm`}
-        />
-        <StatRow label="Flujo total aproximado" value={`${totalLm.toLocaleString("es-ES")} lm`} />
+        {proposes && <StatRow label="Propuesta" value={`${grid.n} downlights de ${grid.lmPer} lm`} />}
+        {proposes && <StatRow label="Flujo total aproximado" value={`${grid.totalLm.toLocaleString("es-ES")} lm`} />}
       </div>
       <p className="font-body t-caption mt-2.5" style={{ color: COLORS.subtext }}>
-        {onlyLights
-          ? `Esto no es una lista de compra ni un plano de obra: dice cuánta luz pide la estancia y en cuántas zonas conviene repartirla —aquí, unos ${spacingText(grid, true)}— sin tocar la instalación. Con los puntos que ya tienes, acércate a ese total con luminarias que abran el haz en varias direcciones y con lámparas de pie o de mesa donde no llegue ningún punto. Lo que conviene mantener es el flujo total, no el número de zonas.`
-          : `El número de focos sale de la retícula, no del catálogo: primero se calcula cuánta luz hace falta, después entre cuántos puntos tiene sentido repartirla —aquí, unos ${spacingText(grid)}— y el flujo de cada uno se ajusta al final para llegar al total. Es una propuesta equilibrada, no una regla: si el modelo que te gusta da más o menos lúmenes, puedes poner algún foco más o menos y repartirlos a tu manera. Lo que conviene mantener es el flujo total.`}
+        {!proposes
+          ? "Esa es la luz que debería salir del techo en total. Justo debajo tienes cómo repartirla entre los puntos que ya hay."
+          : "El número de puntos sale de repartir esa luz sin que ningún foco quede demasiado potente ni la estancia se llene de focos pequeños. Es una propuesta, no una regla: si el modelo que te gusta da más o menos lúmenes, puedes poner alguno más o menos. Lo que conviene mantener es el flujo total."}
       </p>
     </div>
   );
@@ -3552,67 +3586,12 @@ const PLAN_ASPECT = 1.4;
  * combinaciones fuera de la búsqueda. Cuando era una penalización, por fuerte
  * que fuera, había estancias donde ganaba por unas milésimas: 3,11 m de fondo
  * salían a 1,505 m porque la alternativa correcta costaba un pelín más. */
-const spacingPenalty = (s) => Math.max(0, SPACING_MIN - s);
-
 /* Dentro de 60-75 cm no resta nada. Salirse de ahí resta poco —a veces es lo
  * que permite abrir la retícula, o lo que la desapretuja en una estancia
  * estrecha— pero acercarse a la pared resta el triple que alejarse, porque un
  * foco a 45 cm ilumina el muro más que la estancia: es un recurso, no un
  * punto de partida. Los topes de 45 y 90 no aparecen aquí; los aplica
  * axisOptions dejando fuera de la búsqueda todo lo que se salga. */
-const marginPenalty = (m) =>
-  Math.max(0, m - WALL_MARGIN_MAX) * 0.5 + Math.max(0, WALL_MARGIN_MIN - m) * 1.5;
-
-/* Reparto de UN eje: cuántos puntos y a qué separación.
- *
- * Se prueban todos los números de puntos con todos los márgenes a pared
- * razonables. Como dentro de la franja no hay preferencia, lo normal es que
- * varias combinaciones empaten a cero; el bucle va de menos puntos a más y se
- * queda con la primera, así que ante dos retículas igual de válidas gana la
- * más abierta —menos focos, más separados— en vez de la más apretada.
- */
-function axisOptions(len) {
-  const out = [];
-  for (let count = 1; count <= 20; count++) {
-    if (count === 1) {
-      // Un punto solo se queda a media estancia de cada pared: solo vale si
-      // esa media estancia cabe dentro del tope.
-      const margin = len / 2;
-      if (margin <= WALL_MARGIN_ABS_MAX) {
-        out.push({ count, spacing: 0, margin, score: Math.max(0, margin - WALL_MARGIN_MAX) * 2 });
-      }
-      continue;
-    }
-    let best = null;
-    // El margen solo se busca entre los dos topes: de 45 a 90 cm. Dentro de
-    // esa horquilla decide marginPenalty; fuera no hay nada que decidir,
-    // porque lo que cambia es el número de puntos, no el margen.
-    const steps = Math.round((WALL_MARGIN_ABS_MAX - WALL_MARGIN_ABS_MIN) / WALL_MARGIN_STEP);
-    for (let k = 0; k <= steps; k++) {
-      const margin = Math.round((WALL_MARGIN_ABS_MIN + k * WALL_MARGIN_STEP) * 100) / 100;
-      const spacing = (len - 2 * margin) / (count - 1);
-      // Los tres topes duros, en una línea: si con este número de puntos no
-      // hay margen legal que baje de 1,50 m, este número de puntos no vale.
-      if (spacing <= 0 || spacing > SPACING_MAX + 1e-9) continue;
-      const score = spacingPenalty(spacing) + marginPenalty(margin);
-      if (!best || score < best.score) best = { count, spacing, margin, score };
-    }
-    if (best) out.push(best);
-  }
-  // Con estancias de casa nunca pasa —a 20 puntos por eje se cubren 30 m—,
-  // pero un eje sin ninguna opción dejaría el informe sin plano.
-  if (!out.length) {
-    const count = Math.max(2, Math.ceil((len - 2 * WALL_MARGIN_ABS_MAX) / SPACING_MAX) + 1);
-    out.push({
-      count,
-      spacing: (len - 2 * WALL_MARGIN_ABS_MAX) / (count - 1),
-      margin: WALL_MARGIN_ABS_MAX,
-      score: 99,
-    });
-  }
-  return out;
-}
-
 // Reparto para un espacio sin techo: la separación entre centros no manda
 // porque no hay retícula que dibujar, así que se parte de un punto de luz
 // exterior corriente y se ajusta el flujo al total.
@@ -3624,6 +3603,60 @@ function ambientLayout(area, lumens, minCount = 1) {
     sx: 0, sy: 0, mx: 0, my: 0,
     lmPer, totalLm: lmPer * n,
   };
+}
+
+/* ===========================================================================
+ * CUÁNTOS PUNTOS DE TECHO, Y DE QUÉ FLUJO
+ * ===========================================================================
+ *
+ * Aquí había un motor de retícula: probaba cada margen a pared y cada
+ * separación posible, y elegía la malla más despejada que siguiera bañando los
+ * muros por igual. Ese criterio es el de un techo que ilumina solo, y ninguna
+ * estancia de Nemul lo es ya: todas tienen capas propias. El resultado era un
+ * salón de 20 m² con SEIS downlights, y el número no bajaba aunque bajaran los
+ * lúmenes, porque salía de la geometría y no de la luz.
+ *
+ * Y sobre todo: las distancias que producía eran falsa precisión. Nemul no
+ * sabe dónde están el sofá, la tele, las puertas, las vigas ni por dónde se
+ * pasa. Decir "1,9 m entre focos y 75 cm a las paredes" es fingir que sí.
+ *
+ * Ahora solo se decide CUÁNTOS puntos y de QUÉ flujo, con dos condiciones:
+ *
+ *   1. Ningún punto pasa del tope. El tope crece con la estancia —400 lm más
+ *      20 por m², entre 500 y 800— porque en una habitación pequeña estás
+ *      cerca de cada foco y el techo ocupa más de tu campo visual: ahí un
+ *      punto fuerte molesta, y en un salón grande no.
+ *   2. No más de 6 m² por punto, para que una estancia grande no se resuelva
+ *      con dos focos aislados.
+ *
+ * Se toma el menor número que cumpla las dos, con un mínimo de dos puntos.
+ *
+ * El recuento usa la necesidad EXACTA (m² x lm/m²), no la redondeada que se
+ * enseña. Con la redondeada el número de puntos llegaba a BAJAR al crecer la
+ * estancia: la necesidad se queda quieta entre escalones de 50 lm mientras el
+ * tope sigue subiendo, y el cociente cae. Diez casos así aparecieron al barrer
+ * seis estancias de 4 a 40 m². Con la exacta no hay ninguno. */
+const POINT_LM_BASE = 400;
+const POINT_LM_PER_M2 = 20;
+const POINT_LM_CAP_MIN = 500;
+const POINT_LM_CAP_MAX = 800;
+const M2_PER_POINT_MAX = 6;
+const POINTS_MIN = 2;
+
+function pointFluxCap(area) {
+  return Math.min(POINT_LM_CAP_MAX, Math.max(POINT_LM_CAP_MIN, POINT_LM_BASE + POINT_LM_PER_M2 * area));
+}
+
+/* `exactLm` es para contar y `shownLm` para repartir: el informe enseña la
+ * necesidad redondeada, así que el flujo por punto se calcula con esa. */
+function generalPoints(area, exactLm, shownLm = exactLm) {
+  const n = Math.max(
+    POINTS_MIN,
+    Math.ceil(exactLm / pointFluxCap(area)),
+    Math.ceil(area / M2_PER_POINT_MAX),
+  );
+  const lmPer = downlightLumens(shownLm, n);
+  return { n, lmPer, totalLm: lmPer * n };
 }
 
 /* Qué foco reparte `lumens` entre `n` puntos: el flujo comercial más cercano.
@@ -3644,171 +3677,11 @@ function downlightLumens(lumens, n) {
     Math.abs(b * n - lumens) < Math.abs(a * n - lumens) ? b : a);
 }
 
-/* Todas las colocaciones posibles de un eje: cuántos puntos, a qué margen, y
- * qué franja cubre cada uno. A diferencia de axisOptions no puntúa ni descarta
- * nada, porque en el reparto abierto un eje no se juzga solo: lo que decide es
- * la superficie que sale al cruzarlo con el otro. Un eje de un solo punto
- * cubre el eje entero. */
-function axisSpreads(len) {
-  const out = [];
-  if (len / 2 <= WALL_MARGIN_ABS_MAX) out.push({ count: 1, cover: len, spacing: 0, margin: len / 2 });
-  const steps = Math.round((WALL_MARGIN_ABS_MAX - WALL_MARGIN_ABS_MIN) / WALL_MARGIN_STEP);
-  for (let count = 2; count <= 12; count++) {
-    for (let k = 0; k <= steps; k++) {
-      const margin = Math.round((WALL_MARGIN_ABS_MIN + k * WALL_MARGIN_STEP) * 100) / 100;
-      const spacing = (len - 2 * margin) / (count - 1);
-      if (spacing > 0) out.push({ count, cover: spacing, spacing, margin });
-    }
-  }
-  return out;
-}
-
-/* La retícula de un salón: la más despejada que siga iluminando bien.
- *
- * Filtra por superficie por punto, por que ningún eje se dispare, por que la
- * retícula no se estire y por que ningún foco tenga que ser una bomba. De las
- * que pasan gana la de MENOS puntos —no la más cercana a una separación
- * ideal—, y solo entre las empatadas a puntos decide la puntuación fina.
- *
- * Esa preferencia por menos puntos es el ajuste entero: sin ella el cálculo
- * sube focos gratis para apretar la retícula, que es de donde venían los 12.
- */
-function openPlanLayout(area, lumens, minCount = 1, minLmPer = 0, limits = {}, dims = null) {
-  // Sin `limits` manda el criterio del salón, que es el de toda la casa.
-  const axisMax = limits.axisMax ?? AXIS_OPEN_MAX;
-  const seMax = limits.seMax ?? SE_OPEN_MAX;
-  const anisoMax = limits.anisoMax ?? GRID_ANISO_MAX;
-  /* `dims` es para las zonas: la de estar de un salón-comedor no es un
-   * rectángulo de proporción corriente sacado de sus m², es el trozo que
-   * queda de la estancia al apartar el comedor. Sin esto, la retícula se
-   * calcularía sobre un rectángulo que no es el que dibuja el plano, y el
-   * texto y el dibujo dirían separaciones distintas. */
-  const w = dims ? dims.w : Math.sqrt(area * PLAN_ASPECT);
-  const d = dims ? dims.d : area / w;
-  let best = null;
-
-  for (const x of axisSpreads(w)) {
-    for (const y of axisSpreads(d)) {
-      const n = x.count * y.count;
-      if (n < minCount || lumens / n > DOWNLIGHT_LM_CAP) continue;
-      // El suelo de flujo: repartir el total entre tantos puntos que a cada
-      // uno le toquen migajas es tener focos de más, no luz mejor repartida.
-      if (minLmPer && lumens / n < minLmPer) continue;
-      const wide = Math.max(x.cover, y.cover);
-      const tight = Math.min(x.cover, y.cover);
-      if (wide > axisMax + 1e-9) continue;
-      const se = Math.sqrt(x.cover * y.cover);
-      if (se > seMax + 1e-9) continue;
-      const aniso = wide / tight;
-      if (aniso > anisoMax + 1e-9) continue;
-      const score =
-        Math.max(0, SPACING_MIN - se) +
-        Math.max(0, se - SPACING_MAX) +
-        marginPenalty(x.margin) + marginPenalty(y.margin) +
-        (aniso - 1) * 0.3;
-      if (!best || n < best.n || (n === best.n && score < best.score)) best = { x, y, n, score };
-    }
-  }
-
-  // Ninguna retícula abierta sirve para esta estancia. Si lo que sobraba era
-  // el suelo de flujo, se reintenta sin él antes de cambiar de criterio: es
-  // una preferencia, no un requisito. Y si aun así no hay nada, se reparte
-  // como el resto de la casa antes que devolver un informe sin plano.
-  if (!best && minLmPer) return openPlanLayout(area, lumens, minCount, 0, limits, dims);
-  if (!best) return planLayout(area, lumens, minCount, dims);
-
-  const { x, y, n } = best;
-  const lmPer = downlightLumens(lumens, n);
-  return {
-    area, w, d, n,
-    cols: x.count, rows: y.count,
-    sx: x.spacing, sy: y.spacing,
-    mx: x.margin, my: y.margin,
-    lmPer,
-    totalLm: lmPer * n,
-  };
-}
-
-/* La retícula completa.
- *
- * La forma de la estancia no se pregunta en ningún sitio, así que se parte de
- * un rectángulo de proporción corriente sacado de los m². Lo que sí es real
- * es el criterio: la separación entre centros manda, el número de puntos sale
- * de ella, y el flujo de cada foco se ajusta después para dar el total
- * calculado. Nunca al revés.
- */
-function planLayout(area, lumens, minCount = 1, dims = null) {
-  const w = dims ? dims.w : Math.sqrt(area * PLAN_ASPECT);
-  const d = dims ? dims.d : area / w;
-  const xs = axisOptions(w);
-  const ys = axisOptions(d);
-
-  let best = null;
-  for (const x of xs) {
-    for (const y of ys) {
-      if (x.count * y.count < minCount) continue;
-      const score = x.score + y.score;
-      if (!best || score < best.score) best = { x, y, score };
-    }
-  }
-
-  const { x, y } = best;
-  const n = x.count * y.count;
-  const lmPer = downlightLumens(lumens, n);
-  return {
-    area, w, d, n,
-    cols: x.count, rows: y.count,
-    sx: x.spacing, sy: y.spacing,
-    mx: x.margin, my: y.margin,
-    lmPer,
-    totalLm: lmPer * n,
-  };
-}
-
 const fmtM = (n) => n.toFixed(1).replace(".", ",");
 // Los m² de una zona son un número redondo o casi: "14,0 m²" se lee como una
 // precisión que no tenemos, y encima es una estimación. Se dice "14 m²".
 const fmtArea = (n) => fmtM(n).replace(/,0$/, "");
 const fmtCm = (m) => `${Math.round((m * 100) / 5) * 5} cm`;
-
-// La separación que se dice en el texto es siempre la que dibuja el plano de
-// al lado, no una cifra de manual: si no coinciden, el informe se contradice
-// a la vista. Cuando la retícula sale cuadrada, las dos medidas son la misma
-// y decir dos veces el mismo número sobra: se dice una.
-//
-// Un eje puede tener un solo punto (una estancia estrecha), y ahí no hay
-// separación que dar: no se inventa un "0,0 m".
-function spacingText(grid, onlyLights = false) {
-  const { cols, rows, sx, sy } = grid;
-  const x = fmtM(sx);
-  const y = fmtM(sy);
-  const unit = onlyLights ? "zonas" : "focos";
-  if (cols > 1 && rows > 1) return x === y ? `${x} m` : `${x} m entre ${unit} y ${y} m entre filas`;
-  if (cols > 1) return `${x} m entre ${unit}, en una sola fila`;
-  if (rows > 1) return `${y} m entre filas, en una sola columna`;
-  return "un único punto centrado";
-}
-
-// La misma medida, para una fila de datos: ahí "1,4 m entre focos y 1,0 m
-// entre filas" repite lo que ya dice la etiqueta de al lado.
-function spacingShort(grid) {
-  const { cols, rows, sx, sy } = grid;
-  const x = fmtM(sx);
-  const y = fmtM(sy);
-  if (cols > 1 && rows > 1) return x === y ? `${x} m` : `${x} × ${y} m`;
-  if (cols > 1) return `${x} m`;
-  if (rows > 1) return `${y} m`;
-  return "punto único";
-}
-
-// La distancia a la pared es la otra mitad del criterio, y hasta ahora no se
-// decía en ningún sitio: el plano repartía los focos dejando medio hueco a
-// cada lado, que con separaciones grandes dejaba el muro a más de un metro.
-function marginText(grid) {
-  const lo = Math.min(grid.mx, grid.my);
-  const hi = Math.max(grid.mx, grid.my);
-  return fmtCm(lo) === fmtCm(hi) ? fmtCm(hi) : `${Math.round((lo * 100) / 5) * 5}-${fmtCm(hi)}`;
-}
 
 /* ---------------------------------------------------------------------------
  * LAS CUATRO CARAS DEL INFORME DEL DORMITORIO
@@ -3953,26 +3826,111 @@ function BedroomLayerBlock({ area, lux, layers, grid }) {
  * espacial, y es deliberado. Nemul no sabe cuántos puntos hay ni dónde están;
  * dibujar unos cuantos círculos repartidos "idealmente" se lee como el sitio
  * donde deberían ir los suyos. El dato útil es el flujo. */
-function CeilingFluxNote({ generalLm }) {
+/* EL TECHO EN EL RECORRIDO DE MEJORA
+ *
+ * Sin plano y sin retícula. Lo único que hay que decir es cuánta luz debe
+ * salir del techo en total y, si sabemos cuántos puntos hay, cuánta le toca a
+ * cada uno. El número de puntos es un dato de la usuaria, no una propuesta
+ * nuestra: por eso aquí no se calcula nada de geometría.
+ *
+ * Un solo punto es el caso interesante: no se le pide que dé el total él solo
+ * —a esa potencia y a esa altura, deslumbra— sino que se dice para qué llega
+ * y qué lo acompaña. */
+function ExistingPointsNote({ points, generalLm }) {
+  const total = generalLm.toLocaleString("es-ES");
+  const per = points && points > 1 ? roundLm(generalLm / points, 50) : null;
+  const cuatroOMas = points === 4;
+
   return (
     <div data-pdf-keep>
-      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>La capa de luz general</p>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Tus puntos de techo</p>
       <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
         <div className="flex items-center gap-3">
           <Lightbulb size={18} color={COLORS.bulb} strokeWidth={1.8} className="shrink-0" />
           <p className="font-display" style={{ color: COLORS.text, fontSize: 26, lineHeight: 1.1 }}>
-            {generalLm.toLocaleString("es-ES")} lm
+            {total} lm
           </p>
         </div>
-        <p className="font-body t-body mt-3" style={{ color: COLORS.text }}>
-          Reparte estos {generalLm.toLocaleString("es-ES")} lm aproximadamente entre los puntos de techo que ya tienes. No es necesario que todos aporten exactamente el mismo flujo; lo importante es acercarse al total recomendado para esta capa.
+        <p className="font-body t-caption mt-1" style={{ color: COLORS.subtext }}>
+          es la luz general que pide la estancia
         </p>
+
+        {points === 1 ? (
+          <p className="font-body t-body mt-3" style={{ color: COLORS.text }}>
+            Con un único punto no busques que dé los {total} lm él solo: a esa potencia y en el centro del techo, deslumbra y aplana la estancia. Pon ahí una luminaria de varios brazos o difusa, y deja que las lámparas de las capas de abajo cubran el resto.
+          </p>
+        ) : per ? (
+          <>
+            <p className="font-body t-body mt-3" style={{ color: COLORS.text }}>
+              Repártelos entre los {points}{cuatroOMas ? " o más" : ""} puntos que ya tienes: unos <strong>{per.toLocaleString("es-ES")} lm por punto</strong>. No hace falta que todos den lo mismo; lo que cuenta es acercarse al total.
+            </p>
+            <p className="font-body t-caption mt-2" style={{ color: COLORS.subtext }}>
+              Si algún punto queda lejos de donde hacéis vida, baja su flujo y compensa con una lámpara de pie o de mesa en esa zona.
+            </p>
+          </>
+        ) : (
+          <p className="font-body t-body mt-3" style={{ color: COLORS.text }}>
+            Reparte estos {total} lm entre los puntos de techo que ya tienes. No es necesario que todos aporten el mismo flujo; lo importante es acercarse al total recomendado para esta capa.
+          </p>
+        )}
+
         <p className="font-body t-small italic mt-2.5" style={{ color: COLORS.subtext }}>
-          No verás aquí un plano con distancias: dijiste que solo vas a cambiar las luminarias, así que tus puntos ya están donde están. Dibujar una retícula sería proponerte agujeros nuevos.
+          No verás aquí un plano con distancias: dijiste que quieres mejorar lo que ya tienes, así que tus puntos están donde están. Dibujar una retícula sería proponerte agujeros nuevos.
         </p>
       </div>
     </div>
   );
+}
+
+/* EL TECHO EN EL RECORRIDO DE REFORMA
+ *
+ * Cuántos puntos y de qué flujo, y nada más. Aquí había un plano acotado con
+ * separaciones y márgenes a pared: una precisión que Nemul no tiene, porque no
+ * sabe dónde están los muebles, las puertas, la tele ni por dónde se pasa.
+ * Decirlo en una frase es más honesto y más útil que dibujarlo mal. */
+function CeilingAdviceBlock({ grid, roomLabel, avoid = [] }) {
+  const { n, lmPer } = grid;
+  return (
+    <div data-pdf-keep>
+      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Los puntos de techo</p>
+      <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
+        <div className="flex items-center gap-3">
+          <Lightbulb size={18} color={COLORS.bulb} strokeWidth={1.8} className="shrink-0" />
+          <p className="font-display" style={{ color: COLORS.text, fontSize: 26, lineHeight: 1.1 }}>
+            {n} puntos de unos {lmPer.toLocaleString("es-ES")} lm
+          </p>
+        </div>
+        <p className="font-body t-body mt-3" style={{ color: COLORS.text }}>
+          Para {roomLabel} recomendamos aproximadamente <strong>{n} puntos de luz general de unos {lmPer.toLocaleString("es-ES")} lm cada uno</strong>. Distribúyelos por la zona donde se hace vida, no repartidos por igual sobre toda la superficie.
+        </p>
+        {avoid.length > 0 && (
+          <div className="mt-2.5">
+            <p className="font-body t-body" style={{ color: COLORS.text }}>Evita colocarlos:</p>
+            <ul className="mt-1 flex flex-col gap-1">
+              {avoid.map((a, i) => (
+                <li key={i} className="font-body t-body flex gap-2" style={{ color: COLORS.text }}>
+                  <span style={{ color: COLORS.accent }}>·</span><span>{a}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <p className="font-body t-small italic mt-2.5" style={{ color: COLORS.subtext }}>
+          No te damos distancias exactas ni un plano: no sabemos dónde están tus muebles, las puertas, las vigas ni por dónde se pasa. El número y el flujo sí son la parte que se puede calcular.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* El conmutador de los dos recorridos. Es la única pieza que decide si se ve
+ * un plano o no, y por eso las tarjetas de informe no se duplican: todas
+ * llaman aquí y aquí se elige. */
+function CeilingSection({ track, grid, points, generalLm, roomLabel = "esta estancia", avoid = [] }) {
+  if (track === TRACK.reforma && grid) {
+    return <CeilingAdviceBlock grid={grid} roomLabel={roomLabel} avoid={avoid} />;
+  }
+  return <ExistingPointsNote points={points} generalLm={generalLm} />;
 }
 
 /* Un solo punto: hay algo que enseñar, pero son zonas, no posiciones. Sin
@@ -4082,7 +4040,7 @@ function LayerRow({ id, label, hint, lm, first }) {
 }
 
 function LivingLayerBlock({ layers }) {
-  const { estar, dining, grid, onlyLights, isDining } = layers;
+  const { estar, dining, grid, track, isDining } = layers;
 
   /* Dos cifras distintas, y hasta ahora se enseñaba una sola.
    *
@@ -4092,15 +4050,15 @@ function LivingLayerBlock({ layers }) {
    * 4 x 500 = 2.000. Enseñar "14,1 m² · 150 lm/m²" encima de "2.000 lm" es una
    * contradicción a la vista de cualquiera que multiplique. */
   const needLm = estar.generalLm;
-  const proposalLm = grid.totalLm;
-  const showProposal = !onlyLights && proposalLm !== needLm;
+  const proposalLm = grid ? grid.totalLm : null;
+  const showProposal = track === TRACK.reforma && grid && proposalLm !== needLm;
 
   const extras = [
     ...estar.ambient.map((a) => ({
       id: a.id,
-      label: a.id === "lectura" ? "Pie de lectura" : a.label,
+      label: a.id === "lectura" ? "Luz de lectura" : a.label,
       lm: a.lm,
-      hint: { lectura: "junto al sofá, regulable", relax: "un punto bajo y cálido, regulable" }[a.id] || "en el extremo opuesto del sofá, regulable",
+      hint: { lectura: "junto al sofá, por detrás del hombro y regulable", relax: "un punto bajo y cálido, regulable" }[a.id] || "en el extremo opuesto del sofá, regulable",
     })),
     ...(estar.accent ? [{ id: "acento", label: "Luz de acento TV", lm: estar.accent.lm, hint: "tira LED oculta tras el canto del mueble" }] : []),
     ...(dining ? [{ id: "mesa", label: "Luz sobre la mesa", lm: dining.pendantTotal, hint: `${dining.pieces > 1 ? `${dining.pieces} colgantes de ${dining.pendantPer} lm` : `un colgante de ${dining.pendantPer} lm`}, a ${PENDANT_H_TEXT} del tablero` }] : []),
@@ -4126,7 +4084,7 @@ function LivingLayerBlock({ layers }) {
           <Lightbulb size={16} color={COLORS.bulb} strokeWidth={1.9} className="shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="font-body t-body" style={{ color: COLORS.text }}>
-              {onlyLights ? "Repartidos entre tus puntos de techo" : `Propuesta: ${grid.n} downlights de ${grid.lmPer} lm`}
+              {track === TRACK.mejora || !grid ? "Repartidos entre tus puntos de techo" : `Propuesta: ${grid.n} downlights de ${grid.lmPer} lm`}
             </p>
             <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
               {isDining ? "solo por la zona de estar: la mesa tiene su propia luz" : "la luz de fondo, la que enciendes al entrar"}
@@ -4150,264 +4108,6 @@ function LivingLayerBlock({ layers }) {
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-/* El esquema de distribución de techo. SOLO en reforma.
- *
- * Aquí sí hay algo real que enseñar: los puntos no existen todavía y Nemul los
- * está proponiendo, así que su posición es la propuesta. Lo que se dibuja son
- * puntos de luz, no muebles: el sofá y el mueble de la televisión estuvieron
- * un rato en este plano y se quitaron, porque Nemul no sabe dónde están y
- * dibujarlos se leía como una instrucción de dónde ponerlos.
- *
- * La mesa sí se dibuja, y por una razón concreta: es lo que da sentido al
- * recuadro discontinuo y a que la retícula se pare antes de llegar. Va
- * declarada como referencia en el pie.
- *
- * Sin cotas. Las distancias están en las recomendaciones. */
-function LivingZonePlan({ layers, measured }) {
-  const { plan, grid, dining, estar } = layers;
-  const { roomW, roomD, diningDepth, estarW } = plan;
-
-  const PAD = 18, BOX_W = 320;
-  const BOX_H = Math.max(150, Math.min(250, Math.round((BOX_W * roomD) / roomW)));
-  const vbW = PAD * 2 + BOX_W, vbH = BOX_H + PAD * 2;
-  const px = BOX_W / roomW, py = BOX_H / roomD;
-  const X = (m) => PAD + m * px;
-  const Y = (m) => PAD + m * py;
-  const splitX = X(estarW);
-
-  const dots = [];
-  for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) {
-    dots.push({
-      x: grid.cols > 1 ? grid.mx + c * grid.sx : estarW / 2,
-      y: grid.rows > 1 ? grid.my + r * grid.sy : roomD / 2,
-    });
-  }
-
-  const tW = diningDepth * 0.55;
-  const tL = Math.min(roomD * 0.45, 1.7);
-  const tCx = estarW + diningDepth / 2;
-  const tCy = roomD / 2;
-  const round = dining.shape === "redonda";
-
-  const keep = LIVING_TABLE_KEEPOUT_M;
-  const kx0 = X(tCx - tW / 2 - keep), kx1 = Math.min(X(tCx + tW / 2 + keep), PAD + BOX_W);
-  const ky0 = Math.max(Y(tCy - tL / 2 - keep), PAD), ky1 = Math.min(Y(tCy + tL / 2 + keep), PAD + BOX_H);
-
-  const n = dining.pieces;
-  const pend = Array.from({ length: n }, (_, i) => tCy - tL / 2 + (tL * (2 * i + 1)) / (2 * n));
-  const fillOff = tL / 2 + keep + 0.2;
-  const clampY = (m) => Math.min(Math.max(m, 0.35), roomD - 0.35);
-  const fills = dining.fillPieces ? [clampY(tCy - fillOff), clampY(tCy + fillOff)] : [];
-
-  return (
-    <div data-pdf-keep>
-      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Dónde abrir los puntos de techo</p>
-      <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
-        <svg viewBox={`0 0 ${vbW} ${vbH}`} xmlns="http://www.w3.org/2000/svg" role="img"
-          aria-label={`Esquema de techo: ${grid.n} focos generales repartidos solo por la zona de estar, ${n === 1 ? "un colgante" : `${n} colgantes`} sobre la mesa y luz de apoyo en el borde del comedor. Ningún foco general sobre la mesa.`}
-          style={{ display: "block", width: "100%", height: "auto" }}>
-          <defs>
-            <radialGradient id="nemul-zone-pool">
-              <stop offset="0" stopColor={COLORS.bulb} stopOpacity="0.42" />
-              <stop offset="1" stopColor={COLORS.bulb} stopOpacity="0" />
-            </radialGradient>
-          </defs>
-
-          <rect x={PAD} y={PAD} width={BOX_W} height={BOX_H} rx="4" fill="#FFFDF8" stroke={COLORS.text} strokeWidth="2" />
-          <rect x={splitX} y={PAD} width={PAD + BOX_W - splitX} height={BOX_H} fill={COLORS.bgAlt} opacity="0.8" />
-          <line x1={splitX} y1={PAD} x2={splitX} y2={PAD + BOX_H} stroke={COLORS.subtext} strokeWidth="1.6" strokeDasharray="7 5" />
-
-          {dots.map((p, i) => (
-            <circle key={`pool${i}`} cx={X(p.x)} cy={Y(p.y)} r={Math.min(grid.cols > 1 ? grid.sx * px : BOX_W, grid.rows > 1 ? grid.sy * py : BOX_H) * 0.55} fill="url(#nemul-zone-pool)" />
-          ))}
-          {dots.map((p, i) => (
-            <circle key={`d${i}`} cx={X(p.x)} cy={Y(p.y)} r="6" fill={COLORS.bulb} stroke={COLORS.text} strokeWidth="1.5" />
-          ))}
-
-          <rect x={kx0} y={ky0} width={kx1 - kx0} height={ky1 - ky0} rx="4" fill="none" stroke={COLORS.warning} strokeWidth="1.3" strokeDasharray="6 4" />
-          {round
-            ? <circle cx={X(tCx)} cy={Y(tCy)} r={Math.min((tW / 2) * px, (tL / 2) * py)} fill={COLORS.bgAlt} stroke={COLORS.subtext} strokeWidth="1.4" strokeDasharray="4 3" />
-            : <rect x={X(tCx - tW / 2)} y={Y(tCy - tL / 2)} width={tW * px} height={tL * py} rx="3" fill={COLORS.bgAlt} stroke={COLORS.subtext} strokeWidth="1.4" strokeDasharray="4 3" />}
-          {pend.map((m, i) => (
-            <g key={`c${i}`}>
-              <circle cx={X(tCx)} cy={Y(m)} r="15" fill={COLORS.bulb} opacity="0.34" />
-              <circle cx={X(tCx)} cy={Y(m)} r="7.5" fill={COLORS.bulb} stroke={COLORS.text} strokeWidth="1.7" />
-            </g>
-          ))}
-          {fills.map((m, i) => (
-            <circle key={`f${i}`} cx={X(tCx)} cy={Y(m)} r="4.5" fill="#FFFDF8" stroke={COLORS.subtext} strokeWidth="1.6" />
-          ))}
-        </svg>
-
-        <p className="font-body t-caption text-center mt-1.5" style={{ color: COLORS.subtext }}>
-          A la izquierda, la zona de estar ({fmtArea(estar.area)} m²). A la derecha, la de comedor ({fmtArea(dining.area)} m²).
-        </p>
-
-        <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
-          <div className="flex items-center gap-2">
-            <span className="rounded-full" style={{ width: 11, height: 11, backgroundColor: COLORS.bulb, boxShadow: `inset 0 0 0 1.4px ${COLORS.text}` }} />
-            <span className="font-body t-caption" style={{ color: COLORS.subtext }}>Luz general — {grid.n} focos de {grid.lmPer} lm</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="rounded-full" style={{ width: 13, height: 13, backgroundColor: COLORS.bulb, boxShadow: `inset 0 0 0 1.6px ${COLORS.text}` }} />
-            <span className="font-body t-caption" style={{ color: COLORS.subtext }}>{n === 1 ? `Colgante de ${dining.pendantPer} lm` : `${n} colgantes de ${dining.pendantPer} lm`}</span>
-          </div>
-          {dining.fillPieces > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="rounded-full" style={{ width: 11, height: 11, backgroundColor: "#FFFDF8", boxShadow: `inset 0 0 0 1.6px ${COLORS.subtext}` }} />
-              <span className="font-body t-caption" style={{ color: COLORS.subtext }}>Luz de apoyo — {dining.fillPieces} × {dining.fillPer} lm</span>
-            </div>
-          )}
-          <div className="flex items-center gap-2">
-            <span style={{ width: 13, height: 11, border: `1.3px dashed ${COLORS.warning}`, borderRadius: 2 }} />
-            <span className="font-body t-caption" style={{ color: COLORS.subtext }}>sin luz general sobre la mesa</span>
-          </div>
-        </div>
-
-        <p className="font-body t-small italic mt-2.5" style={{ color: COLORS.subtext }}>
-          Solo se dibujan puntos de luz. Las lámparas de pie y de sobremesa no salen aquí porque no dependen del techo, y los muebles tampoco: Nemul no sabe cómo tienes puesto el salón.
-        </p>
-        <p className="font-body t-small mt-2.5 rounded-lg p-3" style={{ color: COLORS.text, backgroundColor: COLORS.bgAlt }}>
-          <span className="font-medium">El esquema es orientativo.</span> {measured
-            ? "El rectángulo son las medidas que nos has dado; lo que ha supuesto Nemul es el corte entre las dos zonas y el lugar de la mesa, dibujada con línea discontinua."
-            : "La forma de la estancia, el corte entre las dos zonas y el lugar de la mesa —dibujada con línea discontinua— los ha supuesto Nemul a partir de tus metros cuadrados."} Lo que puedes llevarte tal cual es el criterio: los focos generales solo por la zona de estar, y ninguno sobre la mesa ni pegado a ella.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function CeilingPlan({ grid, onlyLights = false, measured = false }) {
-  const { area, w, d, n, cols, rows, sx, sy, mx, my } = grid;
-  const PAD = 20;
-  const BOX_W = 300;
-  const BOX_H = Math.max(120, Math.min(240, Math.round((BOX_W * d) / w)));
-
-  // Hueco extra a la izquierda para la cota vertical. El plano acotaba solo la
-  // separación horizontal, así que una retícula de 1,75 x 1,29 m se leía como
-  // si los focos estuvieran a 1,7 m en las dos direcciones. Con un solo número
-  // a la vista, el dibujo dice menos de lo que sabe.
-  //
-  // Solo se reserva cuando hay dos filas que acotar: en un plano de una sola
-  // fila ese margen quedaría vacío y descentraría la estancia.
-  const GUTTER = rows >= 2 ? 22 : 0;
-  const LEFT = PAD + GUTTER;
-  const vbW = LEFT + BOX_W + PAD;
-  const vbH = BOX_H + PAD * 2 + 26;
-
-  // El plano dibuja el margen a pared real. Antes repartía los focos en
-  // huecos iguales —medio hueco a cada lado—, así que con separaciones
-  // grandes el muro quedaba a más de un metro sin que nadie lo hubiera
-  // decidido.
-  const cx = (c) => LEFT + (BOX_W * (cols > 1 ? mx + c * sx : w / 2)) / w;
-  const cy = (r) => PAD + (BOX_H * (rows > 1 ? my + r * sy : d / 2)) / d;
-  const stepX = cols > 1 ? (BOX_W * sx) / w : BOX_W;
-  const stepY = rows > 1 ? (BOX_H * sy) / d : BOX_H;
-  const pool = Math.min(stepX, stepY) * 0.62;
-
-  const lights = [];
-  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) lights.push({ c, r });
-
-  return (
-    <div data-pdf-keep>
-      {/* Quien solo va a cambiar luminarias no está mirando dónde colocar
-          focos: está mirando dónde debería llegar la luz. El mismo dibujo
-          responde a las dos preguntas, pero no con el mismo título. */}
-      <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>
-        {onlyLights ? "Distribución ideal de la luz" : "Dónde colocar los focos"}
-      </p>
-      <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.bg }}>
-        <svg viewBox={`0 0 ${vbW} ${vbH}`} xmlns="http://www.w3.org/2000/svg" role="img"
-          aria-label={`Plano orientativo visto desde arriba: ${n} ${onlyLights ? "zonas de luz repartidas" : "focos repartidos"} en ${cols} columnas y ${rows} filas, con ${spacingText(grid, onlyLights)}`}
-          style={{ display: "block", width: "100%", height: "auto" }}>
-          <defs>
-            <radialGradient id="nemul-pool">
-              <stop offset="0" stopColor={COLORS.bulb} stopOpacity="0.42" />
-              <stop offset="1" stopColor={COLORS.bulb} stopOpacity="0" />
-            </radialGradient>
-          </defs>
-
-          <rect x={LEFT} y={PAD} width={BOX_W} height={BOX_H} rx="4" fill="#FFFDF8" stroke={COLORS.text} strokeWidth="2" />
-          {lights.map(({ c, r }, i) => <circle key={`p${i}`} cx={cx(c)} cy={cy(r)} r={pool} fill="url(#nemul-pool)" />)}
-          {lights.map(({ c, r }, i) => (
-            <circle key={`l${i}`} cx={cx(c)} cy={cy(r)} r="7" fill={COLORS.bulb} stroke={COLORS.text} strokeWidth="1.6" />
-          ))}
-
-          {cols >= 2 && (
-            <>
-              <g stroke={COLORS.text} strokeWidth="1.1" fill="none">
-                <line x1={cx(0)} y1={PAD - 8} x2={cx(1)} y2={PAD - 8} strokeDasharray="3 2" />
-                <line x1={cx(0)} y1={PAD - 12} x2={cx(0)} y2={PAD - 4} />
-                <line x1={cx(1)} y1={PAD - 12} x2={cx(1)} y2={PAD - 4} />
-              </g>
-              <rect x={(cx(0) + cx(1)) / 2 - 27} y={PAD - 19} width="54" height="15" rx="7" fill={COLORS.text} />
-              <text x={(cx(0) + cx(1)) / 2} y={PAD - 8} textAnchor="middle" fontFamily="Montserrat, sans-serif" fontSize="9.5" fontWeight="600" fill="#FFF7E8">
-                {fmtM(sx)} m
-              </text>
-            </>
-          )}
-
-          {rows >= 2 && (
-            <>
-              <g stroke={COLORS.text} strokeWidth="1.1" fill="none">
-                <line x1={LEFT - 8} y1={cy(0)} x2={LEFT - 8} y2={cy(1)} strokeDasharray="3 2" />
-                <line x1={LEFT - 12} y1={cy(0)} x2={LEFT - 4} y2={cy(0)} />
-                <line x1={LEFT - 12} y1={cy(1)} x2={LEFT - 4} y2={cy(1)} />
-              </g>
-              {/* La misma píldora que arriba, girada sobre su propio centro:
-                  así el texto sube por el lateral en vez de tumbarse. */}
-              <g transform={`rotate(-90 ${LEFT - 11} ${(cy(0) + cy(1)) / 2})`}>
-                <rect x={LEFT - 38} y={(cy(0) + cy(1)) / 2 - 7.5} width="54" height="15" rx="7" fill={COLORS.text} />
-                <text x={LEFT - 11} y={(cy(0) + cy(1)) / 2 + 3.6} textAnchor="middle" fontFamily="Montserrat, sans-serif" fontSize="9.5" fontWeight="600" fill="#FFF7E8">
-                  {fmtM(sy)} m
-                </text>
-              </g>
-            </>
-          )}
-
-          <g stroke={COLORS.subtext} strokeWidth="1" fill="none">
-            <line x1={LEFT} y1={vbH - 18} x2={LEFT + BOX_W} y2={vbH - 18} strokeDasharray="3 2" />
-            <line x1={LEFT} y1={vbH - 22} x2={LEFT} y2={vbH - 14} />
-            <line x1={LEFT + BOX_W} y1={vbH - 22} x2={LEFT + BOX_W} y2={vbH - 14} />
-          </g>
-          <text x={LEFT + BOX_W / 2} y={vbH - 4} textAnchor="middle" fontFamily="Montserrat, sans-serif" fontSize="9.5" fill={COLORS.subtext}>
-            {fmtArea(area)} m² · unos {fmtM(w)} × {fmtM(d)} m
-          </text>
-        </svg>
-
-        <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
-          <div className="flex items-center gap-2">
-            <span className="rounded-full" style={{ width: 11, height: 11, backgroundColor: COLORS.bulb, boxShadow: `inset 0 0 0 1.4px ${COLORS.text}` }} />
-            <span className="font-body t-caption" style={{ color: COLORS.subtext }}>
-              {onlyLights ? `${n} zonas de luz de unos ${grid.lmPer} lm` : `${n} focos de ${grid.lmPer} lm`}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="rounded-full" style={{ width: 11, height: 11, backgroundColor: "#F6DFAE" }} />
-            <span className="font-body t-caption" style={{ color: COLORS.subtext }}>zona que cubre cada uno</span>
-          </div>
-        </div>
-
-        <p className="font-body t-small italic mt-2.5" style={{ color: COLORS.subtext }}>
-          {onlyLights
-            ? `Reparto orientativo en ${cols} × ${rows}: unos ${spacingText(grid, true)}, y a unos ${marginText(grid)} de las paredes. ${measured ? "El rectángulo son las medidas que nos has dado: si tu planta tiene recodos o columnas, ajústalo" : "La forma de la estancia se ha dibujado como un rectángulo corriente a partir de los m²: llévalo a tu planta real"} y a dónde estén los muebles, y cuenta las lámparas que ya tienes como parte del reparto.`
-            : `Colocación orientativa en ${cols} × ${rows}: unos ${spacingText(grid)}, y a unos ${marginText(grid)} de las paredes. ${measured ? "El rectángulo son las medidas que nos has dado: ajusta la retícula a los recodos que tenga tu planta" : "La forma de la estancia se ha dibujado como un rectángulo corriente a partir de los m²: ajusta la retícula a tu planta real"} y a dónde estén los muebles, apartando los focos de los sitios donde os sentáis para que no queden en el campo de visión.`}
-        </p>
-        {/* Este plano dibuja la distribución ideal para los m² de la estancia:
-            no sabe dónde están los puntos de luz actuales, porque no se
-            preguntan. A quien va a reformar eso le vale como plano. A quien
-            solo cambia luminarias hay que decírselo, o se irá pensando que
-            necesita abrir seis puntos nuevos. */}
-        {onlyLights && (
-          <p className="font-body t-small mt-2.5 rounded-lg p-3" style={{ color: COLORS.text, backgroundColor: COLORS.bgAlt }}>
-            <span className="font-medium">No necesitas crear estos puntos.</span> El esquema representa cómo conviene repartir la luz, no una nueva instalación. Utiliza los puntos existentes y completa las zonas que lo necesiten con luminarias orientables o lámparas de mesa o de pie.
-          </p>
-        )}
-      </div>
     </div>
   );
 }
@@ -4515,7 +4215,7 @@ function TechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) 
   // room.id importa: es lo que distingue el salón del salón-comedor, y con él
   // si la estancia se parte en dos zonas o se calcula como una sola.
   const { tempK, grid, tips, mistakes, layers } = generateLivingReport(answers, room.id);
-  const onlyLights = answers.renovationStatus === "onlyLights";
+  const { track, points } = layers;
   const { Icon } = room;
   return (
     <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
@@ -4535,17 +4235,18 @@ function TechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) 
 
           <LivingLayerBlock layers={layers} />
 
-          {/* El salón conserva su esquema orientativo en los dos modos, con el
-              aviso de siempre de que es un reparto recomendado y no una
-              instalación que haya que abrir.
-
-              El salón-comedor no: ahí el dibujo tendría que colocar la mesa y
-              el corte entre las dos zonas, y ninguna de las dos cosas las
-              sabe Nemul. Solo se dibuja cuando hay reforma y los puntos que
-              se enseñan son de verdad una propuesta. */}
-          {layers.isDining
-            ? (!onlyLights && <LivingZonePlan layers={layers} measured={!!roomDims(answers)} />)
-            : <CeilingPlan grid={grid} onlyLights={onlyLights} measured={!!roomDims(answers)} />}
+          {/* Ni plano de zonas ni retícula: en los dos recorridos se habla de
+              puntos, y en el salón-comedor de los de la zona de estar. */}
+          <CeilingSection
+            track={track} grid={grid} points={points}
+            generalLm={layers.estar.generalLm}
+            roomLabel={layers.isDining ? "la zona de estar" : "este salón"}
+            avoid={[
+              "justo encima del sofá o de donde os sentéis, porque desde ahí el foco entra en el campo de visión",
+              ...(layers.isDining ? ["sobre la mesa del comedor, que ya tiene su propia luz"] : []),
+              ...((answers.activities || []).includes("tv") ? ["en la vertical de la televisión, para no crear reflejos en la pantalla"] : []),
+            ]}
+          />
 
           <TipsList tips={tips} />
 
@@ -4559,13 +4260,13 @@ function TechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) 
 /* La cocina, en dos bloques como el salón: la general por un lado y el trabajo
  * y los refuerzos por otro. Sin fila de total: la tira de la encimera y los
  * focos del techo no se encienden a la vez ni suman una cifra útil. */
-function KitchenLayerBlock({ layers, area, onlyLights }) {
+function KitchenLayerBlock({ layers, area, track }) {
   const { generalLux, generalLm, grid, task, reinforcements, island } = layers;
   // Necesidad y propuesta son dos cifras distintas: la primera es los metros
   // por los lm/m², la segunda lo que dan los focos, que vienen en escalones.
   const needLm = generalLm;
-  const proposalLm = grid.totalLm;
-  const showProposal = !onlyLights && proposalLm !== needLm;
+  const proposalLm = grid ? grid.totalLm : null;
+  const showProposal = track === TRACK.reforma && grid && proposalLm !== needLm;
 
   const work = [];
   if (task.mode === "underCabinet") {
@@ -4602,7 +4303,7 @@ function KitchenLayerBlock({ layers, area, onlyLights }) {
           <Lightbulb size={16} color={COLORS.bulb} strokeWidth={1.9} className="shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="font-body t-body" style={{ color: COLORS.text }}>
-              {onlyLights ? "Repartidos entre tus puntos de techo" : `Propuesta: ${grid.n} downlights de ${grid.lmPer} lm`}
+              {track === TRACK.mejora || !grid ? "Repartidos entre tus puntos de techo" : `Propuesta: ${grid.n} downlights de ${grid.lmPer} lm`}
             </p>
             <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
               moverse, ver el conjunto y abrir un armario: la encimera no depende de esto
@@ -4641,7 +4342,8 @@ function KitchenLayerBlock({ layers, area, onlyLights }) {
 
 function KitchenReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
   const { tempK, grid, area, layers, distribution, narrative, mistakes } = generateKitchenReport(answers);
-  const onlyLights = answers.renovationStatus === "onlyLights";
+  const track = reportTrack(answers);
+  const points = existingPoints(answers);
   const { Icon } = room;
   return (
     <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
@@ -4659,15 +4361,18 @@ function KitchenReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
             roomId={room.id}
             tempK={tempK}
             sameToneAs={sameToneAs}
-            extra={<StatRow label="Separación entre downlights" value={spacingShort(grid)} />}
           />
 
-          <KitchenLayerBlock layers={layers} area={area} onlyLights={onlyLights} />
+          <KitchenLayerBlock layers={layers} area={area} track={track} />
 
-          <CeilingPlan grid={grid} onlyLights={onlyLights} measured={!!roomDims(answers)} />
+          <CeilingSection
+            track={track} grid={grid} points={points} generalLm={layers.generalLm}
+            roomLabel="esta cocina"
+            avoid={["en la vertical de la encimera: de pie te tapas tú la luz. Van adelantados hacia su borde, y la encimera tiene además su propia capa"]}
+          />
 
           <div>
-            <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Distribución recomendada de los focos</p>
+            <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>{grid ? "Distribución recomendada de los focos" : "Cómo aprovechar tus puntos"}</p>
             <div className="flex flex-col gap-2">
               {distribution.map((line, i) => (
                 <div key={i} className="flex items-start gap-3 rounded-xl p-3.5" style={{ backgroundColor: COLORS.bg }}>
@@ -4728,11 +4433,11 @@ function RoomReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
 /* El baño, en dos bloques: la general y las capas funcionales. Sin total: el
  * espejo ilumina una cara y la general un suelo, así que sumarlos no da una
  * cifra que signifique nada. */
-function BathroomLayerBlock({ bath, area, lux, grid, onlyLights }) {
+function BathroomLayerBlock({ bath, area, lux, grid, track }) {
   const { mirror, wet, night, generalTempK } = bath;
   const needLm = Math.round((lux * area) / 100) * 100;
-  const proposalLm = grid.totalLm;
-  const showProposal = !onlyLights && proposalLm !== needLm;
+  const proposalLm = grid ? grid.totalLm : null;
+  const showProposal = track === TRACK.reforma && grid && proposalLm !== needLm;
 
   const rows = [
     {
@@ -4764,7 +4469,7 @@ function BathroomLayerBlock({ bath, area, lux, grid, onlyLights }) {
           <Lightbulb size={16} color={COLORS.bulb} strokeWidth={1.9} className="shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="font-body t-body" style={{ color: COLORS.text }}>
-              {onlyLights ? "Repartidos entre tus puntos de techo" : `Propuesta: ${grid.n} downlights de ${grid.lmPer} lm`}
+              {track === TRACK.mejora || !grid ? "Repartidos entre tus puntos de techo" : `Propuesta: ${grid.n} downlights de ${grid.lmPer} lm`}
             </p>
             <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
               Iluminación general para moverte y ver bien el espacio. La iluminación del espejo se calcula aparte.
@@ -4798,11 +4503,11 @@ function BathroomLayerBlock({ bath, area, lux, grid, onlyLights }) {
   );
 }
 
-function ClosetLayerBlock({ closet, area, lux, grid, onlyLights }) {
+function ClosetLayerBlock({ closet, area, lux, grid, track }) {
   const { interior, mirror } = closet;
   const needLm = Math.round((lux * area) / 100) * 100;
-  const proposalLm = grid.totalLm;
-  const showProposal = !onlyLights && proposalLm !== needLm;
+  const proposalLm = grid ? grid.totalLm : null;
+  const showProposal = track === TRACK.reforma && grid && proposalLm !== needLm;
 
   const rows = [
     ...(interior ? [{
@@ -4830,7 +4535,7 @@ function ClosetLayerBlock({ closet, area, lux, grid, onlyLights }) {
           <Lightbulb size={16} color={COLORS.bulb} strokeWidth={1.9} className="shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="font-body t-body" style={{ color: COLORS.text }}>
-              {onlyLights ? "Repartidos entre tus puntos de techo" : `Propuesta: ${grid.n} downlights de ${grid.lmPer} lm`}
+              {track === TRACK.mejora || !grid ? "Repartidos entre tus puntos de techo" : `Propuesta: ${grid.n} downlights de ${grid.lmPer} lm`}
             </p>
             <p className="font-body t-caption" style={{ color: COLORS.subtext }}>
               Iluminación general para moverte y ver el conjunto del vestidor. El interior de los armarios y el espejo se calculan aparte.
@@ -4865,7 +4570,7 @@ function ClosetLayerBlock({ closet, area, lux, grid, onlyLights }) {
 }
 
 function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
-  const { tempK, lumens, grid, area, lux, tips, mistakes, layers, bath, closet } = generateGenericTechnicalReport(room.id, answers);
+  const { tempK, lumens, grid, area, lux, tips, mistakes, layers, bath, closet, track, points } = generateGenericTechnicalReport(room.id, answers);
   const { Icon } = room;
   return (
     <div className="rounded-xl overflow-hidden" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
@@ -4884,13 +4589,12 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameTon
           {layers ? (
             <BedroomLayerBlock area={area} lux={lux} layers={layers} grid={grid} />
           ) : bath ? (
-            <BathroomLayerBlock bath={bath} area={area} lux={lux} grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} />
+            <BathroomLayerBlock bath={bath} area={area} lux={lux} grid={grid} track={track} />
           ) : closet && (closet.interior || closet.mirror) ? (
-            <ClosetLayerBlock closet={closet} area={area} lux={lux} grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} />
+            <ClosetLayerBlock closet={closet} area={area} lux={lux} grid={grid} track={track} />
           ) : (
             <CalculationBlock
-              area={area} lux={lux} lumens={lumens} grid={grid}
-              onlyLights={answers.renovationStatus === "onlyLights"}
+              area={area} lux={lux} lumens={lumens} grid={grid} track={track}
               ambientOnly={room.id === "office"}
             />
           )}
@@ -4903,9 +4607,13 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameTon
           {/* El dormitorio elige entre tres representaciones según lo que hay
               en su techo; ver BEDROOM: LAS CUATRO CARAS DEL INFORME. */}
           {layers ? (
-            layers.mode === "reforma" ? <CeilingPlan grid={grid} measured={!!roomDims(answers)} />
-            : layers.mode === "varios" ? <CeilingFluxNote generalLm={layers.generalLm} />
-            : <BedroomZoneScheme layers={layers} />
+            /* El dormitorio conserva sus tres caras. La de "varios puntos" pasa
+             * a usar el número exacto, que antes no se preguntaba. */
+            layers.mode === "reforma"
+              ? <CeilingAdviceBlock grid={grid} roomLabel="este dormitorio"
+                  avoid={["en la vertical de la cama: tumbada, un foco encima deslumbra"]} />
+            : layers.mode === "uno" ? <BedroomZoneScheme layers={layers} />
+            : <ExistingPointsNote points={points} generalLm={layers.generalLm} />
           ) : room.id === "terrace" ? (
             <div data-pdf-keep>
               <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Zonas a iluminar</p>
@@ -4914,7 +4622,11 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameTon
               </div>
             </div>
           ) : (
-            <CeilingPlan grid={grid} onlyLights={answers.renovationStatus === "onlyLights"} measured={!!roomDims(answers)} />
+            <CeilingSection
+              track={track} grid={grid} points={points} generalLm={lumens}
+              roomLabel={GENERIC_ROOM_LABEL[room.id] || "esta estancia"}
+              avoid={GENERIC_CEILING_AVOID[room.id] || []}
+            />
           )}
 
           <TipsList tips={tips} />
@@ -4925,6 +4637,20 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameTon
     </div>
   );
 }
+
+/* Cómo se nombra cada estancia dentro de la frase del bloque de techo, y qué
+ * conviene esquivar al repartir los puntos. Es lo único que sustituye al
+ * plano: en vez de fingir posiciones, se dice de qué apartarse. */
+const GENERIC_ROOM_LABEL = {
+  bedroom: "este dormitorio", bathroom: "este baño", closet: "este vestidor",
+  office: "este despacho", terrace: "esta terraza",
+};
+
+const GENERIC_CEILING_AVOID = {
+  bathroom: ["en la vertical del espejo: desde arriba la cara queda en sombra, y el espejo ya tiene su propia luz"],
+  closet: ["pegados a la pared de los armarios: la luz daría en las puertas y no en la ropa"],
+  office: ["detrás de ti ni en la vertical de la pantalla, para no reflejarte el monitor"],
+};
 
 const GENERIC_TECH_ROOMS = ["bedroom", "bathroom", "closet", "terrace", "office"];
 
