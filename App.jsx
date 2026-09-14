@@ -331,6 +331,22 @@ const RENOVATION_INSIGHT = {
   onlyLights: "Como vas a trabajar con la instalación que ya tienes, el objetivo es cuánta luz debe dar el techo en total, no dónde irían los puntos. Sustituye lo que cuelga de cada uno por luminarias que den el flujo indicado —un plafón por un foco orientable, un carril o una suspensión múltiple en el punto existente— y cubre con lámparas de pie o de mesa las zonas a las que no llegue ningún punto.",
 };
 
+/* Lo que conviene aprovechar de la obra, estancia por estancia.
+ *
+ * Estos cinco consejos vivían dentro de la pregunta "¿Qué te gustaría
+ * mejorar?", colgados de una opción "Estoy reformando desde cero" que repetía
+ * la pregunta del recorrido. Eso los dejaba fuera del alcance de casi todo el
+ * mundo: quien decía "tengo sombras en el espejo" y a continuación decía que
+ * estaba reformando el baño no llegaba a leer nunca lo de separar circuitos.
+ * Ahora salen del recorrido, que es de donde tenían que salir. */
+const ROOM_RENOVATION_INSIGHT = {
+  bathroom: "Como estás reformando desde cero, separa en circuitos distintos el espejo, la zona húmeda (si la tienes) y la luz general.",
+  closet: "Como estás reformando desde cero, aprovecha para integrar luz dentro de los propios armarios.",
+  terrace: "Como estás reformando desde cero, deja prevista una toma eléctrica protegida cerca de la zona de estar exterior.",
+  hallway: "Como estás reformando desde cero, aprovecha para dejar cableado preparado para un sensor de movimiento.",
+  office: "Con una reforma completa, aprovecha para dejar circuitos independientes para la luz general y la de tarea del escritorio.",
+};
+
 const BEDROOM_RENOVATION_INSIGHT = {
   onlyLights: "Como solo vas a cambiar las luminarias, esto no es una obra a ejecutar sino el objetivo de luz que hay que alcanzar: sustituye lo que cuelga de los puntos que ya tienes por luminarias que den el flujo indicado, y resuelve la cabecera con lámparas de mesita, apliques o colgantes, que no piden instalación nueva.",
   renovation: "Como vas a reformar, aprovecha para dejar la luz general y la de la cabecera en circuitos separados: poder encender solo las mesitas es lo que convierte el dormitorio en una habitación de descanso por la noche.",
@@ -892,7 +908,7 @@ function generateLivingReport(answers = {}, roomId = "living") {
     : [];
   return {
     tempK, lumens, grid, area, lux, layers,
-    tips: pickTopTips(tips, cubiertos),
+    tips: pickTopTips(tips, cubiertos, tipMax(answers, roomId)),
     mistakes: [...new Set(mistakes)],
   };
 }
@@ -934,7 +950,6 @@ const KITCHEN_PROBLEM_OPTIONS = [
   { id: "shadows", label: "La encimera tiene sombras" },
   { id: "visibility", label: "No veo bien cuando cocino" },
   { id: "modern", label: "Quiero una cocina más moderna" },
-  { id: "renovating", label: "Voy a hacer una reforma", Icon: Hammer },
   { id: "onlyLighting", label: "Solo quiero cambiar la iluminación" },
 ];
 
@@ -942,7 +957,6 @@ const KITCHEN_PROBLEM_REACTIONS = {
   shadows: "Entendido: vamos a poner luz directa sobre la encimera, no solo general.",
   visibility: "Vamos a priorizar visibilidad sobre ambiente en la zona de trabajo.",
   modern: "Buscamos un aspecto más moderno sin sacrificar función.",
-  renovating: "Con reforma completa, podemos plantear circuitos independientes desde cero.",
   onlyLighting: "Solo cambiar la iluminación: nos vamos a adaptar a lo que ya existe.",
 };
 
@@ -993,7 +1007,6 @@ const KITCHEN_PROBLEM_SENTENCE = {
   shadows: "Ya que la encimera tiene sombras, dirige puntos de luz independientes directamente sobre la zona de trabajo, no solo luz general desde el techo.",
   visibility: "Como no ves bien al cocinar, sube la intensidad de la luz sobre la encimera por encima de lo habitual, en un tono blanco neutro.",
   modern: "Para lograr un aspecto más moderno, combina downlights empotrados con un detalle de luz LED bajo los muebles altos.",
-  renovating: "Como vas a hacer una reforma completa, aprovecha para dejar circuitos independientes para la zona de trabajo, la isla o península, y la luz general.",
   onlyLighting: "Ya que solo vas a cambiar la iluminación, prioriza soluciones sin obra, como focos de superficie o tiras adhesivas regulables.",
 };
 
@@ -1232,7 +1245,10 @@ function generateKitchenReport(answers = {}) {
   }
 
   if (KITCHEN_PROBLEM_SENTENCE[problem]) sentences.push(KITCHEN_PROBLEM_SENTENCE[problem]);
-  if (renovationStatus === "renovation" && problem !== "renovating") sentences.push("Aprovecha además que vas a hacer una reforma para dejar circuitos independientes preparados para el futuro.");
+  // El consejo de reforma sale del recorrido, no de la pregunta de mejorar:
+  // antes solo lo veía quien elegía "Voy a hacer una reforma" como problema, y
+  // quien decía "la encimera tiene sombras" y reformaba igual no lo veía nunca.
+  if (renovationStatus === "renovation") sentences.push("Como vas a hacer una reforma completa, aprovecha para dejar circuitos independientes para la zona de trabajo, la isla o península, y la luz general.");
   if (renovationStatus === "onlyLights" && problem !== "onlyLighting") sentences.push("Ya que solo vas a cambiar la iluminación, prioriza soluciones sin obra que aprovechen los puntos ya existentes.");
 
   if (light === "low") sentences.push("Como la cocina recibe poca luz natural, compensa con un tono algo más intenso durante el día.");
@@ -1454,35 +1470,30 @@ const PROBLEM_REACTIONS = {
     cold: "Bajaremos el tono general hacia un blanco más cálido.",
     night: "Añadiremos una luz muy tenue, independiente de la principal, para la noche.",
     spa: "Priorizaremos luz cálida y regulable para ese ambiente de spa.",
-    renovating: "Con reforma desde cero, separaremos en circuitos el espejo, la zona húmeda (si la tienes) y la general.",
   },
   closet: {
     colors: "Cambiaremos a una luz blanca neutra para que veas los colores reales de la ropa.",
     mirror: "Iluminaremos el espejo desde ambos lados del cuerpo, no solo desde arriba.",
     organize: "Añadiremos luz uniforme dentro de cajones y estantes.",
     elegant: "Sumaremos un punto de luz cálida decorativa junto al espejo o la entrada.",
-    renovating: "Con reforma desde cero, integraremos luz dentro de los propios armarios.",
   },
   terrace: {
     dark: "Añadiremos dos o tres puntos de luz repartidos, en vez de uno solo central.",
     noAmbience: "Combinaremos luz cálida indirecta con algún punto decorativo.",
     weather: "Elegiremos luminarias con certificación IP44 o superior.",
     decor: "Priorizaremos varios puntos de baja intensidad frente a un único foco potente.",
-    renovating: "Con reforma desde cero, dejaremos prevista una toma eléctrica protegida junto a la zona de estar.",
   },
   hallway: {
     dark: "Añadiremos un punto adicional en el tramo central, además de los extremos.",
     scary: "Una luz muy tenue permanente o con sensor hará que dé menos reparo cruzarlo de noche.",
     energy: "Un sensor de movimiento con LED de bajo consumo será lo más eficiente.",
     decor: "Consideraremos apliques en la pared en vez de solo downlights en el techo.",
-    renovating: "Con reforma desde cero, dejaremos cableado preparado para un sensor de movimiento.",
   },
   office: {
     glare: "Vamos a reorientar o suavizar la luz que se refleja en la pantalla.",
     tired: "Añadiremos una luz de tarea más uniforme para descansar la vista.",
     videocall: "Reforzaremos la luz frontal para que te veas mejor en cámara.",
     cold: "Bajaremos el tono hacia una luz algo más cálida.",
-    renovating: "Con reforma desde cero, dejaremos previstas varias tomas para escritorio y estanterías.",
   },
 };
 
@@ -1505,35 +1516,30 @@ const PROBLEM_OPTIONS = {
     { id: "cold", label: "La luz es demasiado fría o clínica" },
     { id: "night", label: "Me falta luz para las rutinas nocturnas" },
     { id: "spa", label: "Quiero un ambiente de spa" },
-    { id: "renovating", label: "Estoy reformando desde cero", Icon: Hammer },
   ],
   closet: [
     { id: "colors", label: "No veo bien los colores de la ropa" },
     { id: "mirror", label: "Hay sombras al mirarme al espejo" },
     { id: "organize", label: "Quiero organizarlo mejor con luz" },
     { id: "elegant", label: "Busco algo más elegante" },
-    { id: "renovating", label: "Estoy reformando desde cero", Icon: Hammer },
   ],
   terrace: [
     { id: "dark", label: "Se ve muy oscura de noche" },
     { id: "noAmbience", label: "Falta ambiente para recibir invitados" },
     { id: "weather", label: "Quiero proteger las luces del agua o el sol" },
     { id: "decor", label: "Busco algo más decorativo" },
-    { id: "renovating", label: "Estoy reformando desde cero", Icon: Hammer },
   ],
   hallway: [
     { id: "dark", label: "El pasillo se ve oscuro" },
     { id: "scary", label: "Da algo de reparo cruzarlo de noche" },
     { id: "energy", label: "Quiero ahorrar energía" },
     { id: "decor", label: "Busco algo más decorativo" },
-    { id: "renovating", label: "Estoy reformando desde cero", Icon: Hammer },
   ],
   office: [
     { id: "glare", label: "Se refleja la luz en la pantalla" },
     { id: "tired", label: "Se me cansa la vista" },
     { id: "videocall", label: "No me veo bien en videollamadas" },
     { id: "cold", label: "Se ve muy fría o clínica" },
-    { id: "renovating", label: "Estoy reformando desde cero", Icon: Hammer },
   ],
 };
 
@@ -1659,28 +1665,24 @@ const PROBLEM_INSIGHT = {
     cold: "Si la luz se siente demasiado fría, baja la temperatura de color general hacia un blanco más cálido y neutro.",
     night: "Para las rutinas nocturnas, añade una luz muy tenue independiente de la luz principal del baño.",
     spa: "Para un ambiente de spa, prioriza luz cálida y regulable, y valora añadir una vela o luz indirecta en la zona húmeda.",
-    renovating: "Como estás reformando desde cero, separa en circuitos distintos el espejo, la zona húmeda (si la tienes) y la luz general.",
   },
   closet: {
     colors: "Si no distingues bien los colores, cambia a una luz blanca neutra de alta fidelidad de color sobre la zona de la ropa.",
     mirror: "Para evitar sombras en el espejo, ilumina desde ambos lados del cuerpo en lugar de un único punto superior.",
     organize: "Para organizar mejor, añade luz uniforme dentro de cajones y estantes, no solo en el centro del vestidor.",
     elegant: "Para un aspecto más elegante, añade un punto de luz cálida decorativa junto al espejo o la entrada.",
-    renovating: "Como estás reformando desde cero, aprovecha para integrar luz dentro de los propios armarios.",
   },
   terrace: {
     dark: "Si la terraza se ve muy oscura de noche, añade dos o tres puntos de luz distribuidos en lugar de uno solo central.",
     noAmbience: "Para dar ambiente a las visitas, combina luz cálida indirecta con algún punto decorativo, como farolillos o guirnaldas.",
     weather: "Si buscas proteger las luces del agua o el sol, elige luminarias con certificación para exterior (IP44 o superior).",
     decor: "Para un toque más decorativo, prioriza varios puntos de baja intensidad frente a un único foco potente.",
-    renovating: "Como estás reformando desde cero, deja prevista una toma eléctrica protegida cerca de la zona de estar exterior.",
   },
   hallway: {
     dark: "Si el pasillo se ve oscuro, añade un punto adicional en el tramo central, además de los extremos.",
     scary: "Para que dé menos reparo cruzarlo de noche, instala una luz muy tenue permanente o con sensor a baja altura.",
     energy: "Para ahorrar energía, un sensor de movimiento con luz LED de bajo consumo es la combinación más eficiente.",
     decor: "Para un toque decorativo, considera apliques en la pared en lugar de solo downlights en el techo.",
-    renovating: "Como estás reformando desde cero, aprovecha para dejar cableado preparado para un sensor de movimiento.",
   },
   office: {
     glare: "Para evitar reflejos en la pantalla, evita colocar luces justo detrás de ti o frente al monitor; opta por luz indirecta o lateral.",
@@ -1690,7 +1692,6 @@ const PROBLEM_INSIGHT = {
     // luz. Lo que sí toca decir sobre verse bien en cámara ya está en
     // EXTRA_INSIGHT.office.videoCalls.si, y es puramente lumínico.
     cold: "Si la luz se siente demasiado fría o clínica, baja la temperatura de color hacia un blanco más neutro.",
-    renovating: "Con una reforma completa, aprovecha para dejar circuitos independientes para la luz general y la de tarea del escritorio.",
   },
 };
 
@@ -2154,7 +2155,7 @@ function generateGenericTechnicalReport(roomId, answers = {}) {
       ...(TIPS_COVERED_BY_LAYERS[roomId] || []),
       // Igual que en el salón: si hay plano, sus medidas ya están dichas.
       ...(grid && !cfg.ambient ? ["reticula"] : []),
-    ]),
+    ], tipMax(answers, roomId)),
   };
 }
 
@@ -2360,6 +2361,19 @@ function getFlowForRoom(roomId, answers) {
  * —salón y cocina— caen en la heurística de texto de tipRank(). */
 
 const TIP_MAX = 3;
+/* En reforma hay un hueco más. Los consejos de obra —qué dejar previsto
+ * mientras las paredes están abiertas— van los últimos en el orden, y con tres
+ * plazas se quedaban siempre fuera: el problema marcado y un par de consejos
+ * funcionales las agotaban antes de llegar a ellos. El tope de tres sigue en
+ * pie para quien solo mejora lo que ya tiene. */
+const TIP_MAX_RENOVATION = 4;
+/* El hueco extra existe para el consejo de obra, no para rellenar: solo se
+ * abre si esta estancia tiene uno que enseñar. Un salón en reforma, que no
+ * tiene consejo propio de obra, sigue con tres. */
+const tipMax = (answers = {}, roomId) =>
+  (reportTrack(answers) === TRACK.reforma && ROOM_RENOVATION_INSIGHT[roomId]
+    ? TIP_MAX_RENOVATION
+    : TIP_MAX);
 
 /* `problem` va por delante de `fix` porque no todos los errores pesan igual:
  * el que la usuaria ha marcado en "¿qué te gustaría solucionar?" es el motivo
@@ -2409,12 +2423,16 @@ function tipRank(text) {
 /* `covered` son los temas que el informe ya ha explicado más arriba, en una
  * capa o en el cálculo. Repetirlos abajo no informa: gasta uno de los tres
  * huecos en algo que la usuaria acaba de leer. */
-function pickTopTips(tips, covered = []) {
+function pickTopTips(tips, covered = [], max = TIP_MAX) {
   const seen = new Set();
   return (tips || [])
     .map((t) => (typeof t === "string" ? { text: t, rank: tipRank(t) } : t))
     .filter((t) => t && t.text)
-    .map((t, i) => ({ ...t, topic: tipTopic(t.text), i }))
+    /* Un consejo puede declarar su propio tema —o declarar que no tiene—: el
+     * de la reforma habla del espejo y del armario, pero para cablearlos, no
+     * para iluminarlos, y el detector de temas lo confundía con lo que las
+     * capas ya habían dicho arriba. */
+    .map((t, i) => ({ ...t, topic: "topic" in t ? t.topic : tipTopic(t.text), i }))
     /* Lo que la usuaria ha pedido arreglar no se descarta nunca por estar el
      * tema tratado más arriba: es el motivo por el que ha rellenado el
      * cuestionario. En un vestidor con armarios cerrados, "no veo bien los
@@ -2435,7 +2453,7 @@ function pickTopTips(tips, covered = []) {
       seen.add(t.topic);
       return true;
     })
-    .slice(0, TIP_MAX)
+    .slice(0, max)
     .map((t) => t.text);
 }
 
@@ -2451,7 +2469,18 @@ const TIPS_COVERED_BY_LAYERS = {
  * quiere leerlos. */
 function getRankedReport(roomId, answers = {}) {
   const parts = [];
-  const add = (text, rank) => { if (text) parts.push({ text, rank }); };
+  const add = (text, rank, topic) => {
+    if (text) parts.push(topic === undefined ? { text, rank } : { text, rank, topic });
+  };
+
+  /* Lo que aprovechar mientras la obra está abierta abre el bloque funcional.
+   * Iba al final, con los consejos de ambiente, y ahí no lo leía nadie: con
+   * tres o cuatro plazas nunca llegaba su turno. No es el error a corregir
+   * —ese sigue siendo el problema marcado, por delante—, pero sí es lo único
+   * del informe que deja de poder hacerse en cuanto se cierran las paredes. */
+  if (answers.renovationStatus === "renovation") {
+    add(ROOM_RENOVATION_INSIGHT[roomId], TIP_RANK.functional, null);
+  }
 
   if (roomId === "hallway") {
     add("En un pasillo no siempre es necesario instalar iluminación en el techo. Un foseado lineal, balizas, apliques de pared o tiras LED en el rodapié pueden guiar el recorrido con una luz uniforme, evitando deslumbramientos y creando un ambiente más agradable.", TIP_RANK.functional);
@@ -4400,7 +4429,7 @@ function KitchenReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
 }
 
 function RoomReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
-  const insights = pickTopTips(getRankedReport(room.id, answers));
+  const insights = pickTopTips(getRankedReport(room.id, answers), [], tipMax(answers, room.id));
   // Este informe era el único sin "Errores que debes evitar", así que salía
   // más pobre que el resto al ponerlos uno al lado de otro.
   const mistakes = ROOM_TECH_MISTAKES[room.id] || [];
