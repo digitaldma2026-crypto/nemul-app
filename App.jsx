@@ -235,8 +235,22 @@ const CEILING_POINTS_OPTIONS = [
   { id: "varios", label: "Sí, varios" },
 ];
 
+/* Algunos consejos no son ni de un recorrido ni del otro: son los dos, pero
+ * dichos de forma distinta. En vez de etiquetar cada consejo con "esto es
+ * obra", el propio texto puede venir en dos versiones y se elige la del
+ * recorrido. Un string suelto vale igual en los dos. */
+const byTrack = (value, answers = {}) =>
+  (value && typeof value === "object" ? value[answers.renovationStatus] : value);
+
 const CEILING_INSIGHT = {
-  liso: "Un techo liso no tiene cámara donde empotrar focos: sin reforma, lo más viable son luminarias de superficie o carriles; si vas a reformar, se puede construir un falso techo para tener más libertad. Si te preocupa el deslumbramiento lateral de los focos de superficie, un accesorio tipo \"honeycomb\" lo reduce bastante.",
+  /* Se daban las dos mitades a la vez —"sin reforma esto, si vas a reformar
+   * esto otro"— a quien ya había dicho cuál era su caso. Solo lo recibe el
+   * dormitorio, así que además se adapta a él: nada de carriles de focos
+   * sobre una cama. */
+  liso: {
+    onlyLights: "Un techo liso no tiene cámara donde empotrar focos, así que lo que cabe es una luminaria de superficie en el punto que ya tienes. Elígela con difusor: en un dormitorio la luz de arriba tiene que ser suave, no un foco directo sobre la cama.",
+    renovation: "Un techo liso no tiene cámara donde empotrar focos. Si construyes un falso techo ganas libertad para empotrar y para integrar tiras ocultas, que es la forma de que la luz del dormitorio llegue rebotada y no directa.",
+  },
   pladur: "Un falso techo de pladur ya tiene la cámara necesaria para empotrar focos e integrar tiras LED sin obra adicional. Al elegir el downlight, uno con acabado negro y la fuente de luz más hundida respecto al techo da más confort visual que uno blanco y superficial, porque reduce el deslumbramiento.",
   vigas: "Con vigas vistas, evita empotrar focos en la madera: opta por soluciones de superficie o carriles.",
   noSe: "Antes de instalar focos empotrados, confirma con un instalador qué tipo de techo tienes.",
@@ -373,7 +387,7 @@ const ROOM_RENOVATION_INSIGHT = {
 };
 
 const BEDROOM_RENOVATION_INSIGHT = {
-  onlyLights: "Como solo vas a cambiar las luminarias, esto no es una obra a ejecutar sino el objetivo de luz que hay que alcanzar: sustituye lo que cuelga de los puntos que ya tienes por luminarias que den el flujo indicado, y resuelve la cabecera con lámparas de mesita, apliques o colgantes, que no piden instalación nueva.",
+  onlyLights: "Como solo vas a cambiar las luminarias, esto no es una obra a ejecutar sino el objetivo de luz que hay que alcanzar: sustituye lo que cuelga de los puntos que ya tienes por luminarias que den el flujo indicado. Resuelve la cabecera con lámparas de mesita o, si ya tienes puntos preparados, con apliques. Si quieres añadir apliques o colgantes donde no existe instalación, será necesaria una pequeña intervención eléctrica; mejor que la haga un profesional.",
   renovation: "Como vas a reformar, aprovecha para dejar la luz general y la de la cabecera en circuitos separados: poder encender solo las mesitas es lo que convierte el dormitorio en una habitación de descanso por la noche.",
 };
 
@@ -1292,13 +1306,17 @@ function generateKitchenReport(answers = {}) {
   // península. La casilla de "varias zonas" añade su consejo encima, porque
   // se puede tener isla y cocinar además en la encimera.
   if (layout === "isla") {
-    sentences.push("Sobre la isla, dos o tres lámparas colgantes ayudan a crear un punto focal y una iluminación más agradable para cocinar, desayunar o reunirse.");
+    // En una cocina ya hecha casi nunca hay puntos sobre la isla: proponerlos
+    // como si fuera cambiar una bombilla es prometer lo que no es.
+    sentences.push(renovationStatus === "onlyLights"
+      ? "Sobre la isla, dos o tres colgantes pueden aportar luz directa y crear un punto de ambiente. Si no tienes puntos de luz sobre la isla, añadirlos requiere una pequeña intervención eléctrica; mejor que la haga un profesional."
+      : "Sobre la isla, dos o tres lámparas colgantes ayudan a crear un punto focal y una iluminación más agradable para cocinar, desayunar o reunirse.");
     // Las medidas concretas faltaban: el informe decía "no las cuelgues
     // demasiado bajas" sin decir nunca cuál era la altura buena. En el
     // comedor sí se daba el número, y la isla es la pieza más visible de
     // una cocina.
-    sentences.push("Cuélgalas entre 75 y 85 cm por encima de la encimera. Esa altura ofrece una buena iluminación de trabajo y evita deslumbramientos.");
-    sentences.push("Sepáralas entre 60 y 80 cm entre sí, y deja unos 30 cm libres hasta cada extremo de la isla para conseguir una distribución más uniforme de la luz.");
+    sentences.push("La altura correcta está entre 75 y 85 cm por encima de la encimera: ofrece una buena iluminación de trabajo y evita deslumbramientos.");
+    sentences.push("Deja entre 60 y 80 cm de separación y unos 30 cm libres hasta cada extremo de la isla, para conseguir una distribución más uniforme de la luz.");
     sentences.push("Con dos colgantes cubres una isla de hasta 1,80 m; a partir de 2,20 m, reparte mejor la luz con tres.");
   } else if (layout === "peninsula") {
     sentences.push("Sobre la península, un par de colgantes lineales ayudan a marcar la zona de trabajo sin cerrar la vista hacia el resto de la cocina.");
@@ -1327,7 +1345,10 @@ function generateKitchenReport(answers = {}) {
   // quien decía "la encimera tiene sombras" y reformaba igual no lo veía nunca.
   if (renovationStatus === "renovation") sentences.push("Como vas a hacer una reforma completa, aprovecha para dejar circuitos independientes para la zona de trabajo, la isla o península, y la luz general.");
   // Igual que el de reforma: sale del recorrido, no de la pregunta de mejorar.
-  if (renovationStatus === "onlyLights") sentences.push("Ya que solo vas a cambiar la iluminación, prioriza soluciones sin obra, como focos de superficie o tiras adhesivas regulables.");
+  // Decía "tiras adhesivas" justo después de recomendar arriba una regleta
+  // continua con CRI ≥ 90: bajo un mueble de cocina hay grasa y calor, y el
+  // adhesivo acaba despegándose. Ahora coincide con lo que ya se recomienda.
+  if (renovationStatus === "onlyLights") sentences.push("Ya que solo vas a cambiar la iluminación, prioriza lo que aprovecha lo que ya hay: focos de superficie en los puntos existentes y, bajo los muebles altos, una regleta o perfil LED con CRI ≥ 90. Es lo único que ilumina la encimera por delante de ti y no proyecta tu propia sombra sobre lo que cortas.");
 
   if (light === "low") sentences.push("Como la cocina recibe poca luz natural, compensa con un tono algo más intenso durante el día.");
   else if (light === "bright") sentences.push("Como recibe mucha luz natural, reserva esta intensidad sobre todo para las horas sin sol.");
@@ -1657,7 +1678,10 @@ const EXTRA_INSIGHT = {
   closet: {
     mirror: {
       tengo: "Añade iluminación frontal o lateral a ambos lados del espejo, a la altura de los ojos: la luz cenital sola genera sombras bajo la barbilla y los ojos. Busca un CRI de 90 o superior para ver bien los colores reales de la ropa.",
-      planeo: "Antes de instalar el espejo, coloca dos puntos de luz a ambos lados de donde irá ubicado, a la altura aproximada de los ojos, y deja prevista la instalación eléctrica en esa zona para no tener que abrir pared después. Busca un CRI de 90 o superior.",
+      planeo: {
+        renovation: "Antes de instalar el espejo, coloca dos puntos de luz a ambos lados de donde irá ubicado, a la altura aproximada de los ojos, y deja prevista la instalación eléctrica en esa zona para no tener que abrir pared después. Busca un CRI de 90 o superior.",
+        onlyLights: "Coloca dos puntos de luz a ambos lados de donde vaya el espejo, a la altura de los ojos, con CRI 90 o superior: desde arriba la barbilla queda en sombra y la ropa se juzga mal. Si en esa pared no hay nada, es una intervención pequeña, pero eléctrica: mejor que la haga un profesional. Sin tocar la pared, la alternativa es un espejo con luz integrada.",
+      },
       no: "Con iluminación general uniforme es suficiente, sin necesidad de puntos de luz adicionales para el rostro.",
     },
   },
@@ -2035,7 +2059,10 @@ function bedroomLayerTips(layers, grid) {
   }
   if (layers.mode === "uno") {
     tips.push(layers.singlePointStrained
-      ? `Un único punto de techo se queda corto para los ${layers.generalLm.toLocaleString("es-ES")} lm que le tocan a la luz general de techo: una luminaria sola de ese flujo deslumbra al mirar hacia arriba desde la cama. Sin obra, la salida es aprovechar ese mismo punto con un carril, una suspensión de varios brazos o un plafón de varios focos, que reparten el flujo en vez de concentrarlo.`
+      /* Proponía un carril y un plafón de varios focos, que resuelven el flujo
+       * pero contradicen lo que el propio informe defiende dos párrafos antes:
+       * que en un dormitorio la luz de arriba sea suave. */
+      ? `Un único punto de techo se queda corto para los ${layers.generalLm.toLocaleString("es-ES")} lm que le tocan a la luz general de techo: una luminaria sola de ese flujo deslumbra al mirar hacia arriba desde la cama. Sin obra, aprovecha ese mismo punto con un plafón amplio de difusor opaco o una suspensión que reparta también hacia arriba, y deja que la cabecera se lleve su parte en vez de exigírsela al techo.`
       : "Con un solo punto de techo, elige una luminaria que reparta la luz en vez de concentrarla —difusor opaco, varios focos o luz indirecta hacia el techo— para no tener un foco intenso justo en el campo de visión desde la cama.");
   }
   return tips;
@@ -2442,11 +2469,23 @@ const TIP_MAX_MEJORA = 4;
  * ocupa si existe. Un salón, que no tiene consejo propio ni en reforma ni en
  * mejora, sigue con tres. Y si en una estancia con hueco no hay cuatro
  * consejos útiles, se muestran los que haya: pickTopTips corta, nunca rellena. */
+/* El consejo propio de esta estancia para el recorrido elegido, si lo tiene.
+ * El dormitorio lo guarda en su propio diccionario —sus dos textos hablan de
+ * mesitas y de circuitos de cabecera— y por eso quedaba fuera del mecanismo:
+ * ni abría hueco ni subía de prioridad, así que su consejo de cabecera no se
+ * leía nunca. */
+const ownTrackTip = (roomId, answers = {}) => {
+  if (roomId === "bedroom") return BEDROOM_RENOVATION_INSIGHT[answers.renovationStatus];
+  return answers.renovationStatus === "renovation"
+    ? ROOM_RENOVATION_INSIGHT[roomId]
+    : answers.renovationStatus === "onlyLights"
+      ? ROOM_ONLYLIGHTS_INSIGHT[roomId]
+      : null;
+};
+
 const tipMax = (answers = {}, roomId) => {
-  const reforma = reportTrack(answers) === TRACK.reforma;
-  const dict = reforma ? ROOM_RENOVATION_INSIGHT : ROOM_ONLYLIGHTS_INSIGHT;
-  if (!dict[roomId]) return TIP_MAX;
-  return reforma ? TIP_MAX_RENOVATION : TIP_MAX_MEJORA;
+  if (!ownTrackTip(roomId, answers)) return TIP_MAX;
+  return reportTrack(answers) === TRACK.reforma ? TIP_MAX_RENOVATION : TIP_MAX_MEJORA;
 };
 
 /* `problem` va por delante de `fix` porque no todos los errores pesan igual:
@@ -2531,6 +2570,9 @@ function pickTopTips(tips, covered = [], max = TIP_MAX) {
     .map((t) => t.text);
 }
 
+// Claves de EXTRA_INSIGHT cuyo consejo no compite con la capa del mismo nombre.
+const EXTRA_INSIGHT_NO_TOPIC = { closet: ["mirror"] };
+
 // Temas que cada estancia ya resuelve arriba, en sus capas o en su cálculo.
 const TIPS_COVERED_BY_LAYERS = {
   closet: ["armario", "espejo"],
@@ -2558,17 +2600,14 @@ function getRankedReport(roomId, answers = {}) {
    * Va sin tema por lo mismo que el de obra: el de baño habla del agua y el de
    * vestidor del armario, que son los temas que sus capas ya tratan arriba, y
    * con tema el filtro los descartaría enteros. */
-  if (roomId !== "bedroom") {
-    const own = answers.renovationStatus === "renovation"
-      ? ROOM_RENOVATION_INSIGHT[roomId]
-      : answers.renovationStatus === "onlyLights"
-        ? ROOM_ONLYLIGHTS_INSIGHT[roomId]
-        : null;
-    add(own, TIP_RANK.functional, null);
-  }
+  add(ownTrackTip(roomId, answers), TIP_RANK.functional, null);
 
   if (roomId === "hallway") {
-    add("En un pasillo no siempre es necesario instalar iluminación en el techo. Un foseado lineal, balizas, apliques de pared o tiras LED en el rodapié pueden guiar el recorrido con una luz uniforme, evitando deslumbramientos y creando un ambiente más agradable.", TIP_RANK.functional);
+    // Foseado y balizas son obra: en mejora no caben, y ahí el consejo propio
+    // del pasillo ya resuelve lo mismo con carril y tira de zócalo.
+    if (answers.renovationStatus === "renovation") {
+      add("En un pasillo no siempre es necesario instalar iluminación en el techo. Un foseado lineal, balizas, apliques de pared o tiras LED en el rodapié pueden guiar el recorrido con una luz uniforme, evitando deslumbramientos y creando un ambiente más agradable.", TIP_RANK.functional);
+    }
     add(HALLWAY_LENGTH_INSIGHT[answers.length], TIP_RANK.functional);
     add(LIGHT_INSIGHT[answers.light], TIP_RANK.comfort);
     add(HALLWAY_SENSOR_INSIGHT[answers.sensor], TIP_RANK.functional);
@@ -2578,23 +2617,28 @@ function getRankedReport(roomId, answers = {}) {
     add(LIGHT_INSIGHT[answers.light], TIP_RANK.comfort);
   }
   // El techo condiciona lo que se puede instalar: es funcional, no ambiente.
-  add(CEILING_INSIGHT[answers.ceiling], TIP_RANK.functional);
+  add(byTrack(CEILING_INSIGHT[answers.ceiling], answers), TIP_RANK.functional);
 
   const extra = EXTRA_INSIGHT[roomId];
+  /* La capa del espejo explica cómo iluminarlo; este consejo, cómo resolver la
+   * instalación según el recorrido. No son lo mismo, pero el detector de temas
+   * ve "espejo" en los dos y descartaba el segundo. Exento, como el consejo
+   * propio del recorrido. La excepción es de esta clave, no del filtro. */
+  const noTopic = EXTRA_INSIGHT_NO_TOPIC[roomId] || [];
   if (extra) Object.keys(extra).forEach((key) => {
     const val = answers[key];
-    if (val && extra[key][val]) add(extra[key][val], TIP_RANK.functional);
+    if (val) add(byTrack(extra[key][val], answers), TIP_RANK.functional,
+      noTopic.includes(key) ? null : undefined);
   });
 
   // Lo que la usuaria ha dicho que quiere solucionar. Es, literalmente, el
   // error a corregir: encabeza siempre.
   add((PROBLEM_INSIGHT[roomId] || {})[answers.problem], TIP_RANK.problem);
 
-  const renovationDict = roomId === "bedroom" ? BEDROOM_RENOVATION_INSIGHT : RENOVATION_INSIGHT;
   // El genérico solo cuando esta estancia no tiene versión propia arriba.
-  const hasOwn = roomId !== "bedroom" && ROOM_ONLYLIGHTS_INSIGHT[roomId]
-    && answers.renovationStatus === "onlyLights";
-  if (!hasOwn) add(renovationDict[answers.renovationStatus], TIP_RANK.comfort);
+  if (!ownTrackTip(roomId, answers)) {
+    add(RENOVATION_INSIGHT[answers.renovationStatus], TIP_RANK.comfort);
+  }
 
   if (parts.length === 0) add("Con lo que nos cuentes de este espacio, Nemul preparará un estudio de iluminación a medida.", TIP_RANK.functional);
   return parts;
@@ -3984,10 +4028,23 @@ const CEILING_COMPLEMENT = {
 };
 const CEILING_COMPLEMENT_DEFAULT = "una lámpara de pie o de mesa en esa zona";
 
+/* Y qué poner en ese punto cuando es el único que hay. Era "una luminaria de
+ * varios brazos o difusa" para las ocho estancias: en un salón es exacto, en
+ * un baño pequeño con humedad no, y en un pasillo tampoco. */
+const SINGLE_POINT_FIXTURE = {
+  kitchen: "un plafón amplio con difusor, que reparta en vez de concentrar",
+  kitchenOpen: "un plafón amplio con difusor, que reparta en vez de concentrar",
+  bathroom: "un plafón con difusor apto para baño, adecuado a su ubicación",
+  closet: "un plafón amplio con difusor, que cubra el frente de los armarios",
+  hallway: "un plafón alargado con difusor, o un carril de superficie que reparta a lo largo",
+};
+const SINGLE_POINT_FIXTURE_DEFAULT = "una luminaria de varios brazos o difusa";
+
 function ExistingPointsNote({
   points, generalLm,
   caption = "es la luz general que pide la estancia",
   complement = CEILING_COMPLEMENT_DEFAULT,
+  fixture = SINGLE_POINT_FIXTURE_DEFAULT,
 }) {
   const total = generalLm.toLocaleString("es-ES");
   const per = points && points > 1 ? roundLm(generalLm / points, 50) : null;
@@ -4009,7 +4066,7 @@ function ExistingPointsNote({
 
         {points === 1 ? (
           <p className="font-body t-body mt-3" style={{ color: COLORS.text }}>
-            Con un único punto no busques que dé los {total} lm él solo: a esa potencia y en el centro del techo, deslumbra y aplana la estancia. Pon ahí una luminaria de varios brazos o difusa, y deja que las capas de abajo cubran el resto.
+            Con un único punto no busques que dé los {total} lm él solo: a esa potencia y en el centro del techo, deslumbra y aplana la estancia. Pon ahí {fixture}, y deja que las capas de abajo cubran el resto.
           </p>
         ) : per ? (
           <>
@@ -4078,11 +4135,11 @@ function CeilingAdviceBlock({ grid, roomLabel, avoid = [] }) {
 /* El conmutador de los dos recorridos. Es la única pieza que decide si se ve
  * un plano o no, y por eso las tarjetas de informe no se duplican: todas
  * llaman aquí y aquí se elige. */
-function CeilingSection({ track, grid, points, generalLm, roomLabel = "esta estancia", avoid = [], complement }) {
+function CeilingSection({ track, grid, points, generalLm, roomLabel = "esta estancia", avoid = [], complement, fixture }) {
   if (track === TRACK.reforma && grid) {
     return <CeilingAdviceBlock grid={grid} roomLabel={roomLabel} avoid={avoid} />;
   }
-  return <ExistingPointsNote points={points} generalLm={generalLm} complement={complement} />;
+  return <ExistingPointsNote points={points} generalLm={generalLm} complement={complement} fixture={fixture} />;
 }
 
 /* Un solo punto: hay algo que enseñar, pero son zonas, no posiciones. Sin
@@ -4549,7 +4606,7 @@ function KitchenReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
 
           <CeilingSection
             track={track} grid={grid} points={points} generalLm={layers.generalLm}
-            complement={CEILING_COMPLEMENT[room.id]}
+            complement={CEILING_COMPLEMENT[room.id]} fixture={SINGLE_POINT_FIXTURE[room.id]}
             roomLabel="esta cocina"
             avoid={["en la vertical de la encimera: de pie te tapas tú la luz. Van adelantados hacia su borde, y la encimera tiene además su propia capa"]}
           />
@@ -4809,7 +4866,7 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameTon
           ) : (
             <CeilingSection
               track={track} grid={grid} points={points} generalLm={lumens}
-              complement={CEILING_COMPLEMENT[room.id]}
+              complement={CEILING_COMPLEMENT[room.id]} fixture={SINGLE_POINT_FIXTURE[room.id]}
               roomLabel={GENERIC_ROOM_LABEL[room.id] || "esta estancia"}
               avoid={GENERIC_CEILING_AVOID[room.id] || []}
             />
