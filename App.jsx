@@ -1677,9 +1677,14 @@ const EXTRA_INSIGHT = {
   },
   closet: {
     mirror: {
-      tengo: "Añade iluminación frontal o lateral a ambos lados del espejo, a la altura de los ojos: la luz cenital sola genera sombras bajo la barbilla y los ojos. Busca un CRI de 90 o superior para ver bien los colores reales de la ropa.",
+      /* Solo en mejora. En reforma la capa del espejo ya da la colocación, la
+       * altura, el CRI y la previsión de instalación: repetirlo abajo gastaba
+       * un hueco en algo que se acababa de leer. En mejora sí aporta —el aviso
+       * de la intervención y la alternativa sin tocar pared—, y ahí se queda. */
+      tengo: {
+        onlyLights: "Añade iluminación frontal o lateral a ambos lados del espejo, a la altura de los ojos: la luz cenital sola genera sombras bajo la barbilla y los ojos. Busca un CRI de 90 o superior para ver bien los colores reales de la ropa.",
+      },
       planeo: {
-        renovation: "Antes de instalar el espejo, coloca dos puntos de luz a ambos lados de donde irá ubicado, a la altura aproximada de los ojos, y deja prevista la instalación eléctrica en esa zona para no tener que abrir pared después. Busca un CRI de 90 o superior.",
         onlyLights: "Coloca dos puntos de luz a ambos lados de donde vaya el espejo, a la altura de los ojos, con CRI 90 o superior: desde arriba la barbilla queda en sombra y la ropa se juzga mal. Si en esa pared no hay nada, es una intervención pequeña, pero eléctrica: mejor que la haga un profesional. Sin tocar la pared, la alternativa es un espejo con luz integrada.",
       },
       no: "Con iluminación general uniforme es suficiente, sin necesidad de puntos de luz adicionales para el rostro.",
@@ -2186,8 +2191,12 @@ function closetLayers(area, answers = {}, dims = null) {
         per: CLOSET_MIRROR_PIECE_LM,
         lm: CLOSET_MIRROR_PIECE_LM * 2,
         cri: 90,
+        // "Con la instalación dejada antes de colgarlo" es lenguaje de obra: en
+        // mejora no hay instalación que dejar prevista.
         detail: answers.mirror === "planeo"
-          ? "dos puntos a los lados de donde vaya el espejo, a la altura de los ojos, con la instalación dejada antes de colgarlo"
+          ? (answers.renovationStatus === "renovation"
+              ? "dos puntos a los lados de donde vaya el espejo, a la altura de los ojos, con la instalación dejada antes de colgarlo"
+              : "dos puntos de luz a los lados del espejo, aproximadamente a la altura de los ojos")
           : "dos apliques a los lados del espejo, a la altura de los ojos, nunca un único punto cenital: desde arriba la barbilla y los ojos quedan en sombra y la ropa se juzga mal",
       }
     : null;
