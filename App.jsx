@@ -339,6 +339,23 @@ const RENOVATION_INSIGHT = {
   onlyLights: "Como vas a trabajar con la instalación que ya tienes, el objetivo es cuánta luz debe dar el techo en total, no dónde irían los puntos. Sustituye lo que cuelga de cada uno por luminarias que den el flujo indicado —un plafón por un foco orientable, un carril o una suspensión múltiple en el punto existente— y cubre con lámparas de pie o de mesa las zonas a las que no llegue ningún punto.",
 };
 
+/* Y su pareja: qué hacer cuando NO hay obra, estancia por estancia.
+ *
+ * El consejo genérico proponía un carril, una suspensión múltiple y lámparas
+ * de pie o de mesa. En un despacho es exactamente lo que toca; en un baño no
+ * hay sitio en el suelo ni conviene con humedad, en un pasillo la lámpara de
+ * pie estorba el paso, y en una terraza descubierta ni siquiera hay techo del
+ * que hablar. La primera frase sigue siendo común —trabajar con los puntos que
+ * hay—; lo que cambia es con qué se completa. El despacho no aparece aquí:
+ * para él el texto genérico ya es el correcto. */
+const ROOM_ONLYLIGHTS_INSIGHT = {
+  bathroom: "Como vas a trabajar con la instalación que ya tienes, aprovecha los puntos existentes y elige luminarias que aporten el flujo recomendado. Completa la iluminación solo donde haga falta, por ejemplo en el espejo o con apliques de pared. En las zonas próximas al agua, utiliza luminarias adecuadas para baño y para su ubicación.",
+  closet: "Como vas a trabajar con la instalación que ya tienes, el objetivo es cuánta luz debe dar el techo en total, no dónde irían los puntos. En un vestidor la luz de arriba se queda en la parte alta de la ropa y no llega al fondo de los módulos, así que cambia la luminaria que hay por otra de más flujo y resuelve el interior con iluminación integrada o tiras LED, sin necesidad de modificar los puntos del techo.",
+  hallway: "Si un único punto deja zonas oscuras, puedes aprovechar la instalación existente con un carril de superficie que reparta mejor la luz. Para la noche, puedes añadir una tira LED cálida en el zócalo con sensor de movimiento y función crepuscular, para que solo se encienda cuando está oscuro y detecte movimiento. Así puedes recorrer el pasillo de noche sin encender la luz general.",
+  // La terraza no comparte ni la primera frase: puede no tener techo.
+  terrace: "Como vas a trabajar con la instalación que ya tienes, el objetivo es cuánta luz necesita cada zona, no dónde irían los puntos. En una terraza puede que no haya techo donde colgar nada: aprovecha las tomas que existan y reparte con apliques de pared, balizas o guirnaldas, que cubren la zona de estar sin obra. Si las luminarias quedan expuestas al exterior, elige modelos adecuados para exterior y para el grado de exposición que tendrán.",
+};
+
 /* Lo que conviene aprovechar de la obra, estancia por estancia.
  *
  * Estos cinco consejos vivían dentro de la pregunta "¿Qué te gustaría
@@ -2407,19 +2424,30 @@ function getFlowForRoom(roomId, answers) {
  * —salón y cocina— caen en la heurística de texto de tipRank(). */
 
 const TIP_MAX = 3;
-/* En reforma hay un hueco más. Los consejos de obra —qué dejar previsto
- * mientras las paredes están abiertas— van los últimos en el orden, y con tres
- * plazas se quedaban siempre fuera: el problema marcado y un par de consejos
- * funcionales las agotaban antes de llegar a ellos. El tope de tres sigue en
- * pie para quien solo mejora lo que ya tiene. */
-const TIP_MAX_RENOVATION = 4;
-/* El hueco extra existe para el consejo de obra, no para rellenar: solo se
- * abre si esta estancia tiene uno que enseñar. Un salón en reforma, que no
- * tiene consejo propio de obra, sigue con tres. */
-const tipMax = (answers = {}, roomId) =>
-  (reportTrack(answers) === TRACK.reforma && ROOM_RENOVATION_INSIGHT[roomId]
-    ? TIP_MAX_RENOVATION
-    : TIP_MAX);
+/* Dos topes por encima del de tres, y cada uno por su motivo.
+ *
+ * En reforma caben cinco: además del problema y de lo funcional, hay que dejar
+ * sitio a lo que solo puede hacerse con las paredes abiertas —circuitos
+ * separados, tomas previstas, luz integrada en el mueble—, y eso son varios
+ * consejos, no uno.
+ *
+ * En mejora caben cuatro: lo que se puede hacer hoy sin obra es más acotado.
+ *
+ * Ninguno de los dos rellena. Son topes, no objetivos: si en esa estancia no
+ * hay tantos consejos útiles, se muestran los que haya. */
+const TIP_MAX_RENOVATION = 5;
+const TIP_MAX_MEJORA = 4;
+/* El hueco extra existe para el consejo propio del recorrido, no para
+ * rellenar: solo se abre si esta estancia tiene uno que enseñar, y solo lo
+ * ocupa si existe. Un salón, que no tiene consejo propio ni en reforma ni en
+ * mejora, sigue con tres. Y si en una estancia con hueco no hay cuatro
+ * consejos útiles, se muestran los que haya: pickTopTips corta, nunca rellena. */
+const tipMax = (answers = {}, roomId) => {
+  const reforma = reportTrack(answers) === TRACK.reforma;
+  const dict = reforma ? ROOM_RENOVATION_INSIGHT : ROOM_ONLYLIGHTS_INSIGHT;
+  if (!dict[roomId]) return TIP_MAX;
+  return reforma ? TIP_MAX_RENOVATION : TIP_MAX_MEJORA;
+};
 
 /* `problem` va por delante de `fix` porque no todos los errores pesan igual:
  * el que la usuaria ha marcado en "¿qué te gustaría solucionar?" es el motivo
@@ -2519,13 +2547,24 @@ function getRankedReport(roomId, answers = {}) {
     if (text) parts.push(topic === undefined ? { text, rank } : { text, rank, topic });
   };
 
-  /* Lo que aprovechar mientras la obra está abierta abre el bloque funcional.
-   * Iba al final, con los consejos de ambiente, y ahí no lo leía nadie: con
-   * tres o cuatro plazas nunca llegaba su turno. No es el error a corregir
-   * —ese sigue siendo el problema marcado, por delante—, pero sí es lo único
-   * del informe que deja de poder hacerse en cuanto se cierran las paredes. */
-  if (answers.renovationStatus === "renovation") {
-    add(ROOM_RENOVATION_INSIGHT[roomId], TIP_RANK.functional, null);
+  /* El consejo propio del recorrido abre el bloque funcional, en los dos.
+   *
+   * Iba al final, con los de ambiente, y ahí no lo leía nadie: con tres o
+   * cuatro plazas nunca llegaba su turno. No es el error a corregir —ese sigue
+   * siendo el problema marcado, por delante—, pero sí es lo más accionable que
+   * tiene el informe: en reforma, lo único que deja de poder hacerse cuando se
+   * cierran las paredes; en mejora, lo único que se puede hacer hoy mismo.
+   *
+   * Va sin tema por lo mismo que el de obra: el de baño habla del agua y el de
+   * vestidor del armario, que son los temas que sus capas ya tratan arriba, y
+   * con tema el filtro los descartaría enteros. */
+  if (roomId !== "bedroom") {
+    const own = answers.renovationStatus === "renovation"
+      ? ROOM_RENOVATION_INSIGHT[roomId]
+      : answers.renovationStatus === "onlyLights"
+        ? ROOM_ONLYLIGHTS_INSIGHT[roomId]
+        : null;
+    add(own, TIP_RANK.functional, null);
   }
 
   if (roomId === "hallway") {
@@ -2552,7 +2591,10 @@ function getRankedReport(roomId, answers = {}) {
   add((PROBLEM_INSIGHT[roomId] || {})[answers.problem], TIP_RANK.problem);
 
   const renovationDict = roomId === "bedroom" ? BEDROOM_RENOVATION_INSIGHT : RENOVATION_INSIGHT;
-  add(renovationDict[answers.renovationStatus], TIP_RANK.comfort);
+  // El genérico solo cuando esta estancia no tiene versión propia arriba.
+  const hasOwn = roomId !== "bedroom" && ROOM_ONLYLIGHTS_INSIGHT[roomId]
+    && answers.renovationStatus === "onlyLights";
+  if (!hasOwn) add(renovationDict[answers.renovationStatus], TIP_RANK.comfort);
 
   if (parts.length === 0) add("Con lo que nos cuentes de este espacio, Nemul preparará un estudio de iluminación a medida.", TIP_RANK.functional);
   return parts;
@@ -3927,7 +3969,26 @@ function BedroomLayerBlock({ area, lux, layers, grid }) {
  * Un solo punto es el caso interesante: no se le pide que dé el total él solo
  * —a esa potencia y a esa altura, deslumbra— sino que se dice para qué llega
  * y qué lo acompaña. */
-function ExistingPointsNote({ points, generalLm, caption = "es la luz general que pide la estancia" }) {
+/* Con qué se compensa un punto que queda lejos. Era una frase sola —"una
+ * lámpara de pie o de mesa"— para las nueve estancias, y en un baño no hay
+ * sitio en el suelo, en un pasillo estorba el paso y en una cocina lo que
+ * falta se resuelve bajo el mueble alto. Salón y despacho se quedan con la
+ * frase de siempre, que ahí sí es la buena. */
+const CEILING_COMPLEMENT = {
+  kitchen: "la tira bajo el mueble alto o un foco orientable sobre esa zona",
+  kitchenOpen: "la tira bajo el mueble alto o un foco orientable sobre esa zona",
+  bedroom: "una lámpara de mesita o un aplique en esa zona",
+  bathroom: "un aplique de pared en esa zona",
+  closet: "luz dentro del armario o un aplique en esa zona",
+  hallway: "un aplique o una baliza baja en ese tramo",
+};
+const CEILING_COMPLEMENT_DEFAULT = "una lámpara de pie o de mesa en esa zona";
+
+function ExistingPointsNote({
+  points, generalLm,
+  caption = "es la luz general que pide la estancia",
+  complement = CEILING_COMPLEMENT_DEFAULT,
+}) {
   const total = generalLm.toLocaleString("es-ES");
   const per = points && points > 1 ? roundLm(generalLm / points, 50) : null;
   const cuatroOMas = points === 4;
@@ -3948,7 +4009,7 @@ function ExistingPointsNote({ points, generalLm, caption = "es la luz general qu
 
         {points === 1 ? (
           <p className="font-body t-body mt-3" style={{ color: COLORS.text }}>
-            Con un único punto no busques que dé los {total} lm él solo: a esa potencia y en el centro del techo, deslumbra y aplana la estancia. Pon ahí una luminaria de varios brazos o difusa, y deja que las lámparas de las capas de abajo cubran el resto.
+            Con un único punto no busques que dé los {total} lm él solo: a esa potencia y en el centro del techo, deslumbra y aplana la estancia. Pon ahí una luminaria de varios brazos o difusa, y deja que las capas de abajo cubran el resto.
           </p>
         ) : per ? (
           <>
@@ -3956,7 +4017,7 @@ function ExistingPointsNote({ points, generalLm, caption = "es la luz general qu
               Repártelos entre los {points}{cuatroOMas ? " o más" : ""} puntos que ya tienes: unos <strong>{per.toLocaleString("es-ES")} lm por punto</strong>. No hace falta que todos den lo mismo; lo que cuenta es acercarse al total.
             </p>
             <p className="font-body t-caption mt-2" style={{ color: COLORS.subtext }}>
-              Si algún punto queda lejos de la zona principal de uso, baja su flujo y compensa con una lámpara de pie o de mesa en esa zona.
+              Si algún punto queda lejos de la zona principal de uso, baja su flujo y compensa con {complement}.
             </p>
           </>
         ) : (
@@ -4017,11 +4078,11 @@ function CeilingAdviceBlock({ grid, roomLabel, avoid = [] }) {
 /* El conmutador de los dos recorridos. Es la única pieza que decide si se ve
  * un plano o no, y por eso las tarjetas de informe no se duplican: todas
  * llaman aquí y aquí se elige. */
-function CeilingSection({ track, grid, points, generalLm, roomLabel = "esta estancia", avoid = [] }) {
+function CeilingSection({ track, grid, points, generalLm, roomLabel = "esta estancia", avoid = [], complement }) {
   if (track === TRACK.reforma && grid) {
     return <CeilingAdviceBlock grid={grid} roomLabel={roomLabel} avoid={avoid} />;
   }
-  return <ExistingPointsNote points={points} generalLm={generalLm} />;
+  return <ExistingPointsNote points={points} generalLm={generalLm} complement={complement} />;
 }
 
 /* Un solo punto: hay algo que enseñar, pero son zonas, no posiciones. Sin
@@ -4488,6 +4549,7 @@ function KitchenReportCard({ room, answers, expanded, onToggle, sameToneAs }) {
 
           <CeilingSection
             track={track} grid={grid} points={points} generalLm={layers.generalLm}
+            complement={CEILING_COMPLEMENT[room.id]}
             roomLabel="esta cocina"
             avoid={["en la vertical de la encimera: de pie te tapas tú la luz. Van adelantados hacia su borde, y la encimera tiene además su propia capa"]}
           />
@@ -4735,7 +4797,8 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameTon
                   avoid={["en la vertical de la cama: tumbada, un foco encima deslumbra"]} />
             : layers.mode === "uno" ? <BedroomZoneScheme layers={layers} />
             : <ExistingPointsNote points={points} generalLm={layers.generalLm}
-                caption="es la luz general de techo, la parte de la luz ambiente que no cubre la cabecera" />
+                caption="es la luz general de techo, la parte de la luz ambiente que no cubre la cabecera"
+                complement={CEILING_COMPLEMENT.bedroom} />
           ) : room.id === "terrace" ? (
             <div data-pdf-keep>
               <p className="font-body t-eyebrow mb-2.5" style={{ color: COLORS.accent }}>Zonas a iluminar</p>
@@ -4746,6 +4809,7 @@ function GenericTechnicalReportCard({ room, answers, expanded, onToggle, sameTon
           ) : (
             <CeilingSection
               track={track} grid={grid} points={points} generalLm={lumens}
+              complement={CEILING_COMPLEMENT[room.id]}
               roomLabel={GENERIC_ROOM_LABEL[room.id] || "esta estancia"}
               avoid={GENERIC_CEILING_AVOID[room.id] || []}
             />
