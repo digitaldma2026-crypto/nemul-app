@@ -5670,7 +5670,7 @@ const LANDING_COPY = {
     // estudio de iluminación está listo"—, así que la portada prometía menos de
     // lo que se cumple. Y es literal: se calculan lúmenes, temperatura de color
     // y distribución, no se sugiere una idea.
-    heroSubtitle: "Recibe un estudio de iluminación personalizado en pocos minutos. No necesitas conocimientos técnicos.",
+    heroSubtitle: "Calcula la luz que necesita cada estancia y recibe un estudio de iluminación personalizado con lúmenes, temperatura de color y distribución de luminarias. Sin conocimientos técnicos.",
     heroCta: "Diseña tu iluminación",
     heroTrust: "Gratis · Sin registro · En pocos minutos",
     sampleLink: "Ver un informe de ejemplo",
@@ -6209,6 +6209,9 @@ export default function NemulApp() {
   }, [savedPlans]);
   const [viewingPlanId, setViewingPlanId] = useState(null);
   const [freeRoomId, setFreeRoomId] = useState(() => {
+    // Modo pruebas de Dayami (ver index.html): todas las estancias abiertas.
+    // La gratuita que tuviera guardada se queda intacta para cuando lo quite.
+    if (window.__nemulModoPruebas) return null;
     try {
       const saved = localStorage.getItem("nemul_freeRoomId");
       /* Si la estancia gratuita guardada ya no está en el catálogo, se descarta
@@ -6300,7 +6303,7 @@ export default function NemulApp() {
       setScreen("premiumGate");
       return;
     }
-    if (!freeRoomId) setFreeRoomId(chosenId);
+    if (!freeRoomId && !window.__nemulModoPruebas) setFreeRoomId(chosenId);
     track("started_room", { room: chosenId });
     gaEvent("started_room", { room: chosenId });
     startFlow();

@@ -17,12 +17,12 @@
       href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Montserrat:wght@400;500;600&display=swap"
     />
 
-    <title>Nemul — Diseña la iluminación de tu hogar</title>
-    <meta name="description" content="Recibe un estudio de iluminación personalizado para tu hogar en pocos minutos. No necesitas conocimientos técnicos." />
+    <title>Calcula y diseña la iluminación de tu hogar | Nemul</title>
+    <meta name="description" content="Calcula la iluminación de cada estancia y recibe recomendaciones sobre lúmenes, temperatura de color y distribución de luminarias para tu hogar." />
     <link rel="canonical" href="https://www.nemul.app/" />
     <meta property="og:site_name" content="Nemul" />
-    <meta property="og:title" content="Nemul — Diseña la iluminación de tu hogar" />
-    <meta property="og:description" content="Recibe un estudio de iluminación personalizado para tu hogar en pocos minutos. No necesitas conocimientos técnicos." />
+    <meta property="og:title" content="Calcula y diseña la iluminación de tu hogar | Nemul" />
+    <meta property="og:description" content="Calcula la iluminación de cada estancia y recibe recomendaciones sobre lúmenes, temperatura de color y distribución de luminarias para tu hogar." />
     <meta property="og:url" content="https://www.nemul.app/" />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="es_ES" />
@@ -41,17 +41,46 @@
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Despacho iluminado de noche: focos empotrados en el techo, tira LED bajo las estanterías y flexo sobre la mesa" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Nemul — Diseña la iluminación de tu hogar" />
-    <meta name="twitter:description" content="Recibe un estudio de iluminación personalizado para tu hogar en pocos minutos." />
+    <meta name="twitter:title" content="Calcula y diseña la iluminación de tu hogar | Nemul" />
+    <meta name="twitter:description" content="Calcula la iluminación de cada estancia y recibe recomendaciones sobre lúmenes, temperatura de color y distribución de luminarias para tu hogar." />
     <meta name="twitter:image" content="https://www.nemul.app/og-image.jpg" />
     <meta name="robots" content="index, follow" />
-    <!-- Google Analytics 4 -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-V6RY9STG4X"></script>
+    <!-- Modo pruebas: para que las visitas de Dayami no cuenten en las
+         estadísticas. Se activa abriendo nemul.app/?modo-pruebas=on y se quita
+         con ?modo-pruebas=off. Queda guardado solo en ese navegador. Con el
+         modo activo no se descarga Google Analytics ni se monta Vercel
+         Analytics (ver main.jsx), así que no sale ningún evento. Para el
+         resto de visitantes todo funciona igual que antes. -->
     <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-V6RY9STG4X');
+      (function () {
+        var CLAVE = 'nemul_modo_pruebas';
+        var activo = false;
+        try {
+          var orden = new URLSearchParams(window.location.search).get('modo-pruebas');
+          if (orden === 'on') localStorage.setItem(CLAVE, '1');
+          if (orden === 'off') localStorage.removeItem(CLAVE);
+          activo = localStorage.getItem(CLAVE) === '1';
+        } catch (e) {
+          // sin acceso a localStorage (modo privado, etc.): se mide con normalidad
+        }
+        window.__nemulModoPruebas = activo;
+
+        if (activo) {
+          // Segundo cierre: el interruptor oficial de Google para no medir.
+          window['ga-disable-G-V6RY9STG4X'] = true;
+          return;
+        }
+
+        // Google Analytics 4 (igual que antes, solo que el script se añade desde aquí)
+        var s = document.createElement('script');
+        s.async = true;
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=G-V6RY9STG4X';
+        document.head.appendChild(s);
+        window.dataLayer = window.dataLayer || [];
+        window.gtag = function () { window.dataLayer.push(arguments); };
+        window.gtag('js', new Date());
+        window.gtag('config', 'G-V6RY9STG4X');
+      })();
     </script>
   </head>
   <body>

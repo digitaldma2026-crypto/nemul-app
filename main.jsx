@@ -72,6 +72,8 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <ErrorBoundary>
       <App />
     </ErrorBoundary>
-    <Analytics />
+    {/* En modo pruebas (ver index.html) no se monta: así Vercel no cuenta la
+        visita y los track() de App.jsx no envían nada. */}
+    {!window.__nemulModoPruebas && <Analytics />}
   </React.StrictMode>
 );
