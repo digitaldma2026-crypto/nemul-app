@@ -5670,7 +5670,7 @@ const LANDING_COPY = {
     // estudio de iluminación está listo"—, así que la portada prometía menos de
     // lo que se cumple. Y es literal: se calculan lúmenes, temperatura de color
     // y distribución, no se sugiere una idea.
-    heroSubtitle: "Calcula la luz que necesita cada estancia y recibe un estudio personalizado con lúmenes, temperatura de color y distribución. Sin conocimientos técnicos.",
+    heroSubtitle: "Calcula la luz de cada estancia y recibe un estudio personalizado. Sin conocimientos técnicos.",
     heroCta: "Diseña tu iluminación",
     heroTrust: "Gratis · Sin registro · En pocos minutos",
     sampleLink: "Ver un informe de ejemplo",
